@@ -1,0 +1,3 @@
+# Defensa adicional cuando el proyecto está dentro de un Alias amplio de XAMPP.
+# Solo public/ concede acceso web; no mover index.php a este directorio.
+Require all denied

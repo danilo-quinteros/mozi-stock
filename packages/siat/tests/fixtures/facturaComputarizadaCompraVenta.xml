@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<facturaComputarizadaCompraVenta xsi:noNamespaceSchemaLocation="facturaComputarizadaCompraVenta.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <cabecera>
+        <nitEmisor>123451020</nitEmisor>
+        <razonSocialEmisor>Metales Totai S.R.L.</razonSocialEmisor>
+        <municipio>Yacuiba</municipio>
+        <telefono>2824512</telefono>
+        <numeroFactura>2377</numeroFactura>
+        <cuf>9C1A83F996B702B8497F0555BFF4C27CB7E1783A67A84B0CA3176D74</cuf>
+        <cufd>BQUE+QytqQUDBKVUFOSVRPQkxVRFZNVFVJBMDAwMDAwM</cufd>
+        <codigoSucursal>1</codigoSucursal>
+        <direccion>Av. Juan XXIII</direccion>
+        <codigoPuntoVenta xsi:nil="true"/>
+        <fechaEmision>2027-06-01T09:19:48.675</fechaEmision>
+        <nombreRazonSocial>DAVID ZELADA</nombreRazonSocial>
+        <codigoTipoDocumentoIdentidad>1</codigoTipoDocumentoIdentidad>
+        <numeroDocumento>987654</numeroDocumento>
+        <complemento>1B</complemento> 
+        <codigoCliente>1864</codigoCliente>
+        <codigoMetodoPago>1</codigoMetodoPago>
+        <numeroTarjeta xsi:nil="true"/>
+        <subTotalNeto>262.12</subTotalNeto>
+        <totalPrecioNeto>142.12</totalPrecioNeto>
+        <iva>18.48</iva>
+        <montoaPagar>160.60</montoaPagar>
+        <codigoMoneda>1</codigoMoneda>
+        <tipoCambio>1.00</tipoCambio>
+        <montoTotalMoneda>160.60</montoTotalMoneda>
+        <montoGiftCard>100.00</montoGiftCard>
+        <descuentoAdicional>20.00</descuentoAdicional>
+        <codigoExcepcion xsi:nil="true"/>
+        <leyenda>Ley N° 453: El proveedor deberá entregar el producto en las modalidades y términos ofertados o convenidos.
+        </leyenda>
+        <usuario>pperez</usuario>
+        <codigoInterno>A</codigoInterno>
+       <codigoDocumentoSector>1</codigoDocumentoSector>  
+    </cabecera>
+    <detalle>
+        <actividadEconomica>4752100</actividadEconomica>
+        <codigoProductoSin>1001912</codigoProductoSin>
+        <codigoProducto>GA-CL-013</codigoProducto>
+        <descripcion>GANCHO P/ CALAMINA M6*J 60</descripcion>
+        <cantidad>200</cantidad>
+        <unidadMedida>1</unidadMedida>
+        <precioNetoUnitario>0.54</precioNetoUnitario>
+        <montoDescuento>7.52</montoDescuento>
+        <subTotal>100.48</subTotal>
+        <numeroSerie>0</numeroSerie>
+        <numeroImei>0</numeroImei>
+    </detalle>
+<detalle>
+        <actividadEconomica>4752100</actividadEconomica>
+        <codigoProductoSin>1001912</codigoProductoSin>
+        <codigoProducto>GA-CL-015</codigoProducto>
+        <descripcion>GANCHO P/ CALAMINA M6*J 70</descripcion>
+        <cantidad>100</cantidad>
+        <unidadMedida>1</unidadMedida>
+        <precioNetoUnitario>0.61</precioNetoUnitario>
+        <montoDescuento>4.11</montoDescuento>
+        <subTotal>56.89</subTotal>
+        <numeroSerie>0</numeroSerie>
+        <numeroImei>0</numeroImei>
+    </detalle>
+<detalle>
+        <actividadEconomica>4752100</actividadEconomica>
+        <codigoProductoSin>1001912</codigoProductoSin>
+        <codigoProducto>RP-FR-01</codigoProducto>
+        <descripcion>REPOSICIÓN FORMULARIO</descripcion>
+        <cantidad>1</cantidad>
+        <unidadMedida>1</unidadMedida>
+        <precioNetoUnitario>0.83</precioNetoUnitario>
+        <montoDescuento>0.00</montoDescuento>
+        <subTotal>0.83</subTotal>
+        <numeroSerie>0</numeroSerie>
+        <numeroImei>0</numeroImei>
+    </detalle>
+<detalle>
+        <actividadEconomica>4752100</actividadEconomica>
+        <codigoProductoSin>1001912</codigoProductoSin>
+        <codigoProducto>HI-CO-004</codigoProducto>
+        <descripcion>HI. CORRUGADO 5/16" (8,00MM) CA- 50</descripcion>
+        <cantidad>3</cantidad>
+        <unidadMedida>1</unidadMedida>
+        <precioNetoUnitario>34.64</precioNetoUnitario>
+        <montoDescuento>0.00</montoDescuento>
+        <subTotal>103.92</subTotal>
+        <numeroSerie>0</numeroSerie>
+        <numeroImei>0</numeroImei>
+    </detalle>
+</facturaComputarizadaCompraVenta>

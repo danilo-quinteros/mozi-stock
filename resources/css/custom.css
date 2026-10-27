@@ -1,0 +1,30 @@
+/*
+Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to edit this template
+*/
+/* 
+    Created on : 27 oct de 2026, 7:44:00 a. m.
+    Author     : danilo
+*/
+
+.nav-item{
+    margin-right: 2px
+}
+
+.nav-group summary{
+    justify-content: start;
+    gap:12px
+}
+
+.nav-group .group-chevron{
+    margin-left: auto
+}
+
+.ico {
+    display: inline-block
+}
+
+.brand{
+    padding-left: 0;
+    padding-right: 0
+}

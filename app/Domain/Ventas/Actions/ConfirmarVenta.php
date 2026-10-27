@@ -1,0 +1,237 @@
+<?php
+
+namespace App\Domain\Ventas\Actions;
+
+use App\Domain\Auditoria\Auditor;
+use App\Domain\Facturacion\Actions\RegistrarFacturaVenta;
+use App\Domain\Facturacion\DatosFactura;
+use App\Domain\Inventario\LibroStock;
+use App\Domain\Tenancy\ResolverSucursal;
+use App\Domain\Ventas\CalculadoraPedido;
+use App\Domain\Ventas\RegistradorCobros;
+use App\Domain\Ventas\ValidadorPago;
+use App\Enums\EstadoPedido;
+use App\Enums\TipoOperacionInventario;
+use App\Models\Pedido;
+use App\Models\User;
+use App\Models\Venta;
+use App\Support\Decimal;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
+
+/**
+ * Convierte un pedido pendiente en venta (especificación § 5.2), todo en una transacción:
+ * bloquea el pedido, revalida totales con la calculadora, valida el pago, descuenta stock
+ * una sola vez (con bloqueo de saldos), crea la venta inmutable y su detalle, registra solo
+ * el dinero recibido y deja el saldo como crédito. Confirmar dos veces devuelve la misma venta.
+ * Si la empresa factura con SIAT, la factura se registra en la misma transacción y se envía al SIN
+ * después del commit; una factura bloqueada (total que no cuadra, falta configuración) no impide la venta.
+ */
+final class ConfirmarVenta
+{
+    public function __construct(
+        private readonly LibroStock $libro,
+        private readonly ResolverSucursal $resolverSucursal,
+        private readonly RegistradorCobros $cobros,
+        private readonly Auditor $auditor,
+        private readonly RegistrarFacturaVenta $facturas,
+    ) {}
+
+    /**
+     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string}  $pago
+     * @param  DatosFactura|null  $factura  datos fiscales confirmados por el vendedor; null: modo automático con datos propuestos, o sin factura en modo manual
+     */
+    public function ejecutar(User $actor, Pedido $pedido, array $pago, ?DatosFactura $factura = null): Venta
+    {
+        Gate::forUser($actor)->authorize('view', $pedido);
+
+        if ($pedido->estado === EstadoPedido::Vendido && ($venta = $this->ventaDe($pedido)) !== null) {
+            return $venta;
+        }
+
+        Gate::forUser($actor)->authorize('update', $pedido);
+
+        if (! Str::isUuid($pago['clave'])) {
+            throw ValidationException::withMessages(['pago_metodo' => __('La confirmación no tiene una clave válida. Recarga la página.')]);
+        }
+
+        $cantidades = $this->cantidadesPorProducto($pedido);
+        $this->libro->asegurarNiveles((int) $actor->empresa_id, array_map(
+            fn (int $productoId) => ['sucursal_id' => $pedido->sucursal_id, 'producto_id' => $productoId], array_keys($cantidades),
+        ));
+
+        try {
+            return DB::transaction(fn (): Venta => $this->confirmar($actor, $pedido->id, $pago, $factura), attempts: 3);
+        } catch (UniqueConstraintViolationException $e) {
+            return $this->ventaDe($pedido) ?? throw $e;
+        }
+    }
+
+    /**
+     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string}  $pago
+     */
+    private function confirmar(User $actor, int $pedidoId, array $pago, ?DatosFactura $factura): Venta
+    {
+        $pedido = Pedido::query()->whereKey($pedidoId)->lockForUpdate()->firstOrFail();
+
+        if ($pedido->estado === EstadoPedido::Vendido) {
+            return $this->ventaDe($pedido) ?? throw new RuntimeException('Pedido vendido sin venta asociada.');
+        }
+
+        if ($pedido->estado === EstadoPedido::Cancelado) {
+            throw ValidationException::withMessages(['lineas' => __('El pedido está cancelado y no puede venderse.')]);
+        }
+
+        $sucursal = $this->resolverSucursal->paraOperacion($actor, $pedido->sucursal_id);
+
+        if ($sucursal->id !== $pedido->sucursal_id) {
+            throw ValidationException::withMessages(['lineas' => __('Solo puedes confirmar pedidos de tu sucursal asignada.')]);
+        }
+
+        $items = DB::table('pedido_items')
+            ->join('productos', 'productos.id', '=', 'pedido_items.producto_id')
+            ->join('unidades_medida', 'unidades_medida.id', '=', 'productos.unidad_medida_id')
+            ->where('pedido_items.empresa_id', $pedido->empresa_id)
+            ->where('pedido_items.pedido_id', $pedido->id)
+            ->orderBy('pedido_items.orden')
+            ->get(['pedido_items.*', 'productos.nombre', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
+
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages(['lineas' => __('El pedido no tiene productos.')]);
+        }
+
+        if (($inactivo = $items->firstWhere('activo', false)) !== null) {
+            throw ValidationException::withMessages(['lineas' => __(':producto está inactivo; quítalo del pedido para vender.', ['producto' => $inactivo->nombre])]);
+        }
+
+        $this->verificarTotales($pedido, $items);
+
+        $cobro = ValidadorPago::inicial($pedido->total, $pago['metodo'], $pago['en_cuotas'],
+            $pago['cuota_inicial'], $pago['efectivo'], $pago['electronico']);
+        $saldo = Decimal::restar($pedido->total, $cobro['monto'], Decimal::ESCALA_DINERO);
+
+        if (Decimal::comparar($saldo, '0', 2) > 0 && $pedido->cliente_id === null) {
+            throw ValidationException::withMessages(['cliente_id' => __('Para vender a crédito identifica al cliente.')]);
+        }
+
+        $cambios = [];
+
+        foreach ($items->groupBy('producto_id') as $productoId => $lineas) {
+            $cambios[] = [
+                'sucursal_id' => $pedido->sucursal_id,
+                'producto_id' => (int) $productoId,
+                'cantidad' => '-'.$lineas->reduce(fn (string $suma, object $l) => Decimal::sumar($suma, (string) $l->cantidad), '0'),
+                'nombre' => (string) $lineas->first()->nombre,
+            ];
+        }
+
+        $operacion = $this->libro->aplicar($actor, [
+            'tipo' => TipoOperacionInventario::Venta,
+            'motivo' => null,
+            'sucursal_id' => $pedido->sucursal_id,
+            'sucursal_destino_id' => null,
+            'nota' => 'Pedido '.$pedido->codigo(),
+            'clave' => $pago['clave'],
+        ], $cambios);
+
+        $venta = new Venta;
+        $venta->empresa_id = $pedido->empresa_id;
+        $venta->pedido_id = $pedido->id;
+        $venta->numero = $operacion->numero;
+        $venta->sucursal_id = $pedido->sucursal_id;
+        $venta->cliente_id = $pedido->cliente_id;
+        $venta->vendedor_id = $pedido->vendedor_id;
+        $venta->confirmado_por = $actor->id;
+        $venta->operacion_inventario_id = $operacion->id;
+        $venta->fecha = Carbon::now();
+        $venta->subtotal = $pedido->subtotal;
+        $venta->descuento_lineas = $pedido->descuento_lineas;
+        $venta->descuento_global = $pedido->descuento_global;
+        $venta->total = $pedido->total;
+        $venta->cobrado_inicial = $cobro['monto'];
+        $venta->saldo_pendiente = $saldo;
+        $venta->devuelto = '0.00';
+        $venta->reembolsado = '0.00';
+        $venta->save();
+
+        DB::table('venta_items')->insert($items->values()->map(fn (object $item) => [
+            'empresa_id' => $venta->empresa_id,
+            'venta_id' => $venta->id,
+            'producto_id' => $item->producto_id,
+            'orden' => $item->orden,
+            'descripcion' => $item->nombre,
+            'sku' => $item->sku,
+            'unidad' => $item->abreviatura,
+            'cantidad' => $item->cantidad,
+            'tipo_precio' => $item->tipo_precio,
+            'precio_unitario' => $item->precio_unitario,
+            'descuento_tipo' => $item->descuento_tipo,
+            'descuento_valor' => $item->descuento_valor,
+            'descuento' => $item->descuento,
+            'subtotal' => $item->subtotal,
+            'total' => $item->total,
+            'created_at' => $venta->fecha,
+        ])->all());
+
+        if ($cobro['metodo'] !== null) {
+            $this->cobros->registrar($actor, $venta, $pedido->sucursal_id, 'inicial', $cobro['metodo'],
+                $cobro['efectivo'], $cobro['electronico'], $pago['clave']);
+        }
+
+        $pedido->estado = EstadoPedido::Vendido;
+        $pedido->save();
+
+        // Facturar no es cobrar: la factura no escribe en pagos_venta ni en movimientos_caja.
+        $this->facturas->registrar($actor, $venta, $factura);
+
+        $this->auditor->registrar('venta.confirmada', $venta, $actor, $venta->empresa_id, despues: [
+            'pedido' => $pedido->codigo(), 'total' => $venta->total, 'cobrado_inicial' => $venta->cobrado_inicial,
+            'saldo_pendiente' => $venta->saldo_pendiente, 'metodo' => $cobro['metodo']?->value,
+        ]);
+
+        return $venta;
+    }
+
+    /**
+     * Los totales guardados deben coincidir con un recálculo desde el detalle.
+     *
+     * @param  Collection<int, \stdClass>  $items
+     */
+    private function verificarTotales(Pedido $pedido, Collection $items): void
+    {
+        $calculo = CalculadoraPedido::calcular(array_values($items->map(fn (\stdClass $i) => [
+            'cantidad' => (string) $i->cantidad,
+            'precio_unitario' => (string) $i->precio_unitario,
+            'descuento_tipo' => (string) $i->descuento_tipo,
+            'descuento_valor' => (string) $i->descuento_valor,
+        ])->all()), $pedido->descuento_global_tipo, $pedido->descuento_global_valor);
+
+        if (Decimal::comparar($calculo['total'], $pedido->total, 2) !== 0) {
+            throw ValidationException::withMessages(['lineas' => __('Los importes del pedido no coinciden. Vuelve a guardarlo antes de confirmar.')]);
+        }
+    }
+
+    /**
+     * @return array<int, string> producto_id => cantidad total del pedido
+     */
+    private function cantidadesPorProducto(Pedido $pedido): array
+    {
+        return DB::table('pedido_items')
+            ->where('empresa_id', $pedido->empresa_id)
+            ->where('pedido_id', $pedido->id)
+            ->pluck('cantidad', 'producto_id')
+            ->map(fn ($cantidad) => (string) $cantidad)
+            ->all();
+    }
+
+    private function ventaDe(Pedido $pedido): ?Venta
+    {
+        return Venta::query()->where('pedido_id', $pedido->id)->first();
+    }
+}

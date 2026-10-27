@@ -1,0 +1,48 @@
+/* MoziStock · Menú lateral colapsable (rail compacto de pos.html): un icono con etiqueta corta por entrada y por
+   grupo; los enlaces de cada grupo se abren en un panel flotante (al pasar el mouse, o con clic en pantallas táctiles).
+   app.js guarda la preferencia y posiciona el panel; en móvil el menú sigue siendo el panel deslizable con acordeón. */
+.sidebar-toggle{margin-left:auto;flex-shrink:0;width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--muted);transition:color .2s,border-color .2s,transform .22s var(--ease)}
+.sidebar-toggle:hover{color:var(--brand-bright);border-color:var(--accent-border);transform:translateY(-1px)}
+.nav-short,.nav-group-symbol,.nav-flyout-title{display:none}
+.sidebar{transition:transform .28s var(--ease),width .25s var(--ease),padding .25s var(--ease)}
+.main{transition:margin-left .25s var(--ease)}
+@media(min-width:761px){
+    html[data-sidebar="collapsed"]{--sidebar-width:88px}
+    html[data-sidebar="collapsed"] .sidebar{padding:22px 10px 15px}
+    html[data-sidebar="collapsed"] .brand{flex-direction:column;padding:0 0 16px;gap:12px}
+    html[data-sidebar="collapsed"] .sidebar-toggle{margin-left:0}
+    html[data-sidebar="collapsed"] .sidebar-toggle .ico{transform:scaleX(-1)}
+    html[data-sidebar="collapsed"] .workspace{justify-content:center;padding:8px}
+    html[data-sidebar="collapsed"] :is(.brand-text,.workspace-info,.workspace>.ico,.nav-label,.nav-text,.nav-group-title,.group-chevron,.side-help,.mini-profile>span:not(.avatar),.btn-text){display:none}
+    html[data-sidebar="collapsed"] .nav-scroll{margin-top:14px;scrollbar-width:none;display:grid;gap:4px;align-content:start}
+
+    /* Entradas del rail: enlaces sueltos y grupos, con el mismo aspecto. */
+    html[data-sidebar="collapsed"] .nav-item,
+    html[data-sidebar="collapsed"] .nav-group summary{flex-direction:column;justify-content:center;gap:5px;min-height:58px;margin:0;padding:9px 3px;border:1px solid transparent;border-radius:12px;font-size:9.5px;font-weight:650;line-height:1.2;letter-spacing:0;text-transform:none;text-align:center;color:var(--muted);position:relative;transition:color .18s,background .18s,transform .2s var(--ease)}
+    html[data-sidebar="collapsed"] .nav-scroll>.nav-item:hover,
+    html[data-sidebar="collapsed"] .nav-group summary:hover{background:var(--panel-soft);color:var(--text);transform:translateY(-2px)}
+    html[data-sidebar="collapsed"] .nav-item.active:after{display:none}
+    html[data-sidebar="collapsed"] .nav-group{margin:0;position:static}
+    html[data-sidebar="collapsed"] .nav-group-symbol{display:inline-grid}
+    html[data-sidebar="collapsed"] .nav-group.has-active summary{color:var(--brand-bright);border-color:rgba(231,138,66,.16);background:var(--sidebar-active)}
+    html[data-sidebar="collapsed"] .nav-group.has-active .nav-group-symbol{color:var(--brand-bright)}
+    html[data-sidebar="collapsed"] .nav-short{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    html[data-sidebar="collapsed"] .nav-item .badge{position:absolute;top:7px;right:12px;margin:0!important;width:8px;height:8px;padding:0;border-radius:50%;font-size:0}
+
+    /* Panel flotante del grupo: oculto con retardo para cruzar el espacio hasta él sin perderlo. */
+    html[data-sidebar="collapsed"] .nav-subitems{position:fixed;z-index:60;left:calc(var(--sidebar-width) + 6px);top:var(--flyout-top,90px);width:232px;max-height:calc(100vh - 24px);overflow-y:auto;padding:8px;display:grid;gap:2px;background:var(--panel-elevated);border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 45px rgba(0,0,0,.28);opacity:0;visibility:hidden;transform:translateX(-6px);transition:opacity .16s,transform .16s var(--ease),visibility 0s linear .22s}
+    html[data-sidebar="collapsed"] .nav-group.flyout-open .nav-subitems{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+    html[data-sidebar="collapsed"] .nav-flyout-title{display:block;padding:7px 10px 8px;font-size:10px;font-weight:780;letter-spacing:.075em;text-transform:uppercase;color:var(--faint)}
+    html[data-sidebar="collapsed"] .nav-subitems .nav-item{flex-direction:row;justify-content:flex-start;gap:11px;min-height:40px;padding:9px 10px;font-size:12.5px;font-weight:570;text-align:left}
+    html[data-sidebar="collapsed"] .nav-subitems .nav-item:hover{transform:translateX(2px)}
+    html[data-sidebar="collapsed"] .nav-subitems .nav-item .nav-text{display:inline}
+    html[data-sidebar="collapsed"] .nav-subitems .nav-item .nav-short{display:none}
+
+    html[data-sidebar="collapsed"] .sidebar-footer{padding:12px 0 0}
+    html[data-sidebar="collapsed"] .mini-profile{justify-content:center;padding:8px;margin-bottom:8px!important}
+    html[data-sidebar="collapsed"] .sidebar-footer .btn{width:100%;padding:0}
+}
+@media(min-width:761px) and (hover:hover){
+    html[data-sidebar="collapsed"] .nav-group:hover .nav-subitems{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+}
+@media(max-width:760px){.sidebar-toggle{display:none}}
