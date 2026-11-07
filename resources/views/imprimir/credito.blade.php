@@ -11,25 +11,25 @@
     <table>
         <thead><tr><th>{{ __('Fecha') }}</th><th>{{ __('Concepto') }}</th><th>{{ __('Método') }}</th><th>{{ __('Recibió') }}</th><th class="der">{{ __('Efectivo') }}</th><th class="der">{{ __('Electrónico') }}</th><th class="der">{{ __('Total') }}</th></tr></thead>
         <tbody>
-            @forelse ($venta->pagos as $pago)
+            @forelse ($pagos as $pago)
                 <tr>
-                    <td>{{ $pago->fecha_cobro->timezone($zona)->format('d/m/Y H:i') }}</td>
-                    <td>{{ $pago->tipo === 'inicial' ? __('Cuota inicial') : __('Abono') }}@if ($pago->nota)<br><span class="muted">{{ $pago->nota }}</span>@endif</td>
-                    <td>{{ $pago->metodo->etiqueta() }}</td>
-                    <td>{{ $pago->receptor->name }}<br><span class="muted">{{ $pago->sucursal->nombre }}</span></td>
-                    <td class="der">{{ Decimal::bs($pago->monto_efectivo) }}</td>
-                    <td class="der">{{ Decimal::bs($pago->monto_electronico) }}</td>
-                    <td class="der">{{ Decimal::bs($pago->monto) }}</td>
+                    <td>{{ $pago['fecha']->timezone($zona)->format('d/m/Y H:i') }}</td>
+                    <td>{{ $pago['concepto'] }}@if ($pago['nota'])<br><span class="muted">{{ $pago['nota'] }}</span>@endif @if ($pago['anulado'])<br><b>{{ __('ANULADO') }}</b> <span class="muted">{{ $pago['anulado'] }}</span>@endif</td>
+                    <td>{{ $pago['metodo'] }}</td>
+                    <td>{{ $pago['receptor'] }}<br><span class="muted">{{ $pago['sucursal'] }}</span></td>
+                    <td class="der">{{ Decimal::bs($pago['efectivo']) }}</td>
+                    <td class="der">{{ Decimal::bs($pago['electronico']) }}</td>
+                    <td class="der">{{ Decimal::bs($pago['monto']) }}</td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="muted">{{ __('Sin pagos registrados (cuota inicial Bs 0,00).') }}</td></tr>
             @endforelse
         </tbody>
-        @if ($venta->pagos->isNotEmpty())
+        @if ($pagos !== [])
             <tfoot><tr>
                 <td colspan="4">{{ __('Total abonado') }}</td>
-                <td class="der">{{ Decimal::bs($venta->pagos->reduce(fn ($s, $p) => Decimal::sumar($s, $p->monto_efectivo, 2), '0')) }}</td>
-                <td class="der">{{ Decimal::bs($venta->pagos->reduce(fn ($s, $p) => Decimal::sumar($s, $p->monto_electronico, 2), '0')) }}</td>
+                <td class="der">{{ Decimal::bs(\App\Domain\Creditos\Consultas\HistorialPagos::total($pagos, 'efectivo')) }}</td>
+                <td class="der">{{ Decimal::bs(\App\Domain\Creditos\Consultas\HistorialPagos::total($pagos, 'electronico')) }}</td>
                 <td class="der">{{ Decimal::bs($venta->cobrado()) }}</td>
             </tr></tfoot>
         @endif

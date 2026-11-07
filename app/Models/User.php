@@ -27,6 +27,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int $id
  * @property int|null $empresa_id
  * @property int|null $sucursal_id
+ * @property int|null $caja_id
  * @property Rol|null $rol
  * @property bool $activo
  * @property string|null $idioma
@@ -42,6 +43,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $updated_at
  * @property-read Empresa|null $empresa
  * @property-read Sucursal|null $sucursal
+ * @property-read Caja|null $caja
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -86,6 +88,14 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function sucursal(): BelongsTo
     {
         return $this->belongsTo(Sucursal::class);
+    }
+
+    /**
+     * @return BelongsTo<Caja, $this>
+     */
+    public function caja(): BelongsTo
+    {
+        return $this->belongsTo(Caja::class)->withoutGlobalScopes();
     }
 
     /**

@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureCapacidad;
 use App\Http\Middleware\EnsureCompanyUser;
 use App\Http\Middleware\EnsureNotImpersonating;
 use App\Http\Middleware\EnsureSaasMode;
 use App\Http\Middleware\EnsureSuperadmin;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,12 +22,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Cada petición web (incluido Livewire) revalida usuario y empresa activos.
         // El idioma de la interfaz sale de la preferencia del usuario o de la sesión.
-        $middleware->web(append: [EnsureAccountIsActive::class, SetLocale::class]);
+        $middleware->web(append: [EnsureAccountIsActive::class, SetLocale::class, SecurityHeaders::class]);
         $middleware->alias([
             'empresa' => EnsureCompanyUser::class,
             'superadmin' => EnsureSuperadmin::class,
             'saas' => EnsureSaasMode::class,
             'sin-impersonar' => EnsureNotImpersonating::class,
+            'capacidad' => EnsureCapacidad::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

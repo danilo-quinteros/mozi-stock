@@ -24,11 +24,13 @@ class ExportarProductosController extends Controller
 
         $sucursal = ListadoProductos::sucursalParaVista($actor, (string) $request->query('sucursal', ''));
         $categoria = (string) $request->query('categoria', '');
+        $filtroStock = (string) $request->query('stock', '');
         $productos = ListadoProductos::consulta(
             (int) $actor->empresa_id,
             $sucursal?->id,
             (string) $request->query('q', ''),
             ctype_digit($categoria) ? (int) $categoria : null,
+            in_array($filtroStock, ['con_stock', 'sin_stock'], true) ? $filtroStock : null,
         )->lazy(500);
 
         return Csv::descargar('productos.csv',

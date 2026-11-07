@@ -66,6 +66,18 @@
     @if (! $suscripcion)
         <div class="notice"><x-icon name="info" /><div><b>{{ __('Tu plan todavía no está configurado') }}</b><p>{{ __('MoziStudios definirá el precio mensual y el vencimiento de tu empresa. Mientras tanto no necesitas hacer nada: el sistema sigue disponible.') }}</p></div></div>
     @else
+        @if ($suscripcion->enPrueba($hoy))
+            @php($diasPrueba = CalendarioSuscripcion::diasHasta($suscripcion->prueba_hasta, $hoy))
+            <div class="notice" style="margin-bottom:18px;border-color:var(--accent-border);background:var(--accent-soft)" data-test="aviso-prueba">
+                <x-icon name="sparkles" />
+                <div class="grow">
+                    <b>{{ $diasPrueba === 0
+                        ? __('Hoy es el último día de tu prueba gratis')
+                        : trans_choice('Estás en tu prueba gratis: te queda :count día|Estás en tu prueba gratis: te quedan :count días', $diasPrueba) }}</b>
+                    <p>{{ __('La prueba dura hasta el :fecha. Para continuar después, paga tu primera mensualidad con QR desde esta pantalla; tus datos se conservan.', ['fecha' => $suscripcion->prueba_hasta->format('d/m/Y')]) }}</p>
+                </div>
+            </div>
+        @endif
         @if ($suscripcion->plan_siguiente_id && $suscripcion->planSiguiente)
             <div class="notice" style="margin-bottom:18px;border-color:var(--accent-border);background:var(--accent-soft)">
                 <x-icon name="calendar" />

@@ -3,8 +3,10 @@
 namespace App\Domain\Tenancy\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Caja\Actions\CrearCajaPrincipal;
 use App\Enums\Rol;
 use App\Models\Sucursal;
+use App\Models\TurnoCaja;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -18,7 +20,10 @@ final class GuardarSucursal
 {
     private const CAMPOS = ['nombre', 'codigo', 'direccion', 'activa'];
 
-    public function __construct(private readonly Auditor $auditor) {}
+    public function __construct(
+        private readonly Auditor $auditor,
+        private readonly CrearCajaPrincipal $crearCajaPrincipal,
+    ) {}
 
     /**
      * @param  array{nombre: string, codigo: string, direccion?: string|null}  $datos
@@ -33,6 +38,8 @@ final class GuardarSucursal
             $sucursal->empresa_id = (int) $actor->empresa_id;
             $sucursal->activa = true;
             $sucursal->save();
+
+            $this->crearCajaPrincipal->ejecutar($actor, $sucursal);
 
             $this->auditor->registrar('sucursal.creada', $sucursal, $actor, $sucursal->empresa_id,
                 despues: $sucursal->only(self::CAMPOS));
@@ -81,6 +88,17 @@ final class GuardarSucursal
                 ->exists()) {
                 throw ValidationException::withMessages([
                     'sucursal' => __('Hay vendedores activos asignados a esta sucursal. Reasígnalos o desactívalos antes.'),
+                ]);
+            }
+
+            // Un turno abierto debe cerrarse y arquearse en su sucursal antes de dejarla sin operaciones.
+            if (! $activa && TurnoCaja::withoutGlobalScopes()
+                ->where('empresa_id', $bloqueada->empresa_id)
+                ->where('sucursal_id', $bloqueada->id)
+                ->where('estado', 'abierto')
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'sucursal' => __('Hay cajas con turno abierto en esta sucursal. Ciérralas antes de desactivarla.'),
                 ]);
             }
 

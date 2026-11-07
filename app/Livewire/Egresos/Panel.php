@@ -6,10 +6,12 @@ use App\Domain\Egresos\Actions\GuardarCategoriaEgreso;
 use App\Domain\Egresos\Actions\RegistrarEgreso;
 use App\Domain\Egresos\Consultas\ListadoEgresos;
 use App\Domain\Reportes\Periodo;
+use App\Livewire\Concerns\EligeCaja;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\UsaSucursalActiva;
 use App\Models\CategoriaEgreso;
 use App\Models\Egreso;
+use App\Models\Proveedor;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Support\Decimal;
@@ -24,13 +26,14 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 /**
- * Egresos operativos y sus categorías (egresos.html V3). Registrar un egreso es una salida
- * real de caja con la fecha y hora actuales; las compras se registran en Compras.
+ * Egresos operativos y sus categorías (egresos.html V3 y Cuentas por pagar § 12). Un egreso
+ * pagado es una salida real con la fecha y hora actuales; con saldo (pendiente o parcial) solo
+ * sale lo pagado y el resto abre su cuenta por pagar. Las compras se registran en Compras.
  */
 #[Title('Egresos')]
 class Panel extends Component
 {
-    use MuestraAvisos, UsaSucursalActiva, WithPagination;
+    use EligeCaja, MuestraAvisos, UsaSucursalActiva, WithPagination;
 
     #[Url(except: 'movimientos')]
     public string $pestana = 'movimientos';
@@ -40,6 +43,10 @@ class Panel extends Component
 
     #[Url(except: '')]
     public string $sucursal = '';
+
+    /** Egreso a abrir desde un enlace (p. ej. el origen de una cuenta por pagar). */
+    #[Url(as: 'egreso', except: '')]
+    public string $abrir = '';
 
     public bool $formEgreso = false;
 
@@ -52,9 +59,21 @@ class Panel extends Component
 
     public ?string $sucursal_id = null;
 
+    public ?string $proveedor_id = null;
+
+    public string $condicion = 'pagado';
+
+    public string $pagado = '';
+
+    public string $vencimiento = '';
+
     public string $metodo = 'efectivo';
 
     public string $monto = '';
+
+    public string $efectivo = '';
+
+    public string $electronico = '';
 
     #[Locked]
     public ?int $viendoId = null;
@@ -78,6 +97,10 @@ class Panel extends Component
         if (! in_array($this->pestana, ['movimientos', 'categorias'], true)) {
             $this->pestana = 'movimientos';
         }
+
+        if (ctype_digit($this->abrir)) {
+            $this->ver((int) $this->abrir);
+        }
     }
 
     public function updated(string $propiedad): void
@@ -91,28 +114,38 @@ class Panel extends Component
     {
         $this->authorize('create', Egreso::class);
         $this->resetValidation();
-        $this->reset('categoria_id', 'descripcion', 'metodo', 'monto');
+        $this->reset('categoria_id', 'descripcion', 'proveedor_id', 'condicion', 'pagado', 'vencimiento', 'metodo', 'monto', 'efectivo', 'electronico');
         $this->clave = (string) Str::uuid();
         $primera = $this->actor()->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
         $this->sucursal_id = $primera === null ? null : (string) $primera;
+        $this->updatedSucursalId();
         $this->formEgreso = true;
     }
 
     public function registrarEgreso(RegistrarEgreso $accion): void
     {
         $this->resetValidation();
-        $egreso = $accion->ejecutar($this->actor(), [
+        $egreso = $accion->ejecutar($this->actor(), $this->datosCaja() + [
             'sucursal_id' => blank($this->sucursal_id) ? null : (int) $this->sucursal_id,
             'categoria_id' => blank($this->categoria_id) ? null : (int) $this->categoria_id,
             'descripcion' => $this->descripcion,
-            'metodo' => $this->metodo,
+            'proveedor_id' => blank($this->proveedor_id) ? null : (int) $this->proveedor_id,
+            'condicion' => $this->condicion,
+            'pagado' => $this->pagado,
+            'vencimiento' => $this->vencimiento === '' ? null : $this->vencimiento,
+            'metodo' => $this->condicion === 'pendiente' ? null : $this->metodo,
             'monto' => $this->monto,
+            'efectivo' => $this->efectivo,
+            'electronico' => $this->electronico,
             'clave' => $this->clave,
         ]);
 
         $this->formEgreso = false;
         $this->resetPage();
-        $this->avisar(__(':codigo registrado: salida de :importe en caja.', ['codigo' => $egreso->codigo(), 'importe' => Decimal::bs($egreso->monto)]));
+        $this->avisar($egreso->condicion === 'pagado'
+            ? __(':codigo registrado: salida de :importe.', ['codigo' => $egreso->codigo(), 'importe' => Decimal::bs($egreso->monto)])
+            : __(':codigo registrado: pagado :pagado y :saldo en cuentas por pagar.', ['codigo' => $egreso->codigo(),
+                'pagado' => Decimal::bs($egreso->pagado), 'saldo' => Decimal::bs(Decimal::restar($egreso->monto, $egreso->pagado, 2))]));
     }
 
     public function ver(int $id): void
@@ -180,8 +213,14 @@ class Panel extends Component
             'deHoy' => ListadoEgresos::total($empresaId, Periodo::hoy()),
             'categorias' => $categorias,
             'sucursales' => Sucursal::query()->orderBy('nombre')->get(['id', 'nombre', 'activa']),
+            'proveedores' => $this->formEgreso ? Proveedor::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
             'viendo' => $this->viendoId === null ? null
-                : Egreso::query()->with(['categoria:id,nombre', 'sucursal:id,nombre', 'usuario:id,name'])->find($this->viendoId),
+                : Egreso::query()->with(['categoria:id,nombre', 'sucursal:id,nombre', 'usuario:id,name', 'proveedor:id,nombre', 'cuentaPagar'])->find($this->viendoId),
+            'mixto' => Decimal::sumar(
+                Decimal::normalizar($this->efectivo === '' ? '0' : $this->efectivo, 2) ?? '0',
+                Decimal::normalizar($this->electronico === '' ? '0' : $this->electronico, 2) ?? '0',
+                Decimal::ESCALA_DINERO,
+            ),
         ]);
     }
 

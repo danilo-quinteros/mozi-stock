@@ -3,6 +3,8 @@
 namespace App\Domain\Ventas\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Caja\CajaOperacion;
+use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
 use App\Domain\Facturacion\Actions\RegistrarFacturaVenta;
 use App\Domain\Facturacion\DatosFactura;
 use App\Domain\Inventario\LibroStock;
@@ -13,6 +15,7 @@ use App\Domain\Ventas\ValidadorPago;
 use App\Enums\EstadoPedido;
 use App\Enums\TipoOperacionInventario;
 use App\Models\Pedido;
+use App\Models\Producto;
 use App\Models\User;
 use App\Models\Venta;
 use App\Support\Decimal;
@@ -29,9 +32,15 @@ use RuntimeException;
  * Convierte un pedido pendiente en venta (especificación § 5.2), todo en una transacción:
  * bloquea el pedido, revalida totales con la calculadora, valida el pago, descuenta stock
  * una sola vez (con bloqueo de saldos), crea la venta inmutable y su detalle, registra solo
- * el dinero recibido y deja el saldo como crédito. Confirmar dos veces devuelve la misma venta.
+ * el dinero recibido y deja el saldo como crédito, con un vencimiento opcional (fecha única; el plan
+ * de cuotas se define después en el historial de pagos). Confirmar dos veces devuelve la misma venta.
  * Si la empresa factura con SIAT, la factura se registra en la misma transacción y se envía al SIN
  * después del commit; una factura bloqueada (total que no cuadra, falta configuración) no impide la venta.
+ *
+ * Fuera del POS (Pedidos y ventas) el cobro inicial se trata como un abono (§ 10.4, decisión del
+ * propietario del 01/11/2026): el efectivo exige un turno abierto de la sucursal que el usuario opere
+ * o, solo para el administrador, fuera de caja; lo electrónico y el crédito sin cuota inicial no lo exigen.
+ * El POS ya llega con su caja y su turno.
  */
 final class ConfirmarVenta
 {
@@ -39,16 +48,23 @@ final class ConfirmarVenta
         private readonly LibroStock $libro,
         private readonly ResolverSucursal $resolverSucursal,
         private readonly RegistradorCobros $cobros,
+        private readonly CajaOperacion $cajas,
         private readonly Auditor $auditor,
         private readonly RegistrarFacturaVenta $facturas,
     ) {}
 
     /**
-     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string}  $pago
+     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string, vencimiento?: string|null, externo?: bool, turno_id?: int|null}  $pago
      * @param  DatosFactura|null  $factura  datos fiscales confirmados por el vendedor; null: modo automático con datos propuestos, o sin factura en modo manual
      */
-    public function ejecutar(User $actor, Pedido $pedido, array $pago, ?DatosFactura $factura = null): Venta
-    {
+    public function ejecutar(
+        User $actor,
+        Pedido $pedido,
+        array $pago,
+        ?DatosFactura $factura = null,
+        ?int $cajaId = null,
+        ?int $turnoId = null,
+    ): Venta {
         Gate::forUser($actor)->authorize('view', $pedido);
 
         if ($pedido->estado === EstadoPedido::Vendido && ($venta = $this->ventaDe($pedido)) !== null) {
@@ -67,17 +83,23 @@ final class ConfirmarVenta
         ));
 
         try {
-            return DB::transaction(fn (): Venta => $this->confirmar($actor, $pedido->id, $pago, $factura), attempts: 3);
+            return DB::transaction(fn (): Venta => $this->confirmar($actor, $pedido->id, $pago, $factura, $cajaId, $turnoId), attempts: 3);
         } catch (UniqueConstraintViolationException $e) {
             return $this->ventaDe($pedido) ?? throw $e;
         }
     }
 
     /**
-     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string}  $pago
+     * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string, vencimiento?: string|null, externo?: bool, turno_id?: int|null}  $pago
      */
-    private function confirmar(User $actor, int $pedidoId, array $pago, ?DatosFactura $factura): Venta
-    {
+    private function confirmar(
+        User $actor,
+        int $pedidoId,
+        array $pago,
+        ?DatosFactura $factura,
+        ?int $cajaId = null,
+        ?int $turnoId = null,
+    ): Venta {
         $pedido = Pedido::query()->whereKey($pedidoId)->lockForUpdate()->firstOrFail();
 
         if ($pedido->estado === EstadoPedido::Vendido) {
@@ -100,14 +122,15 @@ final class ConfirmarVenta
             ->where('pedido_items.empresa_id', $pedido->empresa_id)
             ->where('pedido_items.pedido_id', $pedido->id)
             ->orderBy('pedido_items.orden')
-            ->get(['pedido_items.*', 'productos.nombre', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
+            ->get(['pedido_items.*', 'productos.nombre', 'productos.contenido', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
 
         if ($items->isEmpty()) {
             throw ValidationException::withMessages(['lineas' => __('El pedido no tiene productos.')]);
         }
 
         if (($inactivo = $items->firstWhere('activo', false)) !== null) {
-            throw ValidationException::withMessages(['lineas' => __(':producto está inactivo; quítalo del pedido para vender.', ['producto' => $inactivo->nombre])]);
+            $nombreInactivo = Producto::formatoNombreCompleto($inactivo->nombre, $inactivo->contenido, $inactivo->abreviatura);
+            throw ValidationException::withMessages(['lineas' => __(':producto está inactivo; quítalo del pedido para vender.', ['producto' => $nombreInactivo])]);
         }
 
         $this->verificarTotales($pedido, $items);
@@ -120,14 +143,24 @@ final class ConfirmarVenta
             throw ValidationException::withMessages(['cliente_id' => __('Para vender a crédito identifica al cliente.')]);
         }
 
+        $vencimiento = Decimal::comparar($saldo, '0', 2) > 0 ? self::vencimiento($pago['vencimiento'] ?? null) : null;
+
+        if ($cobro['metodo'] !== null && $cajaId === null && $turnoId === null) {
+            $caja = $this->cajas->resolver($actor, $pedido->sucursal_id, $cobro['efectivo'], (bool) ($pago['externo'] ?? false),
+                'externo', isset($pago['turno_id']) ? (int) $pago['turno_id'] : null);
+            [$cajaId, $turnoId] = [$caja['caja_id'], $caja['turno_id']];
+        }
+
         $cambios = [];
 
         foreach ($items->groupBy('producto_id') as $productoId => $lineas) {
+            $primer = $lineas->first();
+            $nombreItem = Producto::formatoNombreCompleto((string) $primer->nombre, $primer->contenido, $primer->abreviatura);
             $cambios[] = [
                 'sucursal_id' => $pedido->sucursal_id,
                 'producto_id' => (int) $productoId,
                 'cantidad' => '-'.$lineas->reduce(fn (string $suma, object $l) => Decimal::sumar($suma, (string) $l->cantidad), '0'),
-                'nombre' => (string) $lineas->first()->nombre,
+                'nombre' => $nombreItem,
             ];
         }
 
@@ -145,6 +178,8 @@ final class ConfirmarVenta
         $venta->pedido_id = $pedido->id;
         $venta->numero = $operacion->numero;
         $venta->sucursal_id = $pedido->sucursal_id;
+        $venta->caja_id = $cajaId;
+        $venta->turno_caja_id = $turnoId;
         $venta->cliente_id = $pedido->cliente_id;
         $venta->vendedor_id = $pedido->vendedor_id;
         $venta->confirmado_por = $actor->id;
@@ -156,6 +191,7 @@ final class ConfirmarVenta
         $venta->total = $pedido->total;
         $venta->cobrado_inicial = $cobro['monto'];
         $venta->saldo_pendiente = $saldo;
+        $venta->vencimiento = $vencimiento === null ? null : Carbon::parse($vencimiento);
         $venta->devuelto = '0.00';
         $venta->reembolsado = '0.00';
         $venta->save();
@@ -192,10 +228,26 @@ final class ConfirmarVenta
 
         $this->auditor->registrar('venta.confirmada', $venta, $actor, $venta->empresa_id, despues: [
             'pedido' => $pedido->codigo(), 'total' => $venta->total, 'cobrado_inicial' => $venta->cobrado_inicial,
-            'saldo_pendiente' => $venta->saldo_pendiente, 'metodo' => $cobro['metodo']?->value,
+            'saldo_pendiente' => $venta->saldo_pendiente, 'metodo' => $cobro['metodo']?->value, 'vencimiento' => $vencimiento,
         ]);
 
         return $venta;
+    }
+
+    /**
+     * Vencimiento opcional del saldo a crédito: vacío o una fecha desde hoy (hora de negocio).
+     *
+     * @throws ValidationException
+     */
+    public static function vencimiento(?string $valor): ?string
+    {
+        $fecha = RegistrarCuentaCobrar::fecha($valor, 'pago_vencimiento');
+
+        if ($fecha !== null && $fecha < Carbon::now(config('mozistock.business_timezone'))->format('Y-m-d')) {
+            throw ValidationException::withMessages(['pago_vencimiento' => __('El vencimiento no puede ser anterior a hoy.')]);
+        }
+
+        return $fecha;
     }
 
     /**

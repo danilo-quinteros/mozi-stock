@@ -44,7 +44,7 @@
                             <td>{{ $compra->proveedor ?? __('Sin proveedor') }}</td>
                             <td>{{ $compra->sucursal }}</td>
                             <td>{{ $compra->articulos }}</td>
-                            <td>{{ Decimal::bs((string) $compra->total) }}<small style="display:block;color:var(--faint);margin-top:4px">{{ MetodoPago::from($compra->metodo)->etiqueta() }}</small></td>
+                            <td>{{ Decimal::bs((string) $compra->total) }}<small style="display:block;color:var(--faint);margin-top:4px">{{ MetodoPago::tryFrom((string) $compra->metodo)?->etiqueta() ?? __('A crédito') }}</small></td>
                             <td><span class="badge success">{{ __('Pagada') }}</span></td>
                             <td><a class="btn sm ghost" href="{{ route('compras.ver', $compra->id) }}">{{ __('Ver') }} <x-icon name="arrow" size="sm" /></a></td>
                         </tr>

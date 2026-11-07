@@ -174,6 +174,9 @@
                             <x-campo etiqueta="Cuota inicial (Bs)" campo="pago_cuota_inicial">
                                 <input id="pago_cuota_inicial" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="pago_cuota_inicial">
                             </x-campo>
+                            <x-campo etiqueta="Vencimiento del saldo (opcional)" campo="pago_vencimiento">
+                                <input id="pago_vencimiento" class="input" type="date" wire:model="pago_vencimiento" min="{{ now()->timezone(config('mozistock.business_timezone'))->format('Y-m-d') }}">
+                            </x-campo>
                         @endif
                         @if ($pago_metodo === 'mixto')
                             <div class="payment-grid">
@@ -189,6 +192,9 @@
                             <p class="payment-hint">{{ $pago_metodo === 'efectivo' ? __('Al confirmar se registrará como cobrado el total del pedido en efectivo.') : __('Al confirmar se registrará como cobrado el total del pedido en medio electrónico.') }}</p>
                         @endif
                     </div>
+                    @if (! $pago_en_cuotas || ($pago && Decimal::comparar($pago['monto'], '0', 2) > 0))
+                        <div class="payment-fields">@include('livewire.partials.caja', ['metodo' => $pago_metodo])</div>
+                    @endif
                     @php($saldo = $calculo && $pago ? Decimal::restar($calculo['total'], $pago['monto'], 2) : null)
                     <div class="payment-summary">
                         <span>{{ $pago_en_cuotas ? __('Saldo pendiente (crédito)') : __('Cobro al confirmar') }}</span>

@@ -4,6 +4,7 @@ use App\Domain\Facturacion\PreparacionFacturacion;
 use App\Domain\Tenancy\Actions\CrearEmpresa;
 use App\Domain\Tenancy\Actions\GuardarSucursal;
 use App\Domain\Tenancy\GuiaConfiguracion;
+use App\Enums\Rubro;
 use App\Livewire\Empresa\Configuracion;
 use App\Livewire\Empresa\Sucursales;
 use App\Livewire\Facturacion\Datos;
@@ -28,7 +29,7 @@ use Tests\Feature\Facturacion\SiatPruebas;
 function empresaRecienCreada(array $datos = []): array
 {
     $empresa = app(CrearEmpresa::class)->ejecutar(User::factory()->superadmin()->create(),
-        $datos + ['nombre' => 'Comercial Nueva', 'telefono' => '70000000'],
+        $datos + ['nombre' => 'Comercial Nueva', 'rubro' => Rubro::General, 'telefono' => '70000000'],
         ['name' => 'Administradora', 'email' => 'admin@nueva.test', 'password' => 'ClaveSegura12345']);
 
     return [

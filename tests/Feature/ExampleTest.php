@@ -1,7 +1,11 @@
 <?php
 
-test('home sends guests to login', function () {
-    $response = $this->get(route('home'));
+test('home shows the public website in saas mode', function () {
+    $this->get(route('home'))->assertOk()->assertSee('MoziStock');
+});
 
-    $response->assertRedirect(route('login'));
+test('home sends guests to login in standalone mode', function () {
+    config(['mozistock.deployment_mode' => 'standalone']);
+
+    $this->get(route('home'))->assertRedirect(route('login'));
 });

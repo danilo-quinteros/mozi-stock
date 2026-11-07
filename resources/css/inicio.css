@@ -1,0 +1,38 @@
+/* Inicio (index.html) tras la guía de configuración: KPIs, barras de 7 días y listas cortas. Solo tokens del design system. */
+.inicio-kpis{margin-bottom:18px}
+.inicio-sub{margin:6px 0 0}
+.inicio-serie-head .callout-number{white-space:nowrap}
+.inicio-columnas > .stack{align-content:start}
+.inicio-monto{color:var(--text-strong);font-variant-numeric:tabular-nums;white-space:nowrap}
+.inicio-nombre{color:var(--text-strong);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inicio-barras .chartbar span{position:relative;transition:height .4s var(--ease)}
+.inicio-barras .chartbar span[data-valor]:before{content:attr(data-valor);position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:700;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.inicio-barras .chartbar.vacio span{background:var(--border);box-shadow:none}
+.inicio-barras .chartbar:not(.hoy) span{opacity:.72}
+.inicio-barras .chartbar.hoy:after{color:var(--brand-bright);font-weight:750}
+.inicio-barras .chartbar.hoy span[data-valor]:before{color:var(--brand-bright)}
+.inicio-venta{color:inherit;text-decoration:none;border-radius:10px;margin:0 -8px;padding-left:8px;padding-right:8px;transition:background .2s}
+.inicio-venta:hover{background:var(--panel-soft)}
+.inicio-venta .grow{display:grid;gap:5px;min-width:0}
+.inicio-venta .grow b{color:var(--text-strong);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inicio-venta small,.inicio-top small,.inicio-lista .list-line .grow small{color:var(--faint);font-size:10.5px}
+.inicio-venta .right{display:grid;justify-items:end;gap:6px;flex-shrink:0}
+.inicio-lista .list-line .grow{display:grid;gap:5px;min-width:0}
+.inicio-top{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--border-soft)}
+.inicio-top:last-child{border-bottom:0;padding-bottom:0}
+.card-head + .inicio-top{padding-top:0}
+.inicio-top .row{gap:12px}
+.inicio-top .progress{height:6px}
+.inicio-ok{display:flex;gap:12px;align-items:flex-start;padding:4px 0}
+.inicio-ok .ico{color:var(--green);margin-top:2px}
+.inicio-ok b{display:block;font-size:12px;color:var(--text-strong);margin-bottom:4px}
+.inicio-ok p{margin:0;font-size:11px;color:var(--muted)}
+@media(max-width:760px){
+  .grid.four.inicio-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .inicio-kpis .stat{padding:14px}
+  .inicio-kpis .stat-value{font-size:19px;margin:9px 0 8px}
+  .inicio-kpis .stat-foot{font-size:10px;flex-wrap:wrap}
+  .inicio-serie-head{flex-direction:column;align-items:flex-start;gap:12px}
+  .inicio-serie-head .right{display:flex;align-items:baseline;gap:8px;text-align:left}
+}
+@media(max-width:440px){.inicio-barras .chartbar span[data-valor]:before{display:none}}

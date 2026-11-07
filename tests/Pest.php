@@ -1,8 +1,10 @@
 <?php
 
+use App\Domain\AgenteMozi\Actions\EnviarMensaje;
 use App\Domain\Inventario\Actions\RegistrarAjuste;
 use App\Domain\Ventas\Actions\ConfirmarVenta;
 use App\Domain\Ventas\Actions\GuardarPedido;
+use App\Models\AgenteMensaje;
 use App\Models\Empresa;
 use App\Models\Pedido;
 use App\Models\Producto;
@@ -71,6 +73,15 @@ function empresaConAdministrador(array $empresa = []): array
 }
 
 /**
+ * Marca la guía de configuración como terminada: el Inicio deja de mostrar solo la guía y
+ * muestra el panel con indicadores.
+ */
+function guiaTerminada(Empresa $empresa): void
+{
+    $empresa->forceFill(['guia_completada_en' => now()])->save();
+}
+
+/**
  * Producto activo de la empresa (unidad sin decimales salvo que se indique otra).
  *
  * @param  array<string, mixed>  $atributos
@@ -110,6 +121,9 @@ function crearPedido(User $actor, Sucursal $sucursal, array $lineas, array $extr
 }
 
 /**
+ * Sin turno elegido, el efectivo que cobra un administrador queda «fuera de caja» (como antes de
+ * vincular el cobro de Pedidos y ventas a un turno); los tests de caja pasan su turno_id.
+ *
  * @param  array<string, mixed>  $pago
  */
 function confirmarVenta(User $actor, Pedido $pedido, array $pago): Venta
@@ -117,6 +131,7 @@ function confirmarVenta(User $actor, Pedido $pedido, array $pago): Venta
     return app(ConfirmarVenta::class)->ejecutar($actor, $pedido, $pago + [
         'metodo' => null, 'en_cuotas' => false, 'cuota_inicial' => null, 'efectivo' => null,
         'electronico' => null, 'clave' => (string) Str::uuid(),
+        'externo' => $actor->esAdministrador() && ! isset($pago['turno_id']),
     ]);
 }
 
@@ -132,4 +147,35 @@ function stockDe(Sucursal $sucursal, Producto $producto): string
 {
     return (string) (DB::table('stock_niveles')->where('sucursal_id', $sucursal->id)
         ->where('producto_id', $producto->id)->value('cantidad') ?? '0.000');
+}
+
+/**
+ * Agente Mozi: empresa con una sucursal y cuatro productos con stock real: Arroz 20, Jabón 10, Pollo 7 y Leche 3.
+ *
+ * @param  array<string, mixed>  $atributos
+ * @return array{0: Empresa, 1: User}
+ */
+function motorConProductos(array $atributos = []): array
+{
+    [$empresa, $admin] = empresaConAdministrador($atributos);
+    $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id, 'nombre' => 'Centro']);
+    $productos = ['Arroz' => '20', 'Jabón' => '10', 'Pollo' => '7', 'Leche' => '3'];
+    $creados = array_map(fn (string $nombre) => productoDe($empresa, ['nombre' => $nombre]), array_keys($productos));
+    test()->actingAs($admin);
+
+    foreach ($creados as $i => $producto) {
+        cargarStock($admin, $sucursal, $producto, array_values($productos)[$i]);
+    }
+
+    return [$empresa, $admin];
+}
+
+/**
+ * Turno de Agente Mozi como lo envía la pantalla (autentica al actor y usa una clave idempotente).
+ */
+function preguntarAMozi(User $actor, string $texto, ?int $conversacionId = null, ?string $clave = null): AgenteMensaje
+{
+    test()->actingAs($actor);
+
+    return app(EnviarMensaje::class)->ejecutar($actor, $conversacionId, $texto, $clave ?? (string) Str::uuid());
 }

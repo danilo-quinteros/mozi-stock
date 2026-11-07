@@ -14,7 +14,7 @@
     $mensajes = array_values(array_unique(array_merge($erroresVivos, $errors->all())));
     $listo = $filas !== [] && $erroresVivos === [] && $pago !== null;
 @endphp
-<div class="pos" data-pos x-data="{ atajos: false }">
+<div class="pos" data-pos x-data="{ atajos: false }" @venta-finalizada.window="$nextTick(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); document.getElementById('contenido')?.scrollTo({ top: 0, behavior: 'smooth' }); })">
     <div class="pos-head">
         <div>
             <div class="eyebrow">{{ __('Vender es más fácil con MoziStock') }}</div>
@@ -22,6 +22,36 @@
             <p class="lead">{{ __('Encuentra tus productos, cobra y sigue vendiendo. Todo en una sola pantalla.') }}</p>
         </div>
         <div class="pos-head-right">
+            @if ($cajaActual)
+                {{-- El administrador elige con qué caja vende; puede tener varias abiertas a la vez. --}}
+                @php
+                    $eligeCaja = $cajasDisponibles->count() > 1;
+                @endphp
+                @if ($eligeCaja)
+                    <label class="pos-pill pos-branch" title="{{ __('Caja con la que vendes') }}">
+                        <x-icon name="pos" size="sm" />
+                        <select wire:model.live="pos_caja_id" aria-label="{{ __('Caja de venta') }}">
+                            @foreach ($cajasDisponibles as $opcion)
+                                <option value="{{ $opcion->id }}">{{ $opcion->nombre }} · {{ $opcion->turnoActivo ? __('abierta') : __('cerrada') }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                @endif
+                @if ($turnoActual)
+                    <button type="button" class="pos-pill" wire:click="abrirModalCierre" title="{{ __('Turno activo. Clic para arquear y cerrar.') }}">
+                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:4px"></span>
+                        @unless ($eligeCaja)<span>{{ $cajaActual->nombre }}</span>@endunless
+                        <small style="opacity:0.75;margin-left:4px">#{{ $turnoActual->id }} ({{ $turnoActual->usuarioApertura->name }})</small>
+                        <span class="badge soft sm" style="margin-left:6px;font-size:11px">{{ __('Cerrar turno') }}</span>
+                    </button>
+                @else
+                    <button type="button" class="pos-pill" wire:click="iniciarAperturaTurno" title="{{ __('Sin turno. Clic para abrir turno.') }}">
+                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#eab308;margin-right:4px"></span>
+                        @unless ($eligeCaja)<span>{{ $cajaActual->nombre }}</span>@endunless
+                        <small style="color:#eab308;margin-left:4px">{{ __('Abrir turno') }}</small>
+                    </button>
+                @endif
+            @endif
             <button type="button" class="pos-pill" @click="atajos = true"><x-icon name="info" size="sm" /> {{ __('Atajos') }}</button>
             <label class="pos-pill pos-branch">
                 <x-icon name="store" size="sm" />
@@ -43,7 +73,7 @@
         <div class="pos-last" role="status">
             <x-icon name="status-ok" />
             <span>{{ __('Última venta :codigo · :total', ['codigo' => $ultimaVenta->codigo(), 'total' => Decimal::bs($ultimaVenta->total)]) }}@if (Decimal::comparar($ultimaVenta->saldo_pendiente, '0', 2) > 0) · {{ __('saldo a crédito :saldo', ['saldo' => Decimal::bs($ultimaVenta->saldo_pendiente)]) }}@endif</span>
-            <a class="btn ghost sm" href="{{ route('ventas.ver', $ultimaVenta) }}">{{ __('Ver venta') }}</a>
+            <a class="btn ghost sm" href="{{ route('ventas.ver', $ultimaVenta) }}" target="_blank" rel="noopener">{{ __('Ver venta') }}</a>
         </div>
     @endif
 
@@ -61,12 +91,13 @@
                             texto: @js($busqueda),
                             cola: [],
                             ocupado: false,
-                            agregar() {
-                                const valor = this.texto.trim();
+                            agregar(forzado = null) {
+                                const valor = (forzado ?? this.texto).trim();
                                 if (valor === '') return;
                                 this.texto = '';
                                 this.cola.push(valor);
                                 this.procesar();
+                                this.$nextTick(() => this.$refs.buscador?.focus());
                             },
                             async procesar() {
                                 if (this.ocupado) return;
@@ -77,12 +108,15 @@
                                     if (! agregado && this.texto === '') this.texto = valor;
                                 }
                                 this.ocupado = false;
+                                this.$nextTick(() => this.$refs.buscador?.focus());
                             },
                             limpiar() {
                                 this.texto = '';
                                 $wire.set('busqueda', '');
+                                this.$nextTick(() => this.$refs.buscador?.focus());
                             },
-                        }">
+                        }"
+                        @mozistock-scan.window="agregar($event.detail.codigo)">
                         <label class="pos-searchbox">
                             <x-icon name="search" />
                             <input x-ref="buscador" data-pos-buscar type="search" autocomplete="off" spellcheck="false" autofocus
@@ -246,6 +280,10 @@
                             <input id="pago_cuota_inicial" type="text" inputmode="decimal" wire:model.live.debounce.400ms="pago_cuota_inicial">
                         </div>
                         <div class="pos-field"><span>{{ __('Saldo pendiente') }}</span><div class="pos-figure orange">{{ $saldo === null ? '—' : Decimal::bs($saldo) }}</div></div>
+                        <div class="pos-field" style="grid-column:1/-1">
+                            <label for="pago_vencimiento">{{ __('Vencimiento del saldo (opcional)') }}</label>
+                            <input id="pago_vencimiento" type="date" wire:model="pago_vencimiento" min="{{ now()->timezone(config('mozistock.business_timezone'))->format('Y-m-d') }}">
+                        </div>
                     </div>
                 @endif
 
@@ -307,6 +345,119 @@
                 <div class="modal-actions">
                     <button type="button" class="btn ghost" wire:click="$set('formCliente', false)">{{ __('Cancelar') }}</button>
                     <button class="btn primary" type="submit" wire:loading.attr="disabled"><x-icon name="check" /> {{ __('Registrar') }}</button>
+                </div>
+            </form>
+        </x-modal>
+    @endif
+
+    @if ($modalAperturaAbierto)
+        <x-modal titulo="Apertura de turno requerida" cerrar="cerrarModalApertura"
+            descripcion="Toda venta POS requiere un turno abierto. Ingresa el fondo inicial para continuar.">
+            <form wire:submit="abrirTurno">
+                @if ($misOtrosTurnos->isNotEmpty())
+                    <div class="notice caja-alerta" style="margin-bottom:14px" role="status"><x-icon name="info" /><div>
+                        <b>{{ trans_choice('Sigues con 1 caja abierta|Sigues con :count cajas abiertas', $misOtrosTurnos->count()) }}</b>
+                        <p>{{ $misOtrosTurnos->map(fn ($t) => __(':caja · :sucursal · turno #:id', ['caja' => $t->caja->nombre, 'sucursal' => $t->sucursal->nombre, 'id' => $t->id]))->join(', ') }}. {{ __('No se cierra: esta venta y las siguientes quedan en :caja.', ['caja' => $cajaActual?->nombre]) }}</p>
+                    </div></div>
+                @endif
+                <div class="fields">
+                    <x-campo etiqueta="Caja" campo="pos_caja_id">
+                        <input id="pos_caja_id" class="input" type="text" value="{{ $cajaActual?->nombre }} ({{ $cajaActual?->modalidad === 'compartida' ? __('Compartida') : __('Individual') }})" disabled>
+                    </x-campo>
+                    <x-campo etiqueta="Fondo inicial (Bs)" campo="fondoInicial">
+                        <input id="fondoInicial" class="input" type="number" step="0.01" min="0" wire:model="fondoInicial" required autofocus>
+                    </x-campo>
+                </div>
+                <p class="subtle" style="margin-top:8px">{{ __('Puedes registrar Bs 0,00 si no necesitas fondo inicial. Tu carrito permanecerá intacto.') }}</p>
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" wire:click="cerrarModalApertura">{{ __('Cancelar') }}</button>
+                    <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="abrirTurno"><x-icon name="check" /> {{ __('Abrir turno y continuar') }}</button>
+                </div>
+            </form>
+        </x-modal>
+    @endif
+
+    @if ($modalTurnoAnteriorAbierto)
+        <x-modal titulo="Turno abierto de un día anterior" cerrar="$set('modalTurnoAnteriorAbierto', false)"
+            descripcion="Esta caja tiene un turno abierto desde una fecha anterior. ¿Deseas continuarlo o cerrarlo para abrir uno nuevo?">
+            <div class="notice" style="margin-bottom:16px"><x-icon name="info" /><div><b>{{ __('Turno abierto el :fecha por :usuario', ['fecha' => $turnoActual?->fecha_apertura?->copy()->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i'), 'usuario' => $turnoActual?->usuarioApertura?->name]) }}</b><p>{{ __('Elige cómo deseas proceder hoy.') }}</p></div></div>
+            <div class="fields" style="margin-bottom:16px">
+                <x-campo etiqueta="Fondo inicial (solo si abres uno nuevo)" campo="fondoInicial">
+                    <input id="fondoInicial" class="input" type="number" step="0.01" min="0" wire:model="fondoInicial">
+                </x-campo>
+            </div>
+            @error('turnoAnterior')<p class="auth-error" role="alert" style="margin:-6px 0 14px">{{ $message }}</p>@enderror
+            <div class="modal-actions" style="flex-wrap:wrap">
+                <button type="button" class="btn ghost" wire:click="$set('modalTurnoAnteriorAbierto', false)">{{ __('Cancelar') }}</button>
+                <button type="button" class="btn soft" wire:click="continuarTurnoAnterior" wire:loading.attr="disabled">{{ __('Continuar turno anterior') }}</button>
+                <button type="button" class="btn primary" wire:click="cerrarYCrearNuevoTurno" wire:loading.attr="disabled">{{ __('Cerrar anterior y abrir nuevo') }}</button>
+            </div>
+        </x-modal>
+    @endif
+
+    @if ($modalCierreAbierto && $turnoActual && $arqueoCierre)
+        <x-modal :titulo="__('Cierre de turno y arqueo · :caja', ['caja' => $cajaActual?->nombre])" cerrar="cerrarModalCierre"
+            descripcion="Revisa el dinero esperado y registra el efectivo físico contado al finalizar tu sesión.">
+            <form wire:submit="cerrarTurnoActual">
+                <div class="grid two" style="margin-bottom:14px;gap:12px">
+                    <article class="card card-pad" style="background:var(--input)">
+                        <div class="stat-label">{{ __('Fondo inicial') }}</div>
+                        <div class="stat-value" style="font-size:18px">{{ \App\Support\Decimal::bs($arqueoCierre['monto_apertura']) }}</div>
+                        <div class="stat-foot">{{ __('Registrado en la apertura') }}</div>
+                    </article>
+                    <article class="card card-pad" style="background:var(--input)">
+                        <div class="stat-label">{{ __('Cobros en efectivo') }}</div>
+                        <div class="stat-value" style="font-size:18px;color:#22c55e">+{{ \App\Support\Decimal::bs($arqueoCierre['ingresos_efectivo']) }}</div>
+                        <div class="stat-foot">{{ __('Ventas en efectivo del turno') }}</div>
+                    </article>
+                </div>
+
+                <div class="card card-pad" style="background:var(--input);margin-bottom:16px">
+                    <div class="row between" style="margin-bottom:6px">
+                        <span class="subtle">{{ __('Cobros electrónicos (QR / Transf.)') }}</span>
+                        <b>{{ \App\Support\Decimal::bs($arqueoCierre['ingresos_electronico']) }}</b>
+                    </div>
+                    <div class="row between" style="margin-bottom:6px">
+                        <span class="subtle">{{ __('Total ventas cobradas') }}</span>
+                        <b>{{ \App\Support\Decimal::bs($arqueoCierre['total_ventas_cobradas']) }} ({{ $arqueoCierre['cantidad_ventas'] }} {{ $arqueoCierre['cantidad_ventas'] === 1 ? __('venta') : __('ventas') }})</b>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row between" style="font-size:16px;margin-top:8px">
+                        <b>{{ __('Efectivo esperado en caja') }}</b>
+                        <b style="color:var(--accent)">{{ \App\Support\Decimal::bs($arqueoCierre['efectivo_esperado']) }}</b>
+                    </div>
+                </div>
+
+                <div class="fields" style="margin-bottom:14px">
+                    <x-campo etiqueta="Efectivo contado físico (Bs)" campo="montoCierre">
+                        <input id="montoCierre" class="input" type="number" step="0.01" min="0" wire:model.live="montoCierre" required autofocus>
+                    </x-campo>
+                    <x-campo etiqueta="Observación (obligatoria si hay diferencia)" campo="observacionesCierre">
+                        <input id="observacionesCierre" class="input" type="text" wire:model="observacionesCierre" placeholder="{{ __('Motivo del faltante o sobrante') }}">
+                    </x-campo>
+                </div>
+
+                @if ($arqueoCierre['diferencia'] !== null)
+                    <div style="margin-bottom:16px">
+                        @if ($arqueoCierre['estado_diferencia'] === 'cuadrada')
+                            <div class="badge success" style="padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <x-icon name="check" size="sm" /> {{ __('Caja cuadrada: el efectivo contado coincide con el esperado.') }}
+                            </div>
+                        @elseif ($arqueoCierre['estado_diferencia'] === 'sobrante')
+                            <div class="badge warning" style="padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <x-icon name="info" size="sm" /> {{ __('Sobrante en caja de :monto', ['monto' => \App\Support\Decimal::bs($arqueoCierre['diferencia'])]) }}
+                            </div>
+                        @elseif ($arqueoCierre['estado_diferencia'] === 'faltante')
+                            <div class="badge danger" style="padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <x-icon name="alert-triangle" size="sm" /> {{ __('Faltante en caja de :monto', ['monto' => \App\Support\Decimal::bs(ltrim($arqueoCierre['diferencia'], '-'))]) }}
+                            </div>
+                        @endif
+                    </div>
+                @endif
+
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" wire:click="cerrarModalCierre">{{ __('Cancelar') }}</button>
+                    <button class="btn primary" type="submit" wire:loading.attr="disabled"><x-icon name="check" /> {{ __('Confirmar cierre de turno') }}</button>
                 </div>
             </form>
         </x-modal>

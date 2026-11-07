@@ -55,14 +55,17 @@ trait CapturaProductos
         $patron = '%'.addcslashes($termino, '\\%_').'%';
 
         return Producto::query()
-            ->where('activo', true)
-            ->where(fn (Builder $q) => $q->where('nombre', 'like', $patron)
-                ->orWhere('sku', 'like', $patron)
-                ->orWhere('codigo_barras', $termino))
+            ->where('productos.activo', true)
+            ->leftJoin('unidades_medida as um', 'um.id', '=', 'productos.unidad_medida_id')
+            ->where(fn (Builder $q) => $q->where('productos.nombre', 'like', $patron)
+                ->orWhere('productos.sku', 'like', $patron)
+                ->orWhere('productos.codigo_barras', $termino)
+                ->orWhere('productos.contenido', 'like', $patron)
+                ->orWhereRaw("CONCAT_WS(' ', productos.nombre, productos.contenido, um.abreviatura) LIKE ?", [$patron]))
             ->with('unidad:id,abreviatura')
-            ->orderBy('nombre')
+            ->orderBy('productos.nombre')
             ->limit(8)
-            ->get(['id', 'nombre', 'sku', 'unidad_medida_id']);
+            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.sku', 'productos.unidad_medida_id']);
     }
 
     /**
@@ -103,7 +106,7 @@ trait CapturaProductos
     public function agregarProducto(int $id): bool
     {
         // El scope de empresa impide agregar productos de otra empresa.
-        $producto = Producto::query()->where('activo', true)->find($id, ['id', 'nombre']);
+        $producto = Producto::query()->where('activo', true)->with('unidad:id,abreviatura')->find($id, ['id', 'nombre', 'contenido', 'unidad_medida_id']);
 
         if ($producto === null) {
             $this->mensajeCaptura = __('El producto no está disponible.');

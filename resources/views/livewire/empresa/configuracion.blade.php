@@ -24,6 +24,9 @@
                 <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Datos del negocio') }}</div></div>
                 @include('livewire.empresa.partials.formulario-empresa')
             </section>
+            @can('cambiarFunciones', $empresa)
+                <livewire:empresa.funciones-negocio />
+            @endcan
             <section class="card card-pad">
                 <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="settings" /></span>{{ __('Preferencias de interfaz') }}</div></div>
                 <div class="list-line">

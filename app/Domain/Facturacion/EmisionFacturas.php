@@ -3,8 +3,10 @@
 namespace App\Domain\Facturacion;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Facturacion\Firma\FirmadorXmlDSig;
 use App\Domain\Tenancy\Numerador;
 use App\Enums\EstadoFactura;
+use App\Enums\ModalidadFacturacion;
 use App\Models\SiatConfiguracion;
 use App\Models\SiatCufd;
 use App\Models\SiatFactura;
@@ -55,6 +57,7 @@ final class EmisionFacturas
         private readonly CodigosSiat $codigos,
         private readonly Numerador $numerador,
         private readonly Auditor $auditor,
+        private readonly FirmadorXmlDSig $firmador = new FirmadorXmlDSig,
     ) {}
 
     /**
@@ -99,8 +102,9 @@ final class EmisionFacturas
         [$contribuyente, $emision] = $this->codigos->preparar($punto);
         $cuis = $this->codigos->cuis($punto);
         $cufd = $this->codigos->cufdVigente($punto) ?? $this->codigos->renovarCufd($punto);
+        $cliente = $this->clientePara($factura->empresa_id);
 
-        return [$this->cliente->compraVenta($contribuyente), new ContextoDocumento($emision, $cuis->codigo, $cufd->codigo)];
+        return [$cliente->compraVenta($contribuyente), new ContextoDocumento($emision, $cuis->codigo, $cufd->codigo)];
     }
 
     /**
@@ -134,7 +138,7 @@ final class EmisionFacturas
             [$punto, $sucursal] = $this->punto($factura);
             [$contribuyente, $emision] = $this->codigos->preparar($punto);
             $cuis = $this->codigos->cuis($punto);
-            $servicio = $this->cliente->compraVenta($contribuyente);
+            $servicio = $this->clientePara($factura->empresa_id)->compraVenta($contribuyente);
 
             if ($factura->enviada_en !== null && $factura->cuf !== null) {
                 // Ya se intentó enviar: si el SIN la tiene, solo se toma su estado (nunca se envía dos veces).
@@ -151,7 +155,33 @@ final class EmisionFacturas
             $factura->intentos++;
             $factura->save();
 
-            return $this->aplicar($factura, $servicio->recepcionFactura($preparada, $cuis->codigo));
+            $respuesta = $servicio->recepcionFactura($preparada, $cuis->codigo);
+
+            // Si el SIN rechaza porque el CUFD o CUIS enviado es inválido (1003 CUFD inválido, 1006 CUFD no corresponde, 913 CUIS inválido)
+            // se invalida el código desactualizado, se solicita uno nuevo al SIN y se reintenta inmediatamente (1 solo reintento automático)
+            $mensajesCodigos = array_map(fn ($m) => $m->codigo, $respuesta->mensajes);
+            $esCufdInvalido = in_array(1003, $mensajesCodigos, true) || in_array(1006, $mensajesCodigos, true);
+            $esCuisInvalido = in_array(913, $mensajesCodigos, true);
+
+            if (($esCufdInvalido || $esCuisInvalido) && $factura->intentos <= 2) {
+                if ($esCuisInvalido) {
+                    $cuis = $this->codigos->cuis($punto, forzar: true);
+                }
+                if ($esCufdInvalido) {
+                    $this->codigos->invalidarCufdVigente($punto);
+                    $this->codigos->renovarCufd($punto, forzar: true);
+                }
+                $factura->xml = null;
+                $factura->cuf = null;
+                $factura->siat_cufd_id = null;
+                $preparada = $this->preparar($factura, $punto, $sucursal);
+                $factura->intentos++;
+                $factura->save();
+
+                $respuesta = $servicio->recepcionFactura($preparada, $cuis->codigo);
+            }
+
+            return $this->aplicar($factura, $respuesta);
         } catch (ErrorComunicacion $error) {
             $factura->motivo = Str::limit(__('Sin respuesta del SIN: :error. Se reintentará automáticamente.', ['error' => $error->getMessage()]), 1000, '');
             $factura->save();
@@ -172,6 +202,10 @@ final class EmisionFacturas
      */
     private function preparar(SiatFactura $factura, SiatPuntoVenta $punto, SiatSucursal $sucursal): FacturaPreparada
     {
+        $configuracion = DeEmpresa::consulta(SiatConfiguracion::class, $factura->empresa_id)->firstOrFail();
+        $modalidad = $configuracion->modalidad ?? ModalidadFacturacion::Computarizada;
+        $cliente = $this->cliente->conModalidad($modalidad->siat());
+
         $cufd = $this->codigos->cufdVigente($punto) ?? $this->codigos->renovarCufd($punto);
 
         if ($factura->numero === null) {
@@ -183,7 +217,25 @@ final class EmisionFacturas
         $leyenda = CatalogoEmpresa::leyenda($factura->empresa_id, $actividad, $factura->numero)
             ?? throw new ErrorFacturacion(__('No hay leyendas del SIN para la actividad :actividad: sincroniza los catálogos.', ['actividad' => $actividad]));
         $fecha = FechaSiat::desde(new \DateTimeImmutable('now', new \DateTimeZone((string) config('mozistock.business_timezone'))));
-        $preparada = $this->cliente->preparador()->preparar($this->documento($factura, $punto, $sucursal, $cufd, $fecha, $leyenda));
+        $documento = $this->documento($factura, $punto, $sucursal, $cufd, $fecha, $leyenda);
+        $preparada = $cliente->preparador()->preparar($documento);
+
+        // Si la empresa factura en modalidad electrónica, firmar con XMLDSig (Etapa VIII)
+        if ($modalidad === ModalidadFacturacion::Electronica) {
+            if (! $configuracion->tieneCertificado()) {
+                throw new ErrorFacturacion(__('La empresa está configurada en modalidad electrónica pero no tiene cargado un certificado digital .p12.'));
+            }
+            if ($configuracion->certificadoVencido()) {
+                throw new ErrorFacturacion(__('El certificado digital .p12 está vencido. Carga un certificado vigente en Datos fiscales.'));
+            }
+
+            $p12Path = (string) $configuracion->certificadoRutaAbsoluta();
+            $p12Pass = (string) $configuracion->certificadoPasswordDescifrado();
+
+            $xmlFirmado = $this->firmador->firmar($preparada->xml, $p12Path, $p12Pass);
+            $archivoFirmado = Archivo::comprimir($xmlFirmado);
+            $preparada = new FacturaPreparada($documento, $preparada->cuf, $xmlFirmado, $archivoFirmado, Archivo::sha256($archivoFirmado));
+        }
 
         $factura->siat_cufd_id = $cufd->id;
         $factura->leyenda = $leyenda;
@@ -312,5 +364,13 @@ final class EmisionFacturas
         }
 
         return [$punto, $sucursal];
+    }
+
+    private function clientePara(int $empresaId): ClienteSiat
+    {
+        $configuracion = DeEmpresa::consulta(SiatConfiguracion::class, $empresaId)->first();
+        $modalidadSiat = ($configuracion?->modalidad ?? ModalidadFacturacion::Computarizada)->siat();
+
+        return $this->cliente->conModalidad($modalidadSiat);
     }
 }

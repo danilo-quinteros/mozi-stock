@@ -59,6 +59,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // La aplicación guarda las fechas en UTC (config/app.php). Con DB_TIMEZONE=+00:00 la sesión
+            // de MySQL usa la misma zona aunque el servidor esté en otra (p. ej. America/La_Paz), y las
+            // columnas TIMESTAMP guardan el instante correcto. Usarlo en toda instalación nueva. En una
+            // base que ya tiene datos creados sin esta opción, activarlo desplaza las TIMESTAMP existentes:
+            // convertirlas antes (ver docs/IMPLEMENTACION_ESTADO.md).
+            'timezone' => env('DB_TIMEZONE') ?: null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

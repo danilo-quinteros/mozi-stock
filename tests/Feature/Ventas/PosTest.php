@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Caja\Actions\AbrirTurnoCaja;
 use App\Domain\Ventas\Actions\VenderEnPos;
 use App\Enums\EstadoPedido;
 use App\Livewire\Ventas\Pos;
@@ -30,6 +31,8 @@ beforeEach(function () {
     cargarStock($this->admin, $this->sucursal, $this->producto, '20');
     $this->cliente = new Cliente(['nombre' => 'Carlos Mendoza', 'documento' => '4455667']);
     $this->cliente->save();
+    $caja = $this->sucursal->cajaPrincipal();
+    app(AbrirTurnoCaja::class)->ejecutar($this->admin, $caja, '100.00');
 });
 
 /**
@@ -67,7 +70,9 @@ test('the POS screen sells by scanning, charges once and starts a new empty sale
         ->and(MovimientoCaja::query()->pluck('monto', 'metodo')->all())->toBe(['efectivo' => '40.00']);
     $pantalla->assertSet('lineas', [])
         ->assertSet('ultimaVentaId', $venta->id)
-        ->assertSee($venta->codigo());
+        ->assertSee($venta->codigo())
+        ->assertDispatched('venta-finalizada')
+        ->assertSeeHtml('target="_blank"');
     expect($pantalla->get('clave'))->not->toBe($clave);
 });
 

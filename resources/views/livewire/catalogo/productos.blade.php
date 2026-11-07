@@ -9,6 +9,12 @@
         </div>
         @if ($administra)
             <div class="page-actions">
+                @if ($esRevendedoraCyclone)
+                    <button class="btn ghost" type="button" wire:click="sincronizarCyclone" wire:loading.attr="disabled" title="{{ __('Sincronizar con el catálogo de Cyclone') }}">
+                        <x-icon name="history" /> {{ __('Sincronizar con Cyclone') }}
+                    </button>
+                @endif
+                <a class="btn ghost" href="{{ route('productos.importar') }}"><x-icon name="upload" /> {{ __('Importar') }}</a>
                 <a class="btn primary" href="{{ route('productos.crear') }}"><x-icon name="plus" /> {{ __('Nuevo producto') }}</a>
             </div>
         @endif
@@ -24,7 +30,19 @@
     <section class="card card-pad">
         <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Catálogo de productos') }}</div></div>
         <div class="tabs" role="tablist">
-            @foreach (['productos' => 'Productos', 'categorias' => 'Categorías', 'unidades' => 'Unidades y medidas'] as $clave => $etiqueta)
+      @php
+    $pestanas = [
+        'productos' => 'Productos',
+    ];
+
+    if ($esRevendedoraCyclone) {
+        $pestanas['cyclone'] = 'Catálogo Cyclone';
+    }
+
+    $pestanas['categorias'] = 'Categorías';
+    $pestanas['unidades'] = 'Unidades y medidas';
+@endphp
+            @foreach ($pestanas as $clave => $etiqueta)
                 <button type="button" role="tab" class="tab {{ $pestana === $clave ? 'active' : '' }}" aria-selected="{{ $pestana === $clave ? 'true' : 'false' }}" wire:click="$set('pestana', '{{ $clave }}')">{{ __($etiqueta) }}</button>
             @endforeach
         </div>
@@ -48,14 +66,19 @@
                         @endforeach
                     </select>
                 @endif
-                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
+                <select class="select" wire:model.live="filtroStock" aria-label="{{ __('Filtrar por stock') }}">
+                    <option value="">{{ __('Stock') }}</option>
+                    <option value="con_stock">{{ __('Con Stock') }}</option>
+                    <option value="sin_stock">{{ __('Sin Stock') }}</option>
+                </select>
+                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id, 'stock' => $filtroStock])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead><tr><th>{{ __('Producto / código') }}</th><th>{{ __('Categoría') }}</th><th>{{ __('Consumidor') }}</th><th>{{ __('Minorista') }}</th><th>{{ __('Mayorista') }}</th><th>{{ __('Stock · :nombre', ['nombre' => $sucursalVista->nombre ?? '—']) }}</th><th>{{ __('Alerta') }}</th>@if ($administra)<th>{{ __('Acción') }}</th>@endif</tr></thead>
                     <tbody>
                         @forelse ($productos as $producto)
-                            @php($alerta = ListadoProductos::alerta((string) $producto->stock, (string) $producto->minimo))
+                            @php $alerta = ListadoProductos::alerta((string) $producto->stock, (string) $producto->minimo); @endphp
                             <tr wire:key="producto-{{ $producto->id }}">
                                 <td>
                                     <div class="item-name">
@@ -66,11 +89,71 @@
                                                 <x-icon name="store" size="sm" />
                                             @endif
                                         </span>
-                                        <span><b>{{ $producto->nombre }}</b><small>{{ $producto->sku }}@unless ($producto->activo) {{ __('· Inactivo') }} @endunless</small></span>
+                                        <span>
+                                            <b>{{ $producto->nombre }}</b>
+                                            @if ($producto->vinculoExterno)
+                                                <span class="badge info" style="font-size:10px;padding:2px 6px;margin-left:4px">Cyclone</span>
+                                            @endif
+                                            <small>{{ $producto->sku }}@unless ($producto->activo) {{ __('· Inactivo') }} @endunless</small>
+                                        </span>
                                     </div>
                                 </td>
                                 <td>{{ $producto->categoria->nombre ?? '—' }}</td>
-                                <td><b>{{ Decimal::bs($producto->precio_consumidor) }}</b></td>
+                                <td>
+                                    @if ($administra && $editandoProductoId === $producto->id)
+                                        <div style="display:inline-flex;flex-direction:column;gap:4px">
+                                            <div style="display:inline-flex;align-items:center;gap:4px">
+                                                <span style="font-size:11px;font-weight:700;color:var(--faint)">Bs</span>
+                                                <input type="text"
+                                                       inputmode="decimal"
+                                                       class="input"
+                                                       style="min-height:28px;height:28px;padding:0 6px;font-size:12px;font-weight:700;width:75px"
+                                                       wire:model="editandoPrecio"
+                                                       wire:keydown.enter.prevent="guardarPrecio"
+                                                       wire:keydown.escape="cancelarEdicionPrecio"
+                                                       autofocus
+                                                       x-init="$el.focus(); $el.select()">
+                                                <button type="button"
+                                                        class="icon-action"
+                                                        style="height:28px;width:28px;border-radius:7px;color:var(--brand-bright);background:var(--accent-soft)"
+                                                        wire:click="guardarPrecio"
+                                                        wire:loading.attr="disabled"
+                                                        title="{{ __('Guardar') }}">
+                                                    <x-icon name="check" size="sm" />
+                                                </button>
+                                                <button type="button"
+                                                        class="icon-action"
+                                                        style="height:28px;width:28px;border-radius:7px"
+                                                        wire:click="cancelarEdicionPrecio"
+                                                        title="{{ __('Cancelar') }}">
+                                                    <x-icon name="x" size="sm" />
+                                                </button>
+                                            </div>
+                                            @error('editandoPrecio')
+                                                <small class="danger-text" style="font-size:10px;margin-top:2px">{{ $message }}</small>
+                                            @enderror
+                                        </div>
+                                    @else
+                                        <div style="display:inline-flex;align-items:center;gap:6px">
+                                            @if ($administra)
+                                                <button type="button"
+                                                        wire:click="iniciarEdicionPrecio({{ $producto->id }})"
+                                                        style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px"
+                                                        title="{{ __('Clic para editar precio') }}">
+                                                    <b>{{ Decimal::bs($producto->precio_consumidor) }}</b>
+                                                    <span class="icon-action" style="height:22px;width:22px;border-radius:6px;border:1px solid var(--border-soft);opacity:0.7">
+                                                        <x-icon name="edit" size="sm" />
+                                                    </span>
+                                                </button>
+                                            @else
+                                                <b>{{ Decimal::bs($producto->precio_consumidor) }}</b>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    @if (Decimal::comparar($producto->precio_consumidor, '0') === 0 && $producto->vinculoExterno)
+                                        <small style="display:block;color:var(--brand);font-weight:600">{{ __('Precio pendiente') }}</small>
+                                    @endif
+                                </td>
                                 <td>{{ $producto->precio_minorista === null ? '—' : Decimal::bs($producto->precio_minorista) }}</td>
                                 <td>{{ $producto->precio_mayorista === null ? '—' : Decimal::bs($producto->precio_mayorista) }}</td>
                                 <td><b>{{ Decimal::formatear((string) $producto->stock) }}</b> {{ $producto->unidad->abreviatura }}</td>
@@ -84,7 +167,31 @@
                                 @endif
                             </tr>
                         @empty
-                            <tr><td colspan="8"><div class="empty">{{ $buscar !== '' || $categoria !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div></td></tr>
+                            <tr>
+                                <td colspan="8">
+                                    @if ($esRevendedoraCyclone && $buscar === '' && $categoria === '')
+                                        <div class="empty" style="padding:48px 16px;text-align:center">
+                                            <div style="font-size:36px;margin-bottom:12px">📦</div>
+                                            <h3 style="margin-bottom:6px">{{ __('Aún no tienes productos en tu catálogo') }}</h3>
+                                            <p class="subtle" style="max-width:440px;margin:0 auto 20px auto">
+                                                {{ __('Tu empresa está vinculada a Cyclone. Puedes elegir qué productos vender desde el catálogo central o registrar tus propios productos.') }}
+                                            </p>
+                                            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+                                                <button type="button" class="btn primary" wire:click="$set('pestana', 'cyclone')">
+                                                    <x-icon name="store" /> {{ __('Cargar desde Cyclone') }}
+                                                </button>
+                                                @if ($administra)
+                                                    <a class="btn ghost" href="{{ route('productos.crear') }}">
+                                                        <x-icon name="plus" /> {{ __('Nuevo producto manual') }}
+                                                    </a>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @else
+                                        <div class="empty">{{ $buscar !== '' || $categoria !== '' || $filtroStock !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div>
+                                    @endif
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -102,7 +209,9 @@
                     </span>
                 </div>
             @endif
-        @elseif ($pestana === 'categorias')
+        @endif
+
+        @if ($pestana === 'categorias')
             @if ($administra)<button class="btn soft sm" type="button" wire:click="nuevaCategoria"><x-icon name="plus" size="sm" /> {{ __('Nueva categoría') }}</button><div style="height:13px"></div>@endif
             <div class="table-wrap">
                 <table>
@@ -121,7 +230,9 @@
                     </tbody>
                 </table>
             </div>
-        @else
+        @endif
+
+        @if ($pestana === 'unidades')
             @if ($administra)<button class="btn soft sm" type="button" wire:click="nuevaUnidad"><x-icon name="plus" size="sm" /> {{ __('Nueva unidad') }}</button><div style="height:13px"></div>@endif
             <div class="table-wrap">
                 <table>
@@ -148,6 +259,151 @@
                     </tbody>
                 </table>
             </div>
+        @endif
+
+        @if ($pestana === 'cyclone' && $esRevendedoraCyclone)
+            <div class="tool-row" style="margin-bottom:16px">
+                <div class="search">
+                    <x-icon name="search" />
+                    <input class="input" type="search" wire:model.live.debounce.350ms="buscarCyclone" placeholder="{{ __('Buscar en catálogo Cyclone por nombre, código o línea...') }}" aria-label="{{ __('Buscar en catálogo Cyclone') }}">
+                </div>
+                <select class="select" wire:model.live="lineaCyclone" aria-label="{{ __('Filtrar por línea o categoría') }}">
+                    <option value="">{{ __('Todas las líneas') }}</option>
+                    @foreach ($lineasCyclone as $opcionLinea)
+                        <option value="{{ $opcionLinea }}">{{ $opcionLinea }}</option>
+                    @endforeach
+                </select>
+                <select class="select" wire:model.live="estadoCyclone" aria-label="{{ __('Filtrar por estado en catálogo') }}">
+                    <option value="todos">{{ __('Todos los productos') }}</option>
+                    <option value="en_catalogo">{{ __('En mi catálogo') }}</option>
+                    <option value="disponibles">{{ __('Disponibles para agregar') }}</option>
+                </select>
+            </div>
+
+            @if (count($seleccionadosCyclone) > 0)
+                <div class="bulk-bar" style="display:flex;align-items:center;gap:12px;background:#241f1b;border:1px solid #3d342c;border-radius:12px;padding:10px 18px;margin-bottom:18px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span style="background:#3b2314;border:1px solid #78350f;color:#f59e0b;font-weight:800;font-size:13px;padding:2px 10px;border-radius:6px">
+                            {{ count($seleccionadosCyclone) }}
+                        </span>
+                        <span style="font-weight:700;color:var(--text, #fff);font-size:13px">
+                            {{ __('filas marcadas') }}
+                        </span>
+                    </div>
+                    @if ($administra)
+                        <button type="button" class="btn sm" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.14);color:#f3f4f6;font-size:13px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer" wire:click="agregarMarcados" wire:loading.attr="disabled">
+                            <span style="margin-right:4px">+</span> {{ __('Agregar marcados') }}
+                        </button>
+                        <button type="button" class="btn sm" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.14);color:#f3f4f6;font-size:13px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer" wire:click="solicitarDejarVenderMarcados" wire:loading.attr="disabled">
+                            <span style="margin-right:4px">−</span> {{ __('Dejar de vender') }}
+                        </button>
+                    @endif
+                    <button type="button" style="margin-left:auto;background:none;border:none;color:#9ca3af;font-size:13px;cursor:pointer;padding:4px 8px" wire:click="desmarcarCyclone">
+                        {{ __('Desmarcar') }}
+                    </button>
+                </div>
+            @endif
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px">
+                                @php
+                                    $idsPagina = $productosCyclone->pluck('id')->map(fn ($id) => (string) $id)->all();
+                                    $todosPaginaSeleccionados = count($idsPagina) > 0 && count(array_intersect($idsPagina, array_map('strval', $seleccionadosCyclone))) === count($idsPagina);
+                                @endphp
+                                <input type="checkbox" style="accent-color:var(--brand, #ea580c);width:17px;height:17px;cursor:pointer" @checked($todosPaginaSeleccionados) wire:click="toggleSeleccionarTodos({{ json_encode($idsPagina) }})" aria-label="{{ __('Seleccionar todos') }}">
+                            </th>
+                            <th>{{ __('PRODUCTO / CÓDIGO') }}</th>
+                            <th>{{ __('CATEGORÍA') }}</th>
+                            <th>{{ __('PRESENTACIÓN') }}</th>
+                            <th>{{ __('VENTA') }}</th>
+                            <th>{{ __('ESTADO') }}</th>
+                            @if ($administra)<th style="text-align:right">{{ __('ACCIÓN') }}</th>@endif
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($productosCyclone as $item)
+                            <tr wire:key="cyclone-{{ $item->id }}">
+                                <td>
+                                    <input type="checkbox" value="{{ $item->id }}" wire:model.live="seleccionadosCyclone" style="accent-color:var(--brand, #ea580c);width:17px;height:17px;cursor:pointer">
+                                </td>
+                                <td>
+                                    <div class="item-name">
+                                        <span class="token" style="overflow:hidden;border-radius:10px;width:38px;height:38px;background:var(--panel-soft);display:flex;align-items:center;justify-content:center;position:relative">
+                                            @if ($item->foto_url || $item->foto_cache_path)
+                                                <img src="{{ route('catalogo-externo.foto', $item) }}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline-flex'">
+                                                <span style="display:none;align-items:center;justify-content:center"><x-icon name="store" size="sm" /></span>
+                                            @else
+                                                <x-icon name="store" size="sm" />
+                                            @endif
+                                        </span>
+                                        <span>
+                                            <b style="color:var(--text, #fff);font-size:13px">{{ $item->nombre_limpio }}</b>
+                                            <small class="subtle">{{ $item->codigo ? $item->codigo . ' · Cyclone' : 'Cyclone' }}</small>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>{{ $item->linea_nombre ?: '—' }}</td>
+                                <td>
+                                    <b>
+                                        @if ($item->contenido !== null)
+                                            {{ \App\Support\Decimal::formatear((string) $item->contenido) }} {{ $item->unidad_sugerida }}
+                                        @else
+                                            {{ $item->unidad_sugerida ?: '—' }}
+                                        @endif
+                                    </b>
+                                </td>
+                                <td>{{ $item->tipo_venta === 'medida' ? __('Por peso o medida') : __('Por unidad') }}</td>
+                                <td>
+                                    @if ($item->en_catalogo)
+                                        <span class="badge success" style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.28);color:#34d399;font-weight:700;font-size:12px;padding:4px 12px;border-radius:999px;display:inline-flex;align-items:center;gap:6px">
+                                            <span style="font-size:8px">●</span> {{ __('En mi catálogo') }}
+                                        </span>
+                                    @else
+                                        <span class="badge subtle" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#9ca3af;font-weight:600;font-size:12px;padding:4px 12px;border-radius:999px">
+                                            {{ __('Disponible') }}
+                                        </span>
+                                    @endif
+                                </td>
+                                @if ($administra)
+                                    <td style="text-align:right">
+                                        @if ($item->en_catalogo)
+                                            <button type="button" class="btn sm ghost" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#e5e7eb;font-weight:600;border-radius:8px;padding:6px 14px" wire:click="solicitarDejarVender({{ $item->id }})" wire:loading.attr="disabled">
+                                                {{ __('Dejar de vender') }}
+                                            </button>
+                                        @else
+                                            <button type="button" class="btn sm soft" style="font-weight:600;border-radius:8px;padding:6px 14px" wire:click="agregarProducto({{ $item->id }})" wire:loading.attr="disabled">
+                                                {{ __('Agregar') }}
+                                            </button>
+                                        @endif
+                                    </td>
+                                @endif
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7">
+                                    <div class="empty">{{ __('No se encontraron productos en el catálogo de Cyclone.') }}</div>
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if ($productosCyclone instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator && $productosCyclone->hasPages())
+                <div class="table-footer">
+                    <span>{{ __('Página :currentpage de :lastpage', ['currentpage' => $productosCyclone->currentPage(), 'lastpage' => $productosCyclone->lastPage()]) }}</span>
+                    <span class="row">
+                        @unless ($productosCyclone->onFirstPage())
+                            <button class="btn ghost sm" type="button" wire:click="previousPage('cyclonePage')">{{ __('Anterior') }}</button>
+                        @endunless
+                        @if ($productosCyclone->hasMorePages())
+                            <button class="btn ghost sm" type="button" wire:click="nextPage('cyclonePage')">{{ __('Siguiente') }}</button>
+                        @endif
+                    </span>
+                </div>
+            @endif
         @endif
     </section>
 
@@ -200,6 +456,79 @@
                     <button class="btn primary" type="submit" wire:loading.attr="disabled"><x-icon name="check" /> {{ __('Guardar') }}</button>
                 </div>
             </form>
+        </x-modal>
+    @endif
+
+    @if ($confirmandoDejarVenderId && $alertaStockIndividual)
+        <x-modal titulo="Atención: Producto con inventario" cerrar="cancelarDejarVender">
+            <div style="margin-bottom:16px">
+                <div style="margin-bottom:14px;background:#382414;border:1px solid #78350f;color:#fcd34d;padding:12px 16px;border-radius:8px;font-size:13px">
+                    <b>⚠️ {{ __('Este producto tiene existencias registradas en inventario.') }}</b>
+                </div>
+                <p style="margin-bottom:12px;font-size:13px">
+                    {{ __('El producto') }} <b>{{ $alertaStockIndividual['nombre'] }}</b> {{ __('tiene un stock total de') }}
+                    <b style="color:var(--brand, #f59e0b)">{{ \App\Support\Decimal::formatear((string) $alertaStockIndividual['stock_total']) }} {{ $alertaStockIndividual['unidad'] }}</b>:
+                </p>
+                <ul style="margin:0 0 16px 20px;padding:0;font-size:13px;line-height:1.7">
+                    @foreach ($alertaStockIndividual['sucursales'] as $sucursal => $cantidad)
+                        <li><b>{{ $sucursal }}:</b> {{ \App\Support\Decimal::formatear((string) $cantidad) }} {{ $alertaStockIndividual['unidad'] }}</li>
+                    @endforeach
+                </ul>
+                <p class="subtle" style="font-size:12px;line-height:1.6">
+                    {{ __('Al dejar de venderlo, el producto se retirará de tu catálogo activo para que no se ofrezca en nuevas ventas ni pedidos, pero su inventario y el historial de movimientos se conservarán de forma segura.') }}
+                </p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" wire:click="cancelarDejarVender">{{ __('Cancelar') }}</button>
+                <button type="button" class="btn danger" wire:click="confirmarDejarVender" wire:loading.attr="disabled">
+                    {{ __('Sí, dejar de vender') }}
+                </button>
+            </div>
+        </x-modal>
+    @endif
+
+    @if ($confirmandoDejarVenderBulk && !empty($alertaStockBulk))
+        <x-modal titulo="Atención: Productos con inventario" cerrar="cancelarDejarVenderBulk">
+            <div style="margin-bottom:16px">
+                <div style="margin-bottom:14px;background:#382414;border:1px solid #78350f;color:#fcd34d;padding:12px 16px;border-radius:8px;font-size:13px">
+                    <b>⚠️ {{ __(':count productos seleccionados tienen existencias registradas en inventario.', ['count' => count($alertaStockBulk)]) }}</b>
+                </div>
+                <div class="table-wrap" style="max-height:220px;overflow-y:auto;margin-bottom:14px">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>{{ __('Producto') }}</th>
+                                <th>{{ __('Stock total') }}</th>
+                                <th>{{ __('Sucursales') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($alertaStockBulk as $prod)
+                                <tr>
+                                    <td><b>{{ $prod['nombre'] }}</b></td>
+                                    <td><b>{{ \App\Support\Decimal::formatear((string) $prod['stock_total']) }} {{ $prod['unidad'] }}</b></td>
+                                    <td>
+                                        <small class="subtle">
+                                            @foreach ($prod['sucursales'] as $suc => $cant)
+                                                {{ $suc }}: {{ \App\Support\Decimal::formatear((string) $cant) }}@if (!$loop->last), @endif
+                                            @endforeach
+                                        </small>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <p class="subtle" style="font-size:12px;line-height:1.6">
+                    {{ __('Los productos con existencias o historial serán desactivados para no venderse en POS ni pedidos, conservando sus existencias. Los productos sin movimientos se eliminarán completamente de tu catálogo.') }}
+                </p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" wire:click="cancelarDejarVenderBulk">{{ __('Cancelar') }}</button>
+                <button type="button" class="btn danger" wire:click="confirmarDejarVenderBulk" wire:loading.attr="disabled">
+                    {{ __('Confirmar y procesar') }}
+                </button>
+            </div>
         </x-modal>
     @endif
 

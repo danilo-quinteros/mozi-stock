@@ -88,7 +88,7 @@ test('units that admit decimals accept up to three decimals with comma', functio
     $kilo = new UnidadMedida(['nombre' => 'Kilo prueba', 'abreviatura' => 'kg', 'admite_decimales' => true]);
     $kilo->empresa_id = $this->empresa->id;
     $kilo->save();
-    $azucar = productoDe($this->empresa, ['unidad_medida_id' => $kilo->id]);
+    $azucar = productoDe($this->empresa, ['unidad_medida_id' => $kilo->id, 'tipo_venta' => 'medida']);
 
     ajuste($this->admin, ['tipo' => 'entrada', 'motivo' => 'reposicion_manual', 'sucursal_id' => $this->sucursal->id, 'lineas' => [$azucar->id => '2,125']]);
     ajuste($this->admin, ['tipo' => 'salida', 'motivo' => 'merma', 'sucursal_id' => $this->sucursal->id, 'lineas' => [$azucar->id => '0.125']]);

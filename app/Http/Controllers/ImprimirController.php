@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Caja\Consultas\ReporteCaja;
+use App\Domain\Creditos\Consultas\HistorialPagos;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Consultas\Salidas;
 use App\Domain\Reportes\Periodo;
+use App\Models\Caja;
 use App\Models\Compra;
 use App\Models\Sucursal;
 use App\Models\User;
@@ -23,10 +26,9 @@ class ImprimirController extends Controller
     {
         Gate::forUser($this->actor($request))->authorize('cobrar', $venta);
 
-        $venta->load(['empresa', 'cliente:id,nombre,documento', 'sucursal:id,nombre', 'pedido:id,numero', 'vendedor:id,name',
-            'pagos' => fn ($q) => $q->with(['sucursal:id,nombre', 'receptor:id,name'])]);
+        $venta->load(['empresa', 'cliente:id,nombre,documento', 'sucursal:id,nombre', 'pedido:id,numero', 'vendedor:id,name', 'cuotas']);
 
-        return view('imprimir.credito', ['venta' => $venta]);
+        return view('imprimir.credito', ['venta' => $venta, 'pagos' => HistorialPagos::de($venta)]);
     }
 
     public function compra(Request $request, Compra $compra): View
@@ -43,20 +45,26 @@ class ImprimirController extends Controller
         $actor = $this->actor($request);
         Gate::forUser($actor)->authorize('ver-reportes');
         $empresaId = (int) $actor->empresa_id;
-        $dia = Periodo::dia((string) $request->query('fecha', ''));
+        $fecha = (string) $request->query('fecha', '');
+        $dia = Periodo::rango((string) $request->query('desde', $fecha), $fecha);
         $valor = (string) $request->query('sucursal', '');
         $sucursal = ctype_digit($valor) ? Sucursal::query()->find((int) $valor) : null;
         $metodo = in_array($request->query('metodo'), ['efectivo', 'electronico'], true) ? (string) $request->query('metodo') : '';
+        $cajaId = ReporteCaja::cajaElegida((string) $request->query('caja', ''));
+        $caja = $cajaId ? Caja::query()->find($cajaId) : null;
+        $cajaId = $cajaId === ReporteCaja::FUERA_DE_CAJA ? $cajaId : $caja?->id;
 
         return view('imprimir.caja', [
             'empresa' => $actor->empresa,
             'dia' => $dia,
             'sucursal' => $sucursal,
+            'caja' => $caja,
+            'fueraDeCaja' => $cajaId === ReporteCaja::FUERA_DE_CAJA,
             'metodo' => $metodo,
-            'resumen' => Cobros::resumen($empresaId, $dia, $sucursal?->id, $metodo),
-            'cobros' => Cobros::detalle($empresaId, $dia, $sucursal?->id, $metodo)->get(),
-            'salidas' => Salidas::detalle($empresaId, $dia, $sucursal?->id, $metodo)->get(),
-            'filtros' => array_filter(['fecha' => $dia->desde->format('Y-m-d'), 'sucursal' => $sucursal?->id, 'metodo' => $metodo]),
+            'resumen' => Cobros::resumen($empresaId, $dia, $sucursal?->id, $metodo, $cajaId),
+            'cobros' => Cobros::detalle($empresaId, $dia, $sucursal?->id, $metodo, cajaId: $cajaId)->get(),
+            'salidas' => Salidas::detalle($empresaId, $dia, $sucursal?->id, $metodo, $cajaId)->get(),
+            'filtros' => array_filter(['fecha' => $dia->hasta->format('Y-m-d'), 'desde' => $dia->esUnDia() ? null : $dia->desde->format('Y-m-d'), 'sucursal' => $sucursal?->id, 'caja' => $cajaId === ReporteCaja::FUERA_DE_CAJA ? 'externo' : $caja?->id, 'metodo' => $metodo]),
         ]);
     }
 

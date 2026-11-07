@@ -76,13 +76,14 @@ final class ValidadorPago
 
     /**
      * Abono posterior (V3 § 6): Efectivo o Electrónico con un importe; Mixto con dos importes
-     * cuya suma es el abono. Estrictamente mayor que 0 y nunca mayor que el saldo.
+     * cuya suma es el abono. Estrictamente mayor que 0 y nunca mayor que el saldo. Con $esPago
+     * los mensajes hablan de un pago a una cuenta por pagar.
      *
      * @return array{metodo: MetodoPago, monto: string, efectivo: string, electronico: string}
      *
      * @throws ValidationException
      */
-    public static function abono(string $saldo, ?string $metodo, ?string $monto, ?string $efectivo, ?string $electronico): array
+    public static function abono(string $saldo, ?string $metodo, ?string $monto, ?string $efectivo, ?string $electronico, bool $esPago = false): array
     {
         $modo = MetodoPago::tryFrom((string) $metodo)
             ?? throw ValidationException::withMessages(['metodo' => __('Elige Efectivo, Electrónico o Mixto.')]);
@@ -109,11 +110,15 @@ final class ValidadorPago
         $campo = $modo === MetodoPago::Mixto ? 'efectivo' : 'monto';
 
         if (Decimal::comparar($total, '0', 2) <= 0) {
-            throw ValidationException::withMessages([$campo => __('El abono debe ser mayor que Bs 0,00.')]);
+            throw ValidationException::withMessages([$campo => $esPago
+                ? __('El pago debe ser mayor que Bs 0,00.')
+                : __('El abono debe ser mayor que Bs 0,00.')]);
         }
 
         if (Decimal::comparar($total, $saldo, 2) > 0) {
-            throw ValidationException::withMessages([$campo => __('El abono no puede superar el saldo pendiente (:saldo).', ['saldo' => Decimal::bs($saldo)])]);
+            throw ValidationException::withMessages([$campo => $esPago
+                ? __('El pago no puede superar el saldo pendiente (:saldo).', ['saldo' => Decimal::bs($saldo)])
+                : __('El abono no puede superar el saldo pendiente (:saldo).', ['saldo' => Decimal::bs($saldo)])]);
         }
 
         return ['metodo' => $modo, 'monto' => $total, 'efectivo' => $enEfectivo, 'electronico' => $enElectronico];

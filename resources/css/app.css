@@ -6,6 +6,14 @@
 @import './pedidos.css';
 @import './suscripcion.css';
 @import './onboarding.css';
+@import './caja.css';
+@import './sucursales.css';
+@import './reportes.css';
+@import './inicio.css';
+@import './importacion.css';
+@import './sitio-admin.css';
+@import './acceso.css';
+@import './funciones.css';
 @import './custom.css';
 
 @source '../views';

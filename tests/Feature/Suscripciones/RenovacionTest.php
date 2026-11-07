@@ -207,6 +207,7 @@ test('T27: a SaaS payment never enters the cash or reports of any company', func
 test('T26: overdue for three days, the company keeps operating until the superadmin deactivates it', function () {
     planPara($this->empresa, '2026-10-20');
     $this->artisan('mozistock:avisos-suscripcion')->assertSuccessful();
+    guiaTerminada($this->empresa);
 
     $this->actingAs($this->admin)->get(route('dashboard'))->assertOk()->assertSee('Tu suscripción venció el 20/10/2026');
     $this->actingAs($this->admin)->get(route('pedidos.index'))->assertOk();

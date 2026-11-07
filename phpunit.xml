@@ -30,12 +30,19 @@
         <env name="DB_CONNECTION" value="mysql" force="true"/>
         <env name="DB_DATABASE" value="mozistock_test" force="true"/>
         <env name="DB_URL" value="" force="true"/>
+        <env name="DB_TIMEZONE" value="+00:00" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="CYCLONE_API_BASE_URL" value="https://cyclone.test/api/v1" force="true"/>
+        <env name="CYCLONE_API_TOKEN" value="fake-token" force="true"/>
+        <!-- Agente Mozi: las pruebas no dependen del .env local ni llaman a proveedores reales. -->
+        <env name="AGENTE_MOZI_MOTOR" value="demo" force="true"/>
+        <env name="GEMINI_API_KEY" value="" force="true"/>
+        <env name="OPENAI_API_KEY" value="" force="true"/>
     </php>
 </phpunit>
 

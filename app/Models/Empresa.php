@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Domain\Tenancy\CapacidadesEmpresa;
+use App\Enums\Capacidad;
+use App\Enums\Rubro;
 use Database\Factories\EmpresaFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $telefono
  * @property bool $activa
  * @property bool $siat_habilitado
+ * @property Rubro $rubro
  * @property Carbon|null $guia_completada_en
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -39,6 +43,8 @@ class Empresa extends Model
     protected $attributes = [
         'activa' => true,
         'siat_habilitado' => false,
+        // Igual que el valor por defecto de la columna: sin rubro elegido, la empresa es General.
+        'rubro' => 'general',
     ];
 
     protected function casts(): array
@@ -46,6 +52,7 @@ class Empresa extends Model
         return [
             'activa' => 'boolean',
             'siat_habilitado' => 'boolean',
+            'rubro' => Rubro::class,
             'guia_completada_en' => 'datetime',
         ];
     }
@@ -66,6 +73,39 @@ class Empresa extends Model
     public function suscripcion(): HasOne
     {
         return $this->hasOne(Suscripcion::class);
+    }
+
+    /**
+     * @return HasMany<EmpresaProveedorExterno, $this>
+     */
+    public function proveedoresExternos(): HasMany
+    {
+        return $this->hasMany(EmpresaProveedorExterno::class);
+    }
+
+    /**
+     * Filas de capacidades (activas y apagadas). Para saber si una función está encendida usar
+     * tieneCapacidad(), que lee una sola vez por petición.
+     *
+     * @return HasMany<EmpresaCapacidad, $this>
+     */
+    public function capacidades(): HasMany
+    {
+        return $this->hasMany(EmpresaCapacidad::class)->withoutGlobalScopes();
+    }
+
+    /** Si la función está encendida. Una consulta por empresa y petición, compartida entre instancias. */
+    public function tieneCapacidad(Capacidad $capacidad): bool
+    {
+        return app(CapacidadesEmpresa::class)->tiene($this->id, $capacidad);
+    }
+
+    /**
+     * @return list<Capacidad>
+     */
+    public function capacidadesActivas(): array
+    {
+        return app(CapacidadesEmpresa::class)->activas($this->id);
     }
 
     public function identificador(): string

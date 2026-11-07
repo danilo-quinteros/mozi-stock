@@ -144,23 +144,73 @@ final class DatosFactura
     /**
      * Método de pago fiscal propuesto según cómo se cobró:
      * - Efectivo: «EFECTIVO» (código 1 del SIN).
-     * - Electrónico: «TRANSFERENCIA BANCARIA» (código 7 del SIN).
+     * - Electrónico: «TRANSFERENCIA BANCARIA» (código 7 del SIN) o el configurado por la empresa.
      * - Mixto: «EFECTIVO – TRANSFERENCIA BANCARIA» (código 13 del SIN).
-     * - Venta a crédito sin cuota inicial: «PAGO POSTERIOR» del catálogo.
-     * - Crédito con cuota inicial: el vendedor elige la combinación del catálogo.
+     * - Crédito sin cuota inicial: «PAGO POSTERIOR» (código 6 del SIN).
+     * - Crédito con cuota inicial en efectivo: «EFECTIVO – PAGO POSTERIOR» (código 34 del SIN) o combinación de catálogo.
+     * - Crédito con cuota inicial electrónica: «PAGO POSTERIOR – TRANSFERENCIA BANCARIA» (código 57 del SIN) o combinación de catálogo.
+     * - Crédito con cuota inicial mixta: «EFECTIVO – PAGO POSTERIOR - TRANSFERENCIA BANCARIA» (código 106 del SIN) o combinación de catálogo.
      */
     public static function metodoSugerido(int $empresaId, ?MetodoPago $metodo, bool $conSaldo, ?int $electronicoEmpresa = null): ?int
     {
-        return match (true) {
-            $conSaldo && $metodo === null => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR'),
-            $conSaldo => null,
-            $metodo === MetodoPago::Efectivo => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO'),
-            $metodo === MetodoPago::Electronico => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'TRANSFERENCIA BANCARIA') ?? 7,
-            $metodo === MetodoPago::Mixto => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO – TRANSFERENCIA BANCARIA')
+        if ($conSaldo) {
+            return match ($metodo) {
+                null => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR')
+                    ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['POSTERIOR'])
+                    ?? 6,
+
+                MetodoPago::Efectivo => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO - PAGO POSTERIOR')
+                    ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO – PAGO POSTERIOR')
+                    ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['EFECTIVO', 'POSTERIOR'])
+                    ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR')
+                    ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO')
+                    ?? 34,
+
+                MetodoPago::Electronico => self::sugerirElectronicoConSaldo($empresaId, $electronicoEmpresa),
+
+                MetodoPago::Mixto => CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['EFECTIVO', 'POSTERIOR', 'TRANSFERENCIA'])
+                    ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['EFECTIVO', 'POSTERIOR', 'TARJETA'])
+                    ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['EFECTIVO', 'POSTERIOR'])
+                    ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR')
+                    ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO – TRANSFERENCIA BANCARIA')
+                    ?? 106,
+            };
+        }
+
+        return match ($metodo) {
+            MetodoPago::Efectivo => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO') ?? 1,
+            MetodoPago::Electronico => $electronicoEmpresa
+                ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'TRANSFERENCIA BANCARIA')
+                ?? 7,
+            MetodoPago::Mixto => CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO – TRANSFERENCIA BANCARIA')
                 ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'EFECTIVO - TRANSFERENCIA BANCARIA')
+                ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['EFECTIVO', 'TRANSFERENCIA'])
                 ?? 13,
             default => null,
         };
+    }
+
+    private static function sugerirElectronicoConSaldo(int $empresaId, ?int $electronicoEmpresa): int
+    {
+        $desc = $electronicoEmpresa !== null
+            ? CatalogoEmpresa::descripcion($empresaId, Catalogo::TiposMetodoPago, $electronicoEmpresa)
+            : null;
+
+        if ($desc !== null && str_contains(mb_strtoupper($desc), 'TARJETA')) {
+            $codigo = CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['TARJETA', 'POSTERIOR']);
+            if ($codigo !== null) {
+                return $codigo;
+            }
+        }
+
+        return CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR – TRANSFERENCIA BANCARIA')
+            ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR - TRANSFERENCIA BANCARIA')
+            ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'TRANSFERENCIA BANCARIA - PAGO POSTERIOR')
+            ?? CatalogoEmpresa::buscarPorTerminos($empresaId, Catalogo::TiposMetodoPago, ['POSTERIOR', 'TRANSFERENCIA'])
+            ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'PAGO POSTERIOR')
+            ?? $electronicoEmpresa
+            ?? CatalogoEmpresa::codigoPorDescripcion($empresaId, Catalogo::TiposMetodoPago, 'TRANSFERENCIA BANCARIA')
+            ?? 57;
     }
 
     /**

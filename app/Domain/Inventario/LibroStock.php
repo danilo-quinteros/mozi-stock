@@ -5,6 +5,7 @@ namespace App\Domain\Inventario;
 use App\Domain\Tenancy\Numerador;
 use App\Enums\TipoOperacionInventario;
 use App\Models\OperacionInventario;
+use App\Models\Producto;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\User;
 use App\Support\Decimal;
@@ -50,7 +51,7 @@ final class LibroStock
             ->where('productos.empresa_id', $empresaId)
             ->where('productos.activo', true)
             ->whereIn('productos.id', $ids)
-            ->get(['productos.id', 'productos.nombre', 'unidades_medida.admite_decimales'])
+            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.tipo_venta', 'unidades_medida.admite_decimales', 'unidades_medida.abreviatura'])
             ->keyBy('id');
 
         $preparadas = [];
@@ -66,13 +67,15 @@ final class LibroStock
             }
 
             $cantidad = Decimal::normalizar(is_scalar($valor) ? (string) $valor : '', Decimal::ESCALA_CANTIDAD);
+            $nombre = Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->abreviatura);
+            $esEntera = ($producto->tipo_venta ?? 'unidad') === 'unidad' || ! $producto->admite_decimales;
 
             if ($cantidad === null || Decimal::comparar($cantidad, '0') <= 0) {
-                $errores[] = __(':nombre: la cantidad debe ser mayor que cero (hasta 3 decimales).', ['nombre' => $producto->nombre]);
-            } elseif (! $producto->admite_decimales && ! Decimal::esEntero($cantidad)) {
-                $errores[] = __(':nombre: se mide en unidades enteras.', ['nombre' => $producto->nombre]);
+                $errores[] = __(':nombre: la cantidad debe ser mayor que cero (hasta 3 decimales).', ['nombre' => $nombre]);
+            } elseif ($esEntera && ! Decimal::esEntero($cantidad)) {
+                $errores[] = __(':nombre: se mide en unidades enteras.', ['nombre' => $nombre]);
             } else {
-                $preparadas[(int) $id] = ['cantidad' => $cantidad, 'nombre' => (string) $producto->nombre];
+                $preparadas[(int) $id] = ['cantidad' => $cantidad, 'nombre' => $nombre];
             }
         }
 

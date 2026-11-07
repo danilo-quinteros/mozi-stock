@@ -61,6 +61,8 @@ enum TipoOperacionInventario: string
                 'devolucion' => __('Devolución'),
                 'reposicion_manual' => __('Reposición manual'),
                 'compra_externa' => __('Compra externa (solo stock)'),
+                // También la usa la importación de productos al cargar el stock del archivo.
+                'inventario_inicial' => __('Inventario inicial'),
             ],
             self::Salida => [
                 'merma' => __('Merma'),

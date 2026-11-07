@@ -28,6 +28,13 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Catálogo externo de Cyclone. El token y la URL guardados en el proveedor (Superadmin) tienen
+    // prioridad; estos valores son el respaldo del servidor. Leídos aquí para que funcionen con config:cache.
+    'cyclone' => [
+        'base_url' => env('CYCLONE_API_BASE_URL', 'https://cyclonelimpieza.com/sistema/api/v1'),
+        'token' => env('CYCLONE_API_TOKEN'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

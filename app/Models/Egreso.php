@@ -5,28 +5,41 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToEmpresa;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
- * Gasto operativo pagado (sueldos, alquiler, servicios...). Su salida de caja se registra
- * una sola vez; las compras de stock nunca se registran como egreso. Inmutable.
+ * Gasto operativo (sueldos, alquiler, servicios...) reconocido por su monto total. Lo pagado
+ * al registrarlo sale de caja una sola vez; si queda saldo (parcial o pendiente), la deuda vive
+ * en CuentaPagar. Las compras de stock nunca se registran como egreso. Inmutable.
  *
  * @property int $id
  * @property int $empresa_id
  * @property int $numero
  * @property int $sucursal_id
+ * @property int|null $caja_id
+ * @property int|null $turno_caja_id
  * @property int $categoria_egreso_id
+ * @property int|null $proveedor_id
  * @property int $usuario_id
  * @property string $descripcion
- * @property string $metodo
+ * @property string|null $metodo
  * @property string $monto
+ * @property string $condicion
+ * @property string $pagado
+ * @property string $monto_efectivo
+ * @property string $monto_electronico
+ * @property Carbon|null $vencimiento
+ * @property bool $pago_externo
  * @property Carbon $fecha
  * @property string $clave_idempotencia
  * @property Carbon $created_at
  * @property-read Sucursal $sucursal
  * @property-read CategoriaEgreso $categoria
  * @property-read User $usuario
+ * @property-read Proveedor|null $proveedor
+ * @property-read CuentaPagar|null $cuentaPagar
  */
 class Egreso extends Model
 {
@@ -40,6 +53,11 @@ class Egreso extends Model
     {
         return [
             'monto' => 'decimal:2',
+            'pagado' => 'decimal:2',
+            'monto_efectivo' => 'decimal:2',
+            'monto_electronico' => 'decimal:2',
+            'vencimiento' => 'date',
+            'pago_externo' => 'boolean',
             'fecha' => 'datetime',
         ];
     }
@@ -77,5 +95,23 @@ class Egreso extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_id');
+    }
+
+    /**
+     * Beneficiario del gasto; obligatorio cuando queda deuda.
+     *
+     * @return BelongsTo<Proveedor, $this>
+     */
+    public function proveedor(): BelongsTo
+    {
+        return $this->belongsTo(Proveedor::class);
+    }
+
+    /**
+     * @return HasOne<CuentaPagar, $this>
+     */
+    public function cuentaPagar(): HasOne
+    {
+        return $this->hasOne(CuentaPagar::class);
     }
 }

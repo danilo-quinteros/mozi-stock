@@ -37,7 +37,7 @@ class OperacionesCsvController extends Controller
             function () use ($filas): iterable {
                 foreach ($filas as $f) {
                     yield ['COM-'.str_pad((string) $f->numero, 5, '0', STR_PAD_LEFT), $this->fecha($f->fecha), $f->proveedor ?? '', $f->sucursal,
-                        (int) $f->articulos, MetodoPago::from($f->metodo)->etiqueta(), (string) $f->monto_efectivo, (string) $f->monto_electronico,
+                        (int) $f->articulos, MetodoPago::tryFrom((string) $f->metodo)?->etiqueta() ?? __('Sin pago al registrar'), (string) $f->monto_efectivo, (string) $f->monto_electronico,
                         (string) $f->total, $f->referencia ?? '', $f->usuario];
                 }
             });
@@ -54,7 +54,7 @@ class OperacionesCsvController extends Controller
             function () use ($filas): iterable {
                 foreach ($filas as $f) {
                     yield ['EGR-'.str_pad((string) $f->numero, 5, '0', STR_PAD_LEFT), $this->fecha($f->fecha), $f->categoria, $f->descripcion,
-                        $f->sucursal, $f->metodo === 'efectivo' ? __('Efectivo') : __('Electrónico'), Decimal::redondear((string) $f->monto), $f->usuario];
+                        $f->sucursal, MetodoPago::tryFrom((string) $f->metodo)?->etiqueta() ?? __('Sin pago al registrar'), Decimal::redondear((string) $f->monto), $f->usuario];
                 }
             });
     }

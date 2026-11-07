@@ -1,10 +1,10 @@
 <?php
 
 require 'vendor/autoload.php';
+use Illuminate\Contracts\Console\Kernel;
+
 $app = require_once 'bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
-
-use Illuminate\Contracts\Console\Kernel;
 use MoziStudios\Siat\Algoritmos\Archivo;
 use MoziStudios\Siat\ClienteSiat;
 use MoziStudios\Siat\Codigos\Cufd;
@@ -28,11 +28,11 @@ $contribuyente = new Contribuyente(
 $catalogoEventos = [
     1 => 'CORTE DEL SERVICIO DE INTERNET',
     2 => 'INACCESIBILIDAD AL SERVICIO WEB DE LA ADMINISTRACIÓN TRIBUTARIA',
-    3 => 'INGRESO A ZONAS SIN INTERNET POR DESPLIEGUE DE PUNTO DE VENTA',
+    3 => 'INGRESO A ZONAS SIN INTERNET POR DESPLIEGUE DE PUNTO DE VENTA EN VEHICULOS AUTOMOTORES',
     4 => 'VENTA EN LUGARES SIN INTERNET',
-    5 => 'VIRUS INFORMÁTICO O FALLA DE SOFTWARE',
-    6 => 'CAMBIO DE INFRAESTRUCTURA DE SISTEMA O FALLA DE HARDWARE',
-    7 => 'CORTE DE SUMINISTRO DE ENERGIA ELÉCTRICA',
+    5 => 'CORTE DE SUMINISTRO DE ENERGIA ELECTRICA',
+    6 => 'VIRUS INFORMÁTICO O FALLA DE SOFTWARE',
+    7 => 'CAMBIO DE INFRAESTRUCTURA DEL SISTEMA INFORMÁTICO DE FACTURACIÓN O FALLA DE HARDWARE',
 ];
 
 $options = getopt('', ['ejecutar', 'pv:', 'motivo:', 'cantidad:']);
@@ -105,7 +105,17 @@ if ($cufdNuevoObj === null) {
 $cufdNuevo = $cufdNuevoObj->codigo;
 
 echo "-> Paso 4: Registrando evento significativo (Motivo {$motivo}: {$descripcion})...\n";
-$respEv = $cliente->operaciones($contribuyente)->registroEventoSignificativo(
+$ops = $cliente->operaciones($contribuyente);
+if ($motivo >= 5) {
+    $cfgV2 = new \MoziStudios\Siat\Configuracion\ConfiguracionSistema(
+        ambiente: \MoziStudios\Siat\Constantes\Ambiente::from((int) config('siat.ambiente')),
+        modalidad: \MoziStudios\Siat\Constantes\Modalidad::Computarizada,
+        codigoSistema: (string) config('siat.codigo_sistema'),
+        urlBase: 'https://pilotosiatservicios.impuestos.gob.bo/v2/',
+    );
+    $ops = (new ClienteSiat($cfgV2, new \MoziStudios\Siat\Soap\SoapTransporte()))->operaciones($contribuyente);
+}
+$respEv = $ops->registroEventoSignificativo(
     sucursal: 0,
     puntoVenta: $pv,
     cuis: $cuis,

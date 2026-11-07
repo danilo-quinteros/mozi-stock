@@ -30,10 +30,6 @@ final class ConfiguracionSistema
             throw new DatosInvalidos('Falta el código de sistema o tiene caracteres no válidos.');
         }
 
-        if ($modalidad !== Modalidad::Computarizada) {
-            throw new DatosInvalidos('Este paquete solo implementa la modalidad computarizada en línea.');
-        }
-
         $host = parse_url($urlBase, PHP_URL_HOST);
 
         if (! str_starts_with($urlBase, 'https://') || ! is_string($host)) {

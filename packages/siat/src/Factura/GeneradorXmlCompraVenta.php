@@ -5,22 +5,31 @@ namespace MoziStudios\Siat\Factura;
 use DOMDocument;
 use DOMElement;
 use DOMText;
+use MoziStudios\Siat\Constantes\Modalidad;
 use MoziStudios\Siat\Excepciones\DatosInvalidos;
 
 /**
- * XML de facturaComputarizadaCompraVenta en el orden exacto del XSD V3. Los valores opcionales nulos
+ * XML de facturaComputarizadaCompraVenta o facturaElectronicaCompraVenta en el orden exacto del XSD V3. Los valores opcionales nulos
  * se escriben con xsi:nil="true" solo en los campos que el XSD declara nillable; DOM escapa el texto.
  */
 final class GeneradorXmlCompraVenta
 {
     private const XSI = 'http://www.w3.org/2001/XMLSchema-instance';
 
+    public function __construct(
+        private readonly Modalidad $modalidad = Modalidad::Computarizada,
+    ) {}
+
     public function generar(FacturaCompraVenta $factura, string $cuf): string
     {
+        $esElectronica = $this->modalidad === Modalidad::Electronica;
+        $raizNombre = $esElectronica ? 'facturaElectronicaCompraVenta' : 'facturaComputarizadaCompraVenta';
+        $xsdNombre = $esElectronica ? 'facturaElectronicaCompraVenta.xsd' : 'facturaComputarizadaCompraVenta.xsd';
+
         $documento = new DOMDocument('1.0', 'UTF-8');
-        $raiz = $documento->createElement('facturaComputarizadaCompraVenta');
+        $raiz = $documento->createElement($raizNombre);
         $raiz->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:xsi', self::XSI);
-        $raiz->setAttributeNS(self::XSI, 'xsi:noNamespaceSchemaLocation', 'facturaComputarizadaCompraVenta.xsd');
+        $raiz->setAttributeNS(self::XSI, 'xsi:noNamespaceSchemaLocation', $xsdNombre);
         $documento->appendChild($raiz);
 
         $cabecera = $this->hijo($raiz, 'cabecera');

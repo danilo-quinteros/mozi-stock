@@ -15,11 +15,18 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
+/**
+ * @property-read string $vistaPreviaNombreCompleto
+ * @property-read string $vistaPreviaNombreBase
+ * @property-read string $vistaPreviaContenido
+ * @property-read string $textoEjemplo
+ */
 class ProductoFormulario extends Component
 {
     use WithFileUploads;
@@ -35,11 +42,15 @@ class ProductoFormulario extends Component
 
     public string $nombre = '';
 
-    public string $sku = '';
+    public string $tipo_venta = 'unidad';
 
-    public string $codigo_barras = '';
+    public string $contenido = '';
 
-    public string $categoria_id = '';
+    public ?string $sku = '';
+
+    public ?string $codigo_barras = '';
+
+    public ?string $categoria_id = '';
 
     public string $unidad_medida_id = '';
 
@@ -47,11 +58,11 @@ class ProductoFormulario extends Component
 
     public string $precio_consumidor = '';
 
-    public string $precio_minorista = '';
+    public ?string $precio_minorista = '';
 
-    public string $precio_mayorista = '';
+    public ?string $precio_mayorista = '';
 
-    public string $descripcion = '';
+    public ?string $descripcion = '';
 
     public bool $activo = true;
 
@@ -76,16 +87,18 @@ class ProductoFormulario extends Component
 
         $this->authorize('update', $producto);
         $this->productoId = $producto->id;
-        $this->nombre = $producto->nombre;
-        $this->sku = $producto->sku;
-        $this->codigo_barras = (string) $producto->codigo_barras;
-        $this->categoria_id = (string) $producto->categoria_id;
+        $this->nombre = $producto->nombre_base;
+        $this->tipo_venta = (string) ($producto->tipo_venta ?? 'unidad');
+        $this->contenido = $producto->contenido !== null ? Decimal::simple((string) $producto->contenido) : '';
+        $this->sku = (string) ($producto->sku ?? '');
+        $this->codigo_barras = (string) ($producto->codigo_barras ?? '');
+        $this->categoria_id = (string) ($producto->categoria_id ?? '');
         $this->unidad_medida_id = (string) $producto->unidad_medida_id;
         $this->stock_minimo = Decimal::simple($producto->stock_minimo);
         $this->precio_consumidor = $producto->precio_consumidor;
-        $this->precio_minorista = (string) $producto->precio_minorista;
-        $this->precio_mayorista = (string) $producto->precio_mayorista;
-        $this->descripcion = (string) $producto->descripcion;
+        $this->precio_minorista = (string) ($producto->precio_minorista ?? '');
+        $this->precio_mayorista = (string) ($producto->precio_mayorista ?? '');
+        $this->descripcion = (string) ($producto->descripcion ?? '');
         $this->activo = $producto->activo;
         $this->minimos = StockNivel::query()->where('producto_id', $producto->id)->whereNotNull('stock_minimo')
             ->pluck('stock_minimo', 'sucursal_id')->map(fn ($minimo) => Decimal::simple((string) $minimo))->all();
@@ -94,6 +107,13 @@ class ProductoFormulario extends Component
     /**
      * Valida la imagen apenas se sube, antes de intentar mostrar su vista previa.
      */
+    public function updatedTipoVenta(string $valor): void
+    {
+        if ($valor === 'medida') {
+            $this->contenido = '';
+        }
+    }
+
     public function updatedImagen(): void
     {
         try {
@@ -117,7 +137,9 @@ class ProductoFormulario extends Component
         $empresaId = $this->actor()->empresa_id;
         $this->validate([
             'nombre' => ['required', 'string', 'max:150'],
-            'sku' => ['required', 'string', 'max:40', 'regex:/^[A-Za-z0-9._\-\/]+$/',
+            'tipo_venta' => ['required', 'in:unidad,medida'],
+            'contenido' => ['nullable', self::CANTIDAD],
+            'sku' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9._\-\/]+$/',
                 Rule::unique('productos', 'sku')->where('empresa_id', $empresaId)->ignore($this->productoId)],
             'codigo_barras' => ['nullable', 'string', 'max:64',
                 Rule::unique('productos', 'codigo_barras')->where('empresa_id', $empresaId)->ignore($this->productoId)],
@@ -131,6 +153,7 @@ class ProductoFormulario extends Component
             'imagen' => self::REGLAS_IMAGEN,
             'minimos.*' => ['nullable', self::CANTIDAD],
         ], [
+            'contenido.regex' => __('Ingresa una cantidad válida mayor a 0 (por ejemplo 350 o 1,5).'),
             'sku.regex' => __('Usa letras, números, puntos, guiones o barras.'),
             'sku.unique' => __('Ya existe un producto con ese código en tu empresa.'),
             'codigo_barras.unique' => __('Ese código de barras ya está asignado a otro producto.'),
@@ -141,13 +164,28 @@ class ProductoFormulario extends Component
             'minimos.*.regex' => __('Ingresa una cantidad mayor o igual a 0, o déjalo vacío.'),
             'imagen.max' => __('La imagen no puede superar 3 MB.'),
         ], [
+            'nombre' => __('nombre'),
+            'tipo_venta' => __('cómo se vende el producto'),
+            'contenido' => __('contenido / presentación'),
             'sku' => __('código / SKU'), 'codigo_barras' => __('código de barras'), 'categoria_id' => __('categoría'),
             'unidad_medida_id' => __('unidad'), 'stock_minimo' => __('stock mínimo'), 'precio_consumidor' => __('precio consumidor'),
             'precio_minorista' => __('precio minorista'), 'precio_mayorista' => __('precio mayorista'), 'descripcion' => __('descripción'),
         ]);
 
+        if (filled($this->contenido)) {
+            $norm = Decimal::normalizar($this->contenido, Decimal::ESCALA_CANTIDAD);
+            if ($norm === null || Decimal::comparar($norm, '0') <= 0) {
+                throw ValidationException::withMessages([
+                    'contenido' => __('Ingresa una cantidad mayor a 0 (por ejemplo 350 o 1,5).'),
+                ]);
+            }
+        }
+
+        $contenidoGuardar = $this->tipo_venta === 'unidad' && filled($this->contenido) ? $this->contenido : null;
+
         $datos = [
-            'nombre' => $this->nombre, 'sku' => $this->sku, 'codigo_barras' => $this->codigo_barras,
+            'nombre' => $this->nombre, 'tipo_venta' => $this->tipo_venta, 'contenido' => $contenidoGuardar,
+            'sku' => $this->sku, 'codigo_barras' => $this->codigo_barras,
             'descripcion' => $this->descripcion, 'categoria_id' => $this->categoria_id,
             'unidad_medida_id' => $this->unidad_medida_id, 'stock_minimo' => $this->stock_minimo,
             'precio_consumidor' => $this->precio_consumidor, 'precio_minorista' => $this->precio_minorista,
@@ -156,7 +194,8 @@ class ProductoFormulario extends Component
 
         if ($this->productoId === null) {
             $producto = $accion->crear($this->actor(), $datos, $this->imagen);
-            session()->flash('aviso', __('Producto :sku creado. Carga su stock desde Ajustes y traspasos.', ['sku' => $producto->sku]));
+            $etiqueta = $producto->sku ?: $producto->nombre;
+            session()->flash('aviso', __('Producto :sku creado. Carga su stock desde Ajustes y traspasos.', ['sku' => $etiqueta]));
         } else {
             $producto = $accion->actualizar($this->actor(), Producto::query()->findOrFail($this->productoId), $datos, $this->imagen, $this->quitarImagen);
 
@@ -164,10 +203,86 @@ class ProductoFormulario extends Component
                 $minimos->ejecutar($this->actor(), $producto, $this->minimos);
             }
 
-            session()->flash('aviso', __('Producto :sku actualizado.', ['sku' => $producto->sku]));
+            $etiqueta = $producto->sku ?: $producto->nombre;
+            session()->flash('aviso', __('Producto :sku actualizado.', ['sku' => $etiqueta]));
         }
 
         $this->redirectRoute('productos.index', navigate: false);
+    }
+
+    #[Computed]
+    public function vistaPreviaNombreCompleto(): string
+    {
+        $base = $this->vistaPreviaNombreBase();
+        if ($base === '') {
+            return '';
+        }
+
+        $contenido = $this->vistaPreviaContenido();
+
+        return trim($base.' '.$contenido);
+    }
+
+    #[Computed]
+    public function vistaPreviaNombreBase(): string
+    {
+        $nombre = trim($this->nombre);
+
+        // Si el campo nombre está vacío, no mostrar nada en la vista previa
+        if ($nombre === '') {
+            return '';
+        }
+
+        return $nombre;
+    }
+
+    #[Computed]
+    public function vistaPreviaContenido(): string
+    {
+        if ($this->tipo_venta === 'medida') {
+            return '';
+        }
+
+        $nombre = trim($this->nombre);
+        $contenido = trim((string) $this->contenido);
+
+        // Si el nombre está vacío, tampoco se muestra contenido en la vista previa
+        if ($nombre === '' || $contenido === '') {
+            return '';
+        }
+
+        $abreviatura = '';
+        if ($this->unidad_medida_id !== '') {
+            $abreviatura = (string) (UnidadMedida::query()->where('id', (int) $this->unidad_medida_id)->value('abreviatura') ?? '');
+        }
+
+        return trim($contenido.($abreviatura !== '' ? ' '.$abreviatura : ''));
+    }
+
+    #[Computed]
+    public function textoEjemplo(): string
+    {
+        $base = $this->vistaPreviaNombreBase();
+
+        if ($this->tipo_venta === 'medida') {
+            $nombreEjemplo = $base !== '' ? $base : 'Arroz';
+
+            return __('Ejemplo: :producto — se vende por peso o medida.', [
+                'producto' => $nombreEjemplo,
+            ]);
+        }
+
+        $nombreEjemplo = $base !== '' ? $base : 'Cyclone';
+        $contenido = $this->vistaPreviaContenido();
+        if ($contenido === '' && $base === '') {
+            $contenido = '350 g';
+        }
+
+        $descriptor = trim($nombreEjemplo.($contenido !== '' ? ' '.$contenido : ''));
+
+        return __('Ejemplo: :producto — se vende por unidades.', [
+            'producto' => $descriptor,
+        ]);
     }
 
     public function render(): View

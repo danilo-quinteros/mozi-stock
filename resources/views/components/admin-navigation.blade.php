@@ -6,6 +6,8 @@
         ['Suscripciones', 'admin.suscripciones', 'admin.suscripciones*', 'subscription', 'Planes'],
         ['Comprobantes', 'admin.comprobantes', 'admin.comprobantes*', 'receipt', 'Pagos'],
         ['Catálogos SIN', 'admin.catalogos', 'admin.catalogos*', 'history', 'Catálogos'],
+        ['Agente Mozi', 'admin.agente-mozi', 'admin.agente-mozi*', 'sparkles', 'Mozi'],
+        ['Sitio web', 'admin.sitio-web', 'admin.sitio-web*', 'globe', 'Sitio'],
         ['Ajustes globales', 'admin.ajustes', 'admin.ajustes*', 'settings', 'Ajustes'],
     ];
 @endphp

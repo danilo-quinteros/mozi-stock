@@ -1,0 +1,54 @@
+/* Caja y arqueo / Mi caja (prototipo caja-reportes.html). Solo tokens del design system compartido. */
+.caja-reporte .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.caja-reporte td .badge{white-space:nowrap}
+.caja-reporte tfoot td{border-top:1px solid var(--border);padding:14px 12px;font-size:12px}
+.caja-gap{margin-bottom:18px}
+.caja-filtros{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:18px}
+.caja-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.caja-chip{border:1px solid var(--border);background:var(--panel-soft);color:var(--muted);border-radius:999px;padding:8px 13px;font-size:11.5px;font-weight:700;cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.caja-chip:hover{color:var(--text)}
+.caja-chip.active{color:var(--brand-bright);background:var(--accent-soft);border-color:var(--accent-border)}
+.caja-filtros .input{width:auto;min-height:34px;padding-top:0;padding-bottom:0}
+.caja-selects{display:flex;gap:10px;flex-wrap:wrap}
+.caja-selects .select{width:auto;min-width:170px}
+.caja-avisos{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.caja-avisos .notice{align-items:center}
+.caja-avisos .notice .btn{flex-shrink:0;margin-left:auto}
+.notice.caja-alerta{border-color:var(--accent-border)}
+.notice.caja-peligro{border-color:rgba(240,141,129,.3)}
+.notice.caja-peligro .ico{color:var(--red)}
+.caja-split{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.caja-split b{color:var(--text-strong);font-variant-numeric:tabular-nums}
+.caja-ahora{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.caja-tarjeta{border:1px solid var(--border);background:var(--panel-soft);border-radius:16px;padding:16px;display:grid;gap:13px;align-content:start;transition:transform .2s var(--ease),border-color .2s}
+.caja-tarjeta:hover{transform:translateY(-2px);border-color:var(--accent-border)}
+.caja-tarjeta.caja-alerta{border-color:var(--accent-border)}
+.caja-tarjeta-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.caja-tarjeta .row.between{flex-wrap:wrap;gap:8px 12px}
+.caja-tarjeta-acciones{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+/* Barra superior: la píldora de caja no parte su texto; «+N» avisa de otras cajas abiertas del administrador. */
+.top-caja-pill{white-space:nowrap}
+.top-caja-mas{color:var(--brand-bright)}
+.caja-nombre{font-weight:760;color:var(--text-strong);font-size:14px;margin-bottom:3px}
+.caja-etiqueta{font-size:11px;color:var(--muted);font-weight:640}
+.caja-monto{font-size:24px;font-weight:830;letter-spacing:-.04em;color:var(--text-strong);font-variant-numeric:tabular-nums;margin-top:3px}
+.caja-monto-hero{font-size:clamp(34px,4.4vw,48px);font-weight:850;letter-spacing:-.05em;color:var(--text-strong);margin:6px 0 10px;font-variant-numeric:tabular-nums}
+.caja-dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:currentColor}
+.caja-formula .list-line{padding:10px 0}
+.caja-formula .list-line.total{border-top:1px solid var(--border);border-bottom:0;margin-top:2px;padding-top:13px}
+.caja-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.9fr);gap:18px}
+.caja-resultado{border-radius:14px;padding:14px 16px;border:1px solid var(--border);background:var(--panel-soft);display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
+.caja-mov{display:inline-flex;align-items:center;gap:7px}
+.caja-mov:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+.caja-mov.salida:before{background:var(--red)}
+.stat-value.danger-text{color:var(--red)}
+@media(max-width:1000px){.caja-hero{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .caja-selects{width:100%}
+  .caja-selects .select{flex:1;min-width:0}
+  .caja-avisos{grid-template-columns:1fr}
+  .caja-avisos .notice{flex-wrap:wrap}
+  .grid.four.caja-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .caja-kpis .stat{padding:14px}
+  .caja-kpis .stat-value{font-size:19px;margin:9px 0 8px}
+}

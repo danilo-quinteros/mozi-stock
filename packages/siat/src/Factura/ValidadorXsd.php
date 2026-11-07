@@ -24,6 +24,11 @@ final class ValidadorXsd
         return new self(dirname(__DIR__, 2).'/resources/xsd/facturaComputarizadaCompraVenta.xsd');
     }
 
+    public static function compraVentaElectronica(): self
+    {
+        return new self(dirname(__DIR__, 2).'/resources/xsd/facturaElectronicaCompraVenta.xsd');
+    }
+
     /**
      * @throws XmlInvalido
      */

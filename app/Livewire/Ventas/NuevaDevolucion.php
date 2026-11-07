@@ -4,6 +4,7 @@ namespace App\Livewire\Ventas;
 
 use App\Domain\Ventas\Actions\RegistrarDevolucion;
 use App\Domain\Ventas\CalculadoraDevolucion;
+use App\Livewire\Concerns\EligeCaja;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaItem;
@@ -17,15 +18,22 @@ use Livewire\Component;
 /**
  * Devolución de una venta, como sección contextual de Ventas (especificación § 3.9). Los
  * importes mostrados son informativos: RegistrarDevolucion los recalcula con la venta
- * bloqueada y valida cantidades y reembolso en el servidor.
+ * bloqueada y valida cantidades y reembolso en el servidor. El efectivo sale del turno elegido
+ * (EligeCaja) o, si lo indica el administrador, fuera de caja.
  */
 class NuevaDevolucion extends Component
 {
+    use EligeCaja;
+
     #[Locked]
     public int $ventaId;
 
     #[Locked]
     public string $clave = '';
+
+    /** Sucursal de la venta: el reembolso sale de una caja de esa sucursal. */
+    #[Locked]
+    public ?string $sucursal_id = null;
 
     /**
      * Por línea de venta: cantidad a devolver y si vuelve al stock.
@@ -49,6 +57,8 @@ class NuevaDevolucion extends Component
         $this->authorize('devolver', $venta);
         $this->ventaId = $venta->id;
         $this->clave = (string) Str::uuid();
+        $this->sucursal_id = (string) $venta->sucursal_id;
+        $this->elegirCajaPorDefecto();
 
         foreach (VentaItem::query()->where('venta_id', $venta->id)->orderBy('orden')->pluck('id') as $id) {
             $this->lineas[(int) $id] = ['cantidad' => '', 'reingresa' => true];
@@ -75,7 +85,7 @@ class NuevaDevolucion extends Component
 
         /** @var User $actor */
         $actor = Auth::user();
-        $devolucion = $accion->ejecutar($actor, $this->venta(), [
+        $devolucion = $accion->ejecutar($actor, $this->venta(), $this->datosCaja() + [
             'lineas' => $this->lineas,
             'motivo' => $this->motivo,
             'metodo' => $this->metodo,

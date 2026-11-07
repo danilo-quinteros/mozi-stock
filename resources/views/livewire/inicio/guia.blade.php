@@ -160,5 +160,11 @@
                 <livewire:facturacion.puntos :empresa-id="$empresaId" :embebido="true" :key="'guia-sucursal-siat'" />
             </x-modal>
         @endif
+    @else
+        {{-- El último paso se terminó en esta misma visita: el Inicio muestra el panel al recargar. --}}
+        <section class="card card-pad guia-completa">
+            <div class="inicio-ok"><x-icon name="check" /><div><b>{{ __('¡Tu negocio está listo!') }}</b><p>{{ __('Terminaste la configuración inicial. Tu panel ya muestra los indicadores del negocio.') }}</p>
+                <a class="btn primary sm" style="margin-top:12px" href="{{ route('dashboard') }}">{{ __('Ver mi panel') }} <x-icon name="arrow" size="sm" /></a></div></div>
+        </section>
     @endif
 </div>

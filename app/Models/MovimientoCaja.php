@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToEmpresa;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use LogicException;
 
@@ -14,6 +15,8 @@ use LogicException;
  * @property int $id
  * @property int $empresa_id
  * @property int $sucursal_id
+ * @property int|null $caja_id
+ * @property int|null $turno_caja_id
  * @property string $sentido
  * @property string $metodo
  * @property string $monto
@@ -22,6 +25,8 @@ use LogicException;
  * @property Carbon $fecha_operacion
  * @property int $usuario_id
  * @property Carbon $created_at
+ * @property-read Caja|null $caja
+ * @property-read TurnoCaja|null $turno
  */
 class MovimientoCaja extends Model
 {
@@ -30,6 +35,22 @@ class MovimientoCaja extends Model
     public const UPDATED_AT = null;
 
     protected $table = 'movimientos_caja';
+
+    /**
+     * @return BelongsTo<Caja, $this>
+     */
+    public function caja(): BelongsTo
+    {
+        return $this->belongsTo(Caja::class)->withoutGlobalScopes();
+    }
+
+    /**
+     * @return BelongsTo<TurnoCaja, $this>
+     */
+    public function turno(): BelongsTo
+    {
+        return $this->belongsTo(TurnoCaja::class, 'turno_caja_id')->withoutGlobalScopes();
+    }
 
     protected function casts(): array
     {

@@ -14,6 +14,7 @@ use App\Enums\Rol;
 use App\Enums\TipoPrecio;
 use App\Livewire\Concerns\CapturaFactura;
 use App\Livewire\Concerns\CapturaProductos;
+use App\Livewire\Concerns\EligeCaja;
 use App\Livewire\Concerns\EligeCliente;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Cliente;
@@ -32,11 +33,12 @@ use Livewire\Component;
 /**
  * Pantalla única para cotizar y confirmar ventas (pedidos.html). Los importes que se
  * muestran salen de la misma calculadora del servidor; guardar y confirmar delegan en
- * las acciones de dominio, que vuelven a validar todo.
+ * las acciones de dominio, que vuelven a validar todo. El efectivo cobrado al confirmar entra
+ * en el turno elegido (EligeCaja) o, si lo indica el administrador, fuera de caja.
  */
 class Editor extends Component
 {
-    use CapturaFactura, CapturaProductos, EligeCliente, MuestraAvisos;
+    use CapturaFactura, CapturaProductos, EligeCaja, EligeCliente, MuestraAvisos;
 
     #[Locked]
     public ?int $pedidoId = null;
@@ -62,6 +64,8 @@ class Editor extends Component
     public bool $pago_en_cuotas = false;
 
     public string $pago_cuota_inicial = '0';
+
+    public string $pago_vencimiento = '';
 
     public string $pago_efectivo = '';
 
@@ -91,6 +95,7 @@ class Editor extends Component
                 ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
             $this->sucursal_id = $sucursalId === null ? null : (string) $sucursalId;
             $this->vendedor_id = (string) $actor->id;
+            $this->elegirCajaPorDefecto();
 
             if (is_string($mensaje = session('aviso'))) {
                 $this->avisar($mensaje);
@@ -108,6 +113,7 @@ class Editor extends Component
         }
 
         $this->cargar($pedido);
+        $this->elegirCajaPorDefecto();
 
         if (is_string($mensaje = session('aviso'))) {
             $this->avisar($mensaje);
@@ -176,6 +182,10 @@ class Editor extends Component
             throw ValidationException::withMessages(['cliente_id' => __('Para vender a crédito identifica al cliente.')]);
         }
 
+        if ($conSaldo) {
+            ConfirmarVenta::vencimiento($this->pago_vencimiento);
+        }
+
         if (($configuracion = $this->configuracionFiscal()) !== null) {
             // Propuesta de datos fiscales: el vendedor la revisa en la confirmación.
             $metodo = DatosFactura::metodoSugerido($pedido->empresa_id, $cobro['metodo'], $conSaldo, $configuracion->metodo_pago_electronico);
@@ -192,13 +202,14 @@ class Editor extends Component
         // Los datos fiscales se validan con el modal abierto, para que el vendedor vea el error en su campo.
         $datosFactura = $this->datosFactura();
         $this->confirmando = false;
-        $venta = $accion->ejecutar($this->actor(), Pedido::query()->findOrFail($this->pedidoId), [
+        $venta = $accion->ejecutar($this->actor(), Pedido::query()->findOrFail($this->pedidoId), $this->datosCaja() + [
             'metodo' => $this->pago_metodo,
             'en_cuotas' => $this->pago_en_cuotas,
             'cuota_inicial' => $this->pago_cuota_inicial,
             'efectivo' => $this->pago_efectivo,
             'electronico' => $this->pago_electronico,
             'clave' => $this->claveConfirmacion,
+            'vencimiento' => $this->pago_en_cuotas ? $this->pago_vencimiento : null,
         ], $datosFactura);
 
         session()->flash('aviso', __('Venta :codigo confirmada.', ['codigo' => $venta->codigo()]));

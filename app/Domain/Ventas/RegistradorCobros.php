@@ -32,10 +32,15 @@ final class RegistradorCobros
         string $electronico,
         string $clave,
         ?string $nota = null,
+        ?int $cajaId = null,
+        ?int $turnoId = null,
     ): PagoVenta {
         if (DB::transactionLevel() === 0) {
             throw new LogicException('Un cobro solo se registra dentro de una transacción.');
         }
+
+        $cajaId ??= $venta->caja_id;
+        $turnoId ??= $venta->turno_caja_id;
 
         $monto = Decimal::sumar($efectivo, $electronico, Decimal::ESCALA_DINERO);
         $ahora = Carbon::now();
@@ -56,7 +61,8 @@ final class RegistradorCobros
         $pago->save();
 
         $this->caja->registrar($receptor, $sucursalId, 'ingreso',
-            ['efectivo' => $efectivo, 'electronico' => $electronico], 'pago_venta', $pago->id, $ahora);
+            ['efectivo' => $efectivo, 'electronico' => $electronico], 'pago_venta', $pago->id, $ahora,
+            $cajaId, $turnoId);
 
         return $pago;
     }

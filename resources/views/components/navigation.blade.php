@@ -19,9 +19,13 @@
     $grupos = [
         'Ventas y finanzas' => [
             $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*', 'cart', corto: 'Pedidos'),
-            $enlace('Créditos', 'creditos.index', 'creditos.*', 'wallet'),
+            
+            $enlace('Mi caja', 'caja', 'caja', 'cash', $usuario->esVendedor(), 'Caja'),
+            
+            $enlace('Cuentas por cobrar', 'creditos.index', 'creditos.*', 'wallet', corto: 'Cobrar'),
+            $enlace('Cuentas por pagar', 'cuentas-pagar.index', 'cuentas-pagar.*', 'receipt', $administra, 'Pagar'),
             $enlace('Egresos', 'egresos.index', 'egresos.*', 'expense', $administra),
-        ],
+            ],
         'Inventario' => [
             $enlace('Productos', 'productos.index', 'productos.*', 'box'),
             $enlace('Compras', 'compras.index', 'compras.*', 'truck', $administra),
@@ -30,7 +34,7 @@
         'Gestión' => [
             $enlace('Clientes', 'clientes.index', 'clientes.*', 'users'),
             $enlace('Proveedores', 'proveedores.index', 'proveedores.*', 'building', $administra),
-            $enlace('Sucursales', 'sucursales.index', 'sucursales.*', 'store', $administra),
+            $enlace('Sucursales y cajas', 'sucursales.index', 'sucursales.*', 'store', $administra, 'Sucursales'),
             $enlace('Usuarios', 'usuarios.index', 'usuarios.*', 'shield', $administra),
         ],
         'Reportes' => [
@@ -38,12 +42,16 @@
             $enlace('Reportes generales', 'reportes', 'reportes|reportes.*', 'chart', $administra, 'Reportes'),
         ],
     ];
+    $agenteActivo = request()->routeIs('agente-mozi');
     $cuentaActiva = request()->routeIs('*.edit');
     $empresaActiva = request()->routeIs('configuracion', 'suscripcion', 'suscripcion.*', 'facturacion');
 @endphp
 <nav class="nav-scroll nav-groups" aria-label="{{ __('Navegación principal') }}">
     <div class="nav-label">{{ __('Inicio') }}</div>
     <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}" title="{{ __('Resumen') }}"><span class="nav-symbol"><x-icon name="dashboard" /></span><span class="nav-text">{{ __('Resumen') }}</span><span class="nav-short">{{ __('Inicio') }}</span></a>
+    @can('usar-agente-mozi')
+        <a class="nav-item nav-agente {{ $agenteActivo ? 'active' : '' }}" href="{{ route('agente-mozi') }}" title="{{ __('Agente Mozi') }}" @if ($agenteActivo) aria-current="page" @endif><span class="nav-symbol"><x-icon name="sparkles" /></span><span class="nav-text">{{ __('Agente Mozi') }}</span><span class="nav-short">{{ __('Mozi') }}</span></a>
+    @endcan
     @if ($usuario->perteneceAEmpresa())
         @foreach ($grupos as $grupo => $items)
             @php
@@ -64,8 +72,10 @@
         @endforeach
     @endif
     <div class="nav-label">{{ __('Cuenta') }}</div>
-    <a class="nav-item {{ $cuentaActiva ? 'active' : '' }}" href="{{ route('profile.edit') }}" title="{{ __('Mi cuenta') }}" @if ($cuentaActiva) aria-current="page" @endif><span class="nav-symbol"><x-icon name="user" /></span><span class="nav-text">{{ __('Mi cuenta') }}</span><span class="nav-short">{{ __('Cuenta') }}</span></a>
+
     @if ($usuario->perteneceAEmpresa() && $administra)
         <a class="nav-item {{ $empresaActiva ? 'active' : '' }}" href="{{ route('configuracion') }}" title="{{ __('Mi empresa') }}" @if ($empresaActiva) aria-current="page" @endif><span class="nav-symbol"><x-icon name="store" /></span><span class="nav-text">{{ __('Mi empresa') }}</span><span class="nav-short">{{ __('Empresa') }}</span>@if ($alertaCuenta)<span class="badge {{ $alertaCuenta->insignia() }}" style="margin-left:auto">{{ $alertaCuenta->etiqueta() }}</span>@endif</a>
     @endif
+    <a class="nav-item {{ $cuentaActiva ? 'active' : '' }}" href="{{ route('profile.edit') }}" title="{{ __('Mi cuenta') }}" @if ($cuentaActiva) aria-current="page" @endif><span class="nav-symbol"><x-icon name="user" /></span><span class="nav-text">{{ __('Mi cuenta') }}</span><span class="nav-short">{{ __('Cuenta') }}</span></a>
+
 </nav>

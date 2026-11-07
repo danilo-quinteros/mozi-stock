@@ -28,8 +28,8 @@ use Livewire\Livewire;
 function comprar(User $admin, Sucursal $sucursal, array $lineas, array $extra = []): Compra
 {
     return app(RegistrarCompra::class)->ejecutar($admin, $extra + [
-        'sucursal_id' => $sucursal->id, 'proveedor_id' => null, 'referencia' => null, 'lineas' => $lineas,
-        'metodo' => 'efectivo', 'efectivo' => null, 'electronico' => null, 'clave' => (string) Str::uuid(),
+        'sucursal_id' => $sucursal->id, 'proveedor_id' => Proveedor::query()->orderBy('id')->value('id'), 'referencia' => null, 'lineas' => $lineas,
+        'metodo' => 'efectivo', 'efectivo' => null, 'electronico' => null, 'externo' => true, 'clave' => (string) Str::uuid(),
     ]);
 }
 

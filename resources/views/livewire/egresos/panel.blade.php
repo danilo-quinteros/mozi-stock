@@ -14,7 +14,7 @@
     <div class="grid three" style="margin-bottom:18px">
         <article class="card stat"><span class="stat-label">{{ __('Egresos del mes') }}</span><div class="stat-value">{{ Decimal::bs($delMes) }}</div><div class="stat-foot">{{ __('Gastos operativos') }}</div></article>
         <article class="card stat"><span class="stat-label">{{ __('Categorías activas') }}</span><div class="stat-value">{{ $categorias->where('activa', true)->count() }}</div><div class="stat-foot">{{ __('Sin compras duplicadas') }}</div></article>
-        <article class="card stat"><span class="stat-label">{{ __('Registrados hoy') }}</span><div class="stat-value">{{ Decimal::bs($deHoy) }}</div><div class="stat-foot">{{ __('Por fecha real de pago') }}</div></article>
+        <article class="card stat"><span class="stat-label">{{ __('Registrados hoy') }}</span><div class="stat-value">{{ Decimal::bs($deHoy) }}</div><div class="stat-foot">{{ __('Gasto registrado, pagado o pendiente') }}</div></article>
     </div>
 
     <section class="card card-pad">
@@ -41,20 +41,28 @@
             </div>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>{{ __('Fecha') }}</th><th>{{ __('Categoría') }}</th><th>{{ __('Descripción') }}</th><th>{{ __('Sucursal') }}</th><th>{{ __('Medio') }}</th><th>{{ __('Monto') }}</th><th>{{ __('Acción') }}</th></tr></thead>
+                    <thead><tr><th>{{ __('Fecha') }}</th><th>{{ __('Categoría') }}</th><th>{{ __('Descripción') }}</th><th>{{ __('Sucursal') }}</th><th>{{ __('Medio') }}</th><th>{{ __('Monto') }}</th><th>{{ __('Condición') }}</th><th>{{ __('Acción') }}</th></tr></thead>
                     <tbody>
                         @forelse ($egresos as $egreso)
                             <tr wire:key="egreso-{{ $egreso->id }}">
                                 <td>{{ \Illuminate\Support\Carbon::parse($egreso->fecha, 'UTC')->timezone(config('mozistock.business_timezone'))->format('d/m/Y') }}</td>
                                 <td>{{ $egreso->categoria }}</td>
-                                <td>{{ $egreso->descripcion }}</td>
+                                <td>{{ $egreso->descripcion }}@if ($egreso->beneficiario)<small style="display:block;color:var(--faint);margin-top:4px">{{ $egreso->beneficiario }}</small>@endif</td>
                                 <td>{{ $egreso->sucursal }}</td>
-                                <td>{{ $egreso->metodo === 'efectivo' ? __('Efectivo') : __('Electrónico') }}</td>
+                                <td>{{ $egreso->metodo === null ? '—' : \App\Enums\MetodoPago::from($egreso->metodo)->etiqueta() }}</td>
                                 <td><b>{{ Decimal::bs((string) $egreso->monto) }}</b></td>
+                                <td>
+                                    @if ($egreso->condicion === 'pagado')
+                                        <span class="badge success">{{ __('Pagado') }}</span>
+                                    @else
+                                        <span class="badge {{ Decimal::comparar((string) $egreso->saldo, '0', 2) > 0 ? 'warning' : 'success' }}">{{ $egreso->condicion === 'parcial' ? __('Parcial') : __('Pendiente') }}</span>
+                                        <small style="display:block;color:var(--faint);margin-top:4px">{{ __('Saldo :saldo', ['saldo' => Decimal::bs((string) $egreso->saldo)]) }}</small>
+                                    @endif
+                                </td>
                                 <td><button class="btn sm ghost" type="button" wire:click="ver({{ $egreso->id }})">{{ __('Ver') }} <x-icon name="arrow" size="sm" /></button></td>
                             </tr>
                         @empty
-                            <tr><td colspan="7"><div class="empty">{{ trim($buscar) === '' && $sucursal === '' ? __('Aún no registras egresos.') : __('No hay egresos que coincidan con el filtro.') }}</div></td></tr>
+                            <tr><td colspan="8"><div class="empty">{{ trim($buscar) === '' && $sucursal === '' ? __('Aún no registras egresos.') : __('No hay egresos que coincidan con el filtro.') }}</div></td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -95,7 +103,7 @@
     </section>
 
     @if ($formEgreso)
-        <x-modal titulo="Nuevo egreso" descripcion="Se registra como salida de caja con la fecha y hora actuales. No registres aquí compras de productos." cerrar="cerrar">
+        <x-modal titulo="Nuevo egreso" descripcion="Se registra con la fecha y hora actuales: lo pagado sale de caja y un saldo pasa a Cuentas por pagar. No registres aquí compras de productos." cerrar="cerrar">
             <form wire:submit="registrarEgreso">
                 <div class="fields">
                     <x-campo etiqueta="Categoría" campo="categoria_id">
@@ -107,7 +115,7 @@
                         </select>
                     </x-campo>
                     <x-campo etiqueta="Sucursal" campo="sucursal_id">
-                        <select id="sucursal_id" class="select" wire:model="sucursal_id">
+                        <select id="sucursal_id" class="select" wire:model.live="sucursal_id">
                             @foreach ($sucursales->where('activa', true) as $opcion)
                                 <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
                             @endforeach
@@ -116,15 +124,53 @@
                     <x-campo etiqueta="Descripción" campo="descripcion" style="grid-column:1/-1">
                         <input id="descripcion" class="input" type="text" maxlength="150" wire:model="descripcion" placeholder="{{ __('Ej. Internet de octubre') }}" required>
                     </x-campo>
-                    <x-campo etiqueta="Medio" campo="metodo">
-                        <select id="metodo" class="select" wire:model="metodo">
-                            <option value="efectivo">{{ __('Efectivo') }}</option>
-                            <option value="electronico">{{ __('Electrónico') }}</option>
+                    <x-campo :etiqueta="$condicion === 'pagado' ? 'Beneficiario (opcional)' : 'Beneficiario'" campo="proveedor_id">
+                        <select id="proveedor_id" class="select" wire:model="proveedor_id">
+                            <option value="">{{ __('Sin beneficiario') }}</option>
+                            @foreach ($proveedores as $proveedor)
+                                <option value="{{ $proveedor->id }}">{{ $proveedor->nombre }}</option>
+                            @endforeach
                         </select>
                     </x-campo>
                     <x-campo etiqueta="Monto (Bs)" campo="monto">
-                        <input id="monto" class="input" type="text" inputmode="decimal" wire:model="monto" placeholder="0,00" required>
+                        <input id="monto" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="monto" placeholder="0,00" required>
                     </x-campo>
+                    <x-campo etiqueta="Condición" campo="condicion">
+                        <select id="condicion" class="select" wire:model.live="condicion">
+                            <option value="pagado">{{ __('Pagado ahora') }}</option>
+                            <option value="parcial">{{ __('Pago parcial') }}</option>
+                            <option value="pendiente">{{ __('Pendiente de pago') }}</option>
+                        </select>
+                    </x-campo>
+                    @if ($condicion === 'parcial')
+                        <x-campo etiqueta="Pagado ahora (Bs)" campo="pagado">
+                            <input id="pagado" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="pagado" placeholder="0,00">
+                        </x-campo>
+                    @endif
+                    @if ($condicion !== 'pagado')
+                        <x-campo etiqueta="Vencimiento del saldo" campo="vencimiento">
+                            <input id="vencimiento" class="input" type="date" wire:model="vencimiento" required>
+                        </x-campo>
+                    @endif
+                    @if ($condicion !== 'pendiente')
+                        <x-campo etiqueta="Medio" campo="metodo">
+                            <select id="metodo" class="select" wire:model.live="metodo">
+                                <option value="efectivo">{{ __('Efectivo') }}</option>
+                                <option value="electronico">{{ __('Electrónico') }}</option>
+                                <option value="mixto">{{ __('Mixto') }}</option>
+                            </select>
+                        </x-campo>
+                        @if ($metodo === 'mixto')
+                            <x-campo etiqueta="Efectivo (Bs)" campo="efectivo">
+                                <input id="efectivo" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="efectivo" placeholder="0,00">
+                            </x-campo>
+                            <x-campo etiqueta="Electrónico (Bs)" campo="electronico">
+                                <input id="electronico" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="electronico" placeholder="0,00">
+                            </x-campo>
+                            <p class="subtle" style="grid-column:1/-1">{{ __('Suma :mixto', ['mixto' => Decimal::bs($mixto)]) }}</p>
+                        @endif
+                        @include('livewire.partials.caja')
+                    @endif
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn ghost" wire:click="cerrar">{{ __('Cancelar') }}</button>
@@ -140,9 +186,14 @@
             <div class="list-line"><span class="subtle">{{ __('Categoría') }}</span><b>{{ $viendo->categoria->nombre }}</b></div>
             <div class="list-line"><span class="subtle">{{ __('Descripción') }}</span><b>{{ $viendo->descripcion }}</b></div>
             <div class="list-line"><span class="subtle">{{ __('Sucursal') }}</span><b>{{ $viendo->sucursal->nombre }}</b></div>
-            <div class="list-line"><span class="subtle">{{ __('Medio') }}</span><b>{{ $viendo->metodo === 'efectivo' ? __('Efectivo') : __('Electrónico') }}</b></div>
+            @if ($viendo->proveedor)<div class="list-line"><span class="subtle">{{ __('Beneficiario') }}</span><b>{{ $viendo->proveedor->nombre }}</b></div>@endif
+            <div class="list-line"><span class="subtle">{{ __('Medio') }}</span><b>{{ \App\Enums\MetodoPago::tryFrom((string) $viendo->metodo)?->etiqueta() ?? '—' }}@if ($viendo->pago_externo) · {{ __('fuera de caja') }}@endif</b></div>
             <div class="list-line"><span class="subtle">{{ __('Registró') }}</span><b>{{ $viendo->usuario->name }}</b></div>
             <div class="list-line"><span>{{ __('Monto') }}</span><b class="accent-text">{{ Decimal::bs($viendo->monto) }}</b></div>
+            <div class="list-line"><span class="subtle">{{ __('Pagado al registrar') }}</span><b>{{ Decimal::bs($viendo->pagado) }}</b></div>
+            @if ($viendo->cuentaPagar)
+                <div class="list-line"><span class="subtle">{{ __('Cuenta por pagar') }}</span><b><a class="link" href="{{ route('cuentas-pagar.ver', $viendo->cuentaPagar) }}">{{ $viendo->cuentaPagar->codigo() }} · {{ __('saldo :saldo', ['saldo' => Decimal::bs($viendo->cuentaPagar->saldo_pendiente)]) }}</a></b></div>
+            @endif
             <div class="modal-actions"><button type="button" class="btn ghost" wire:click="cerrar">{{ __('Cerrar') }}</button></div>
         </x-modal>
     @endif

@@ -4,6 +4,8 @@ namespace MoziStudios\Siat;
 
 use MoziStudios\Siat\Configuracion\ConfiguracionSistema;
 use MoziStudios\Siat\Configuracion\Contribuyente;
+use MoziStudios\Siat\Constantes\Modalidad;
+use MoziStudios\Siat\Factura\GeneradorXmlCompraVenta;
 use MoziStudios\Siat\Factura\PreparadorFactura;
 use MoziStudios\Siat\Factura\ValidadorXsd;
 use MoziStudios\Siat\Fecha\Reloj;
@@ -31,6 +33,24 @@ final class ClienteSiat
         return $this->configuracion;
     }
 
+    public function conModalidad(Modalidad $modalidad): self
+    {
+        if ($this->configuracion->modalidad === $modalidad) {
+            return $this;
+        }
+
+        $nuevaConfig = new ConfiguracionSistema(
+            codigoSistema: $this->configuracion->codigoSistema,
+            ambiente: $this->configuracion->ambiente,
+            modalidad: $modalidad,
+            urlBase: $this->configuracion->urlBase,
+            segundosConexion: $this->configuracion->segundosConexion,
+            segundosRespuesta: $this->configuracion->segundosRespuesta,
+        );
+
+        return new self($nuevaConfig, $this->transporte, $this->reloj);
+    }
+
     public function codigos(Contribuyente $contribuyente): ServicioCodigos
     {
         return new ServicioCodigos($this->configuracion, $this->transporte, $contribuyente);
@@ -53,6 +73,14 @@ final class ClienteSiat
 
     public function preparador(): PreparadorFactura
     {
-        return new PreparadorFactura($this->configuracion, ValidadorXsd::compraVentaComputarizada());
+        $validador = $this->configuracion->modalidad === Modalidad::Electronica
+            ? ValidadorXsd::compraVentaElectronica()
+            : ValidadorXsd::compraVentaComputarizada();
+
+        return new PreparadorFactura(
+            $this->configuracion,
+            $validador,
+            new GeneradorXmlCompraVenta($this->configuracion->modalidad)
+        );
     }
 }

@@ -20,6 +20,8 @@ use LogicException;
  * @property int $pedido_id
  * @property int $numero
  * @property int $sucursal_id
+ * @property int|null $caja_id
+ * @property int|null $turno_caja_id
  * @property int|null $cliente_id
  * @property int $vendedor_id
  * @property int $confirmado_por
@@ -31,6 +33,7 @@ use LogicException;
  * @property string $total
  * @property string $cobrado_inicial
  * @property string $saldo_pendiente
+ * @property Carbon|null $vencimiento
  * @property string $devuelto
  * @property string $reembolsado
  * @property Carbon|null $created_at
@@ -39,12 +42,14 @@ use LogicException;
  * @property-read Sucursal $sucursal
  * @property-read Cliente|null $cliente
  * @property-read User $vendedor
+ * @property-read Caja|null $caja
+ * @property-read TurnoCaja|null $turno
  */
 class Venta extends Model
 {
     use BelongsToEmpresa;
 
-    private const INMUTABLES = ['pedido_id', 'numero', 'sucursal_id', 'cliente_id', 'vendedor_id', 'confirmado_por',
+    private const INMUTABLES = ['pedido_id', 'numero', 'sucursal_id', 'caja_id', 'turno_caja_id', 'cliente_id', 'vendedor_id', 'confirmado_por',
         'operacion_inventario_id', 'fecha', 'subtotal', 'descuento_lineas', 'descuento_global', 'total', 'cobrado_inicial'];
 
     protected $table = 'ventas';
@@ -59,6 +64,7 @@ class Venta extends Model
             'total' => 'decimal:2',
             'cobrado_inicial' => 'decimal:2',
             'saldo_pendiente' => 'decimal:2',
+            'vencimiento' => 'date',
             'devuelto' => 'decimal:2',
             'reembolsado' => 'decimal:2',
         ];
@@ -117,6 +123,26 @@ class Venta extends Model
     }
 
     /**
+     * Plan de cuotas del crédito (vacío si tiene vencimiento único o ninguno).
+     *
+     * @return HasMany<VentaCuota, $this>
+     */
+    public function cuotas(): HasMany
+    {
+        return $this->hasMany(VentaCuota::class)->orderBy('numero');
+    }
+
+    /**
+     * Cobros posteriores aplicados a esta venta (la cuota inicial está en pagos()).
+     *
+     * @return HasMany<CobroAplicacion, $this>
+     */
+    public function aplicaciones(): HasMany
+    {
+        return $this->hasMany(CobroAplicacion::class)->orderBy('id');
+    }
+
+    /**
      * @return HasMany<Devolucion, $this>
      */
     public function devoluciones(): HasMany
@@ -154,5 +180,21 @@ class Venta extends Model
     public function vendedor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'vendedor_id');
+    }
+
+    /**
+     * @return BelongsTo<Caja, $this>
+     */
+    public function caja(): BelongsTo
+    {
+        return $this->belongsTo(Caja::class)->withoutGlobalScopes();
+    }
+
+    /**
+     * @return BelongsTo<TurnoCaja, $this>
+     */
+    public function turno(): BelongsTo
+    {
+        return $this->belongsTo(TurnoCaja::class, 'turno_caja_id')->withoutGlobalScopes();
     }
 }

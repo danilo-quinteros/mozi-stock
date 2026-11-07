@@ -4,6 +4,7 @@ use App\Domain\Egresos\Actions\RegistrarEgreso;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Periodo;
 use App\Domain\Tenancy\Actions\CrearEmpresa;
+use App\Enums\Rubro;
 use App\Livewire\Caja\Arqueo;
 use App\Livewire\Egresos\Panel;
 use App\Models\CategoriaEgreso;
@@ -26,7 +27,7 @@ use Livewire\Livewire;
 function gastar(User $admin, array $datos): Egreso
 {
     return app(RegistrarEgreso::class)->ejecutar($admin, $datos + [
-        'descripcion' => 'Internet', 'metodo' => 'efectivo', 'monto' => '150', 'clave' => (string) Str::uuid(),
+        'descripcion' => 'Internet', 'metodo' => 'efectivo', 'monto' => '150', 'externo' => true, 'clave' => (string) Str::uuid(),
     ]);
 }
 
@@ -104,7 +105,7 @@ test('the expenses screen registers once, shows the cash count and keeps compani
 
     expect(Egreso::query()->count())->toBe(1);
 
-    Livewire::test(Arqueo::class)->assertSee('Salidas del día')->assertSee('Egreso · EGR-00001')
+    Livewire::test(Arqueo::class)->assertSee('Salió')->call('cambiarPestana', 'movimientos')->assertSee('Egreso · EGR-00001')
         ->assertSee('Servicios · Luz de octubre')->assertSee('− Bs 230,50');
     $arqueo = $this->get(route('caja.exportar', ['fecha' => '2026-10-22']))->streamedContent();
     expect($arqueo)->toContain('Salida;Egreso;EGR-00001')->toContain(';230.50;0.00;230.50');
@@ -122,7 +123,7 @@ test('expense categories are unique per company and new companies start with the
 
     $superadmin = User::factory()->superadmin()->create();
     $this->actingAs($superadmin);
-    $empresa = app(CrearEmpresa::class)->ejecutar($superadmin, ['nombre' => 'Nueva SRL'], [
+    $empresa = app(CrearEmpresa::class)->ejecutar($superadmin, ['nombre' => 'Nueva SRL', 'rubro' => Rubro::General], [
         'name' => 'Admin Nueva', 'email' => 'admin@nueva.test', 'password' => 'clave-segura-123',
     ]);
 

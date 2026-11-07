@@ -62,6 +62,33 @@ final class CatalogoEmpresa
     }
 
     /**
+     * Busca el código cuya descripción contenga todos los términos dados (sin distinguir mayúsculas ni guiones).
+     * Si varios coinciden, devuelve el primero por orden numérico de código.
+     *
+     * @param  list<string>  $terminos
+     */
+    public static function buscarPorTerminos(int $empresaId, Catalogo $catalogo, array $terminos): ?int
+    {
+        $terminosNorm = array_map(fn (string $t) => self::normalizar($t), $terminos);
+
+        foreach (self::opciones($empresaId, $catalogo) as $opcion) {
+            $descNorm = self::normalizar($opcion->descripcion);
+            $coincide = true;
+            foreach ($terminosNorm as $t) {
+                if (! str_contains($descNorm, $t)) {
+                    $coincide = false;
+                    break;
+                }
+            }
+            if ($coincide && ctype_digit($opcion->codigo)) {
+                return (int) $opcion->codigo;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Leyenda de la factura para la actividad: el SIN publica varias por actividad y se rotan por número
      * de factura para que el resultado sea determinista (el mismo número siempre da la misma leyenda).
      */

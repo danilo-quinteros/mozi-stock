@@ -27,6 +27,7 @@ use MoziStudios\Siat\Fecha\FechaSiat;
 use MoziStudios\Siat\Respuestas\Mensaje;
 use MoziStudios\Siat\Servicios\ContextoDocumento;
 use MoziStudios\Siat\Sincronizacion\Catalogo;
+use MoziStudios\Siat\Soap\SoapTransporte;
 use MoziStudios\Siat\Soap\Transporte;
 
 /**
@@ -172,7 +173,7 @@ class CertificacionSiat extends Command
      */
     private function etapaCuis(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
-        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ($this->option('v2') ? 1 : 2);
+        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : 2;
         $ensayo = (bool) $this->option('ensayo');
         $aprobadas = 0;
         $fallidas = 0;
@@ -242,7 +243,7 @@ class CertificacionSiat extends Command
      */
     private function etapaSincronizacion(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
-        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : 50;
+        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ((bool) $this->option('v2') ? 50 : 5);
         $ensayo = (bool) $this->option('ensayo');
         $casoFiltro = $this->option('caso');
         $aprobadas = 0;
@@ -341,7 +342,7 @@ class CertificacionSiat extends Command
      */
     private function etapaCufd(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
-        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : 100;
+        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ((bool) $this->option('v2') ? 100 : 10);
         $ensayo = (bool) $this->option('ensayo');
         $aprobadas = 0;
         $fallidas = 0;
@@ -424,7 +425,7 @@ class CertificacionSiat extends Command
     private function etapaEmision(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
         $esV2 = (bool) $this->option('v2');
-        $cantidadTotal = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ($esV2 ? 250 : 500);
+        $cantidadTotal = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ($esV2 ? 250 : 24);
         $ensayo = (bool) $this->option('ensayo');
         $pvs = $this->puntosVenta();
         $porPv = (int) ceil($cantidadTotal / count($pvs));
@@ -632,7 +633,7 @@ class CertificacionSiat extends Command
      */
     private function etapaAnulacion(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
-        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : 250;
+        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ((bool) $this->option('v2') ? 250 : 24);
         $ensayo = (bool) $this->option('ensayo');
         $anuladasPrevias = array_column($estado['facturas_anuladas'] ?? [], 'cuf');
         $candidatas = array_reverse(array_filter($estado['facturas_emitidas'] ?? [], fn ($f) => ! in_array($f['cuf'], $anuladasPrevias, true)));
@@ -752,10 +753,17 @@ class CertificacionSiat extends Command
      */
     private function etapaReversion(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
-        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : 98;
+        $cantidad = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ((bool) $this->option('v2') ? 250 : 24);
         $ensayo = (bool) $this->option('ensayo');
+        $pvFiltro = $this->option('punto-venta') !== null ? (int) $this->option('punto-venta') : null;
         $revertidasPrevias = array_column($estado['facturas_revertidas'] ?? [], 'cuf');
-        $candidatas = array_filter($estado['facturas_anuladas'] ?? [], fn ($f) => ! in_array($f['cuf'], $revertidasPrevias, true));
+        $bloqueadasRcv = array_column($estado['facturas_bloqueadas_rcv'] ?? [], 'cuf');
+        $candidatas = array_values(array_reverse(array_filter(
+            $estado['facturas_anuladas'] ?? [],
+            fn ($f) => ! in_array($f['cuf'], $revertidasPrevias, true)
+                && ! in_array($f['cuf'], $bloqueadasRcv, true)
+                && ($pvFiltro === null || ($f['pv'] ?? 0) === $pvFiltro)
+        )));
 
         $aprobadas = 0;
         $fallidas = 0;
@@ -814,7 +822,15 @@ class CertificacionSiat extends Command
                         break;
                     }
 
-                    if (($respuesta->codigoEstado === 909 || $respuesta->codigoEstado === 906 || str_contains($mensajes, '408') || str_contains($mensajes, '400') || str_contains($mensajes, 'RCV') || str_contains($mensajes, 'Demasiado tiempo de espera')) && $intentos < $maxIntentos) {
+                    if (str_contains($mensajes, '400') || str_contains($mensajes, 'HTTP status: 400')) {
+                        $estado['facturas_bloqueadas_rcv'][] = ['cuf' => $cuf, 'numero' => $numero, 'pv' => $pv];
+                        $this->guardarEstado($estado);
+                        $fallidas++;
+                        $this->warn("   ✗ Factura #{$numero} bloqueada en RCV del SIN (400): {$mensajes}");
+                        break;
+                    }
+
+                    if (($respuesta->codigoEstado === 909 || $respuesta->codigoEstado === 906 || str_contains($mensajes, '408') || str_contains($mensajes, 'RCV') || str_contains($mensajes, 'Demasiado tiempo de espera')) && $intentos < $maxIntentos) {
                         $this->warn("   ↻ Factura #{$numero} RCV reintento ({$intentos}/{$maxIntentos}) en 5s...");
                         sleep(5);
 
@@ -881,13 +897,10 @@ class CertificacionSiat extends Command
             2 => 'INACCESIBILIDAD AL SERVICIO WEB DE LA ADMINISTRACIÓN TRIBUTARIA',
             3 => 'INGRESO A ZONAS SIN INTERNET POR DESPLIEGUE DE PUNTO DE VENTA EN VEHICULOS AUTOMOTORES',
             4 => 'VENTA EN LUGARES SIN INTERNET',
+            5 => 'CORTE DE SUMINISTRO DE ENERGIA ELECTRICA',
+            6 => 'VIRUS INFORMÁTICO O FALLA DE SOFTWARE',
+            7 => 'CAMBIO DE INFRAESTRUCTURA DEL SISTEMA INFORMÁTICO DE FACTURACIÓN O FALLA DE HARDWARE',
         ];
-
-        if ($esV2) {
-            $eventosMotivos[5] = 'CORTE DE SUMINISTRO DE ENERGIA ELECTRICA';
-            $eventosMotivos[6] = 'VIRUS INFORMÁTICO O FALLA DE SOFTWARE';
-            $eventosMotivos[7] = 'CAMBIO DE INFRAESTRUCTURA DEL SISTEMA INFORMÁTICO DE FACTURACIÓN O FALLA DE HARDWARE';
-        }
 
         foreach ($this->puntosVenta() as $pv) {
             $punto = new PuntoEmision(0, $pv);
@@ -949,7 +962,18 @@ class CertificacionSiat extends Command
                             ];
                         }
 
-                        $respuesta = $cliente->operaciones($contribuyente)->registroEventoSignificativo(
+                        $clienteOps = $cliente->operaciones($contribuyente);
+                        if ($codigoMotivo >= 5 && ! $esV2) {
+                            $cfgV2 = new ConfiguracionSistema(
+                                ambiente: $cliente->configuracion()->ambiente,
+                                modalidad: $cliente->configuracion()->modalidad,
+                                codigoSistema: $cliente->configuracion()->codigoSistema,
+                                urlBase: 'https://pilotosiatservicios.impuestos.gob.bo/v2/',
+                            );
+                            $clienteOps = (new ClienteSiat($cfgV2, new SoapTransporte))->operaciones($contribuyente);
+                        }
+
+                        $respuesta = $clienteOps->registroEventoSignificativo(
                             sucursal: 0,
                             puntoVenta: $pv,
                             cuis: $cuis,
@@ -1020,23 +1044,35 @@ class CertificacionSiat extends Command
     private function etapaPaquetes(ClienteSiat $cliente, Contribuyente $contribuyente, array &$estado): bool
     {
         $esV2 = (bool) $this->option('v2');
-        $paquetesTotal = $this->option('cantidad') !== null ? (int) $this->option('cantidad') : ($esV2 ? 280 : 28);
+        $pvs = $this->puntosVenta();
+        $motivos = [1, 2, 3, 4, 5, 6, 7];
+        if ($this->option('caso') !== null) {
+            $casoOpt = (int) $this->option('caso');
+            if (in_array($casoOpt, $motivos, true)) {
+                $motivos = [$casoOpt];
+            }
+        }
+
+        $paquetesTotal = $this->option('cantidad') !== null
+            ? (int) $this->option('cantidad')
+            : ($this->option('caso') !== null ? count($pvs) * 2 : ($esV2 ? 280 : 28));
         $ensayo = (bool) $this->option('ensayo');
         $aprobadas = 0;
         $fallidas = 0;
 
-        $pvs = $this->puntosVenta();
-
+        // Cachear CUIS y refrescar CUFD para cada PV
+        $cuisPorPv = [];
+        $cufdTransmisionPorPv = [];
         foreach ($pvs as $pv) {
             $punto = new PuntoEmision(0, $pv);
-            $cuis = $this->obtenerCuis($cliente, $contribuyente, $punto, $estado, $ensayo);
+            $cuisPorPv[$pv] = $this->obtenerCuis($cliente, $contribuyente, $punto, $estado, $ensayo);
+            $cufdTransmisionPorPv[$pv] = $estado['cufd'][(string) $pv]['codigo'] ?? 'CUFD-PAQUETE';
 
-            $cufdTransmision = $estado['cufd'][(string) $pv]['codigo'] ?? 'CUFD-PAQUETE';
             if (! $ensayo) {
                 try {
-                    $rCufd = $cliente->codigos($contribuyente)->cufd($punto, $cuis);
+                    $rCufd = $cliente->codigos($contribuyente)->cufd($punto, $cuisPorPv[$pv]);
                     if ($rCufd->cufd !== null) {
-                        $cufdTransmision = $rCufd->cufd->codigo;
+                        $cufdTransmisionPorPv[$pv] = $rCufd->cufd->codigo;
                         $estado['cufd'][(string) $pv] = [
                             'codigo' => $rCufd->cufd->codigo,
                             'codigoControl' => $rCufd->cufd->codigoControl,
@@ -1049,61 +1085,171 @@ class CertificacionSiat extends Command
                     $this->warn("   No se pudo refrescar CUFD para PV {$pv}: {$e->getMessage()}");
                 }
             }
+        }
 
-            // Filtrar todos los eventos registrados para este PV (solo motivos 1 a 4 que no requieren CAFC)
-            $eventosDelPv = array_values(array_filter($estado['eventos'] ?? [], fn ($ev) => ($ev['pv'] ?? null) === $pv && ($ev['codigoEvento'] ?? 0) <= 4));
-            if (empty($eventosDelPv)) {
-                $eventosDelPv = array_values(array_filter($estado['eventos'] ?? [], fn ($ev) => ($ev['pv'] ?? null) === $pv));
+        // Agrupar eventos registrados por PV y por Motivo
+        $eventosPorPvYMotivo = [];
+        foreach ($estado['eventos'] ?? [] as $ev) {
+            $evPv = (int) ($ev['pv'] ?? 0);
+            $mot = (int) ($ev['codigoEvento'] ?? 0);
+            if ($mot >= 1) {
+                $eventosPorPvYMotivo[$evPv][$mot][] = $ev;
             }
-            if (empty($eventosDelPv)) {
-                $eventosDelPv = [$estado['eventos'][0] ?? []];
+        }
+
+        // Sin estado: se crea siempre y solo se usa en la rama V2.
+        $generadorXmlV2 = new GeneradorXmlCompraVentaV2;
+        $nitEmisor = (int) config('siat.pruebas.nit');
+
+        // Determinar número de rondas para cubrir todos los casos y alcanzar la meta
+        $casosPorRonda = max(1, count($pvs) * count($motivos));
+        $maxRondas = max(2, (int) ceil($paquetesTotal / $casosPorRonda));
+
+        for ($r = 1; $r <= $maxRondas; $r++) {
+            if ($aprobadas >= $paquetesTotal) {
+                break;
             }
 
-            // Según CasosDePruebaEmisionPorPaquetes.xlsx del SIN:
-            // PV 1: CANTIDAD DE FACTURAS = igual a 500 (500 facturas)
-            // PV 0: CANTIDAD DE FACTURAS = menor a 500 (e.g. 5 facturas)
-            $facturasPorPaquete = $pv === 1 ? 500 : 5;
-
-            $generadorXmlV2 = $esV2 ? new GeneradorXmlCompraVentaV2 : null;
-            $nitEmisor = (int) config('siat.pruebas.nit');
-
-            foreach ($eventosDelPv as $eventoPv) {
+            foreach ($pvs as $pv) {
                 if ($aprobadas >= $paquetesTotal) {
                     break;
                 }
 
-                $codigoEvento = $eventoPv['codigoRecepcion'] ?? 9973928;
-                $motivo = $eventoPv['codigoEvento'] ?? 1;
-                $fechaEmisionPaquete = isset($eventoPv['fechaInicio'])
-                    ? new DateTimeImmutable((string) $eventoPv['fechaInicio'], new DateTimeZone('America/La_Paz'))
-                    : new DateTimeImmutable('now', new DateTimeZone('America/La_Paz'));
+                $punto = new PuntoEmision(0, $pv);
+                $cuis = $cuisPorPv[$pv] ?? 'CUIS-DEFECTO';
+                $cufdTransmision = $cufdTransmisionPorPv[$pv] ?? 'CUFD-DEFECTO';
+                $facturasPorPaquete = $pv === 1 ? 500 : 5;
 
-                $cufdFacturas = new Cufd(
-                    codigo: $eventoPv['cufdEvento'] ?? $cufdTransmision,
-                    codigoControl: $eventoPv['codigoControl'] ?? $estado['cufd'][(string) $pv]['codigoControl'] ?? 'CONTROL123',
-                    codigoInterno: $eventoPv['codigoInterno'] ?? $estado['cufd'][(string) $pv]['codigoInterno'] ?? 'C',
-                    direccion: $estado['cufd'][(string) $pv]['direccion'] ?? 'Av. Principal #100',
-                );
-
-                $this->line("-> Etapa VI: Paquetes PV {$pv} ({$facturasPorPaquete} facturas/paquete) para Evento {$motivo} (recepción {$codigoEvento})...");
-
-                for ($p = 1; $p <= 4; $p++) {
+                foreach ($motivos as $motivo) {
                     if ($aprobadas >= $paquetesTotal) {
                         break;
                     }
 
-                    $fechaHora = now('America/La_Paz')->format('Y-m-d H:i:s');
-                    $caso = "Paquete PV {$pv} Evento {$motivo} #{$p}";
+                    $limite48h = now('America/La_Paz')->subHours(40);
+                    $listaEventos = array_values(array_filter(
+                        $eventosPorPvYMotivo[$pv][$motivo] ?? [],
+                        fn ($ev) => isset($ev['fechaInicio']) && new DateTimeImmutable((string) $ev['fechaInicio'], new DateTimeZone('America/La_Paz')) > $limite48h
+                    ));
+                    $evItem = null;
+                    if (! $ensayo) {
+                        $descMotivo = match ($motivo) {
+                            1 => 'CORTE DEL SERVICIO DE INTERNET',
+                            2 => 'INACCESIBILIDAD AL SERVICIO WEB DE LA ADMINISTRACIÓN TRIBUTARIA',
+                            3 => 'INGRESO A ZONAS SIN INTERNET POR DESPLIEGUE DE PUNTO DE VENTA EN VEHICULOS AUTOMOTORES',
+                            4 => 'VENTA EN LUGARES SIN INTERNET',
+                            5 => 'CORTE DE SUMINISTRO DE ENERGIA ELECTRICA',
+                            6 => 'VIRUS INFORMÁTICO O FALLA DE SOFTWARE',
+                            7 => 'CAMBIO DE INFRAESTRUCTURA DEL SISTEMA INFORMÁTICO DE FACTURACIÓN O FALLA DE HARDWARE',
+                            default => 'CONTINGENCIA',
+                        };
 
-                    $this->line("   Construyendo paquete de {$facturasPorPaquete} facturas fuera de línea...");
+                        try {
+                            $rInit = $cliente->codigos($contribuyente)->cufd($punto, $cuis);
+                            $cufdEvObj = $rInit->cufd;
+                            $cufdEvCod = $cufdEvObj !== null ? $cufdEvObj->codigo : $cufdTransmision;
+                            sleep(2);
+                            $iniEv = new DateTimeImmutable('now', new DateTimeZone('America/La_Paz'));
+                            sleep(3);
+                            $finEv = new DateTimeImmutable('now', new DateTimeZone('America/La_Paz'));
+                            sleep(2);
+                            $rNuevo = $cliente->codigos($contribuyente)->cufd($punto, $cuis);
+                            $cufdNuevoCod = $rNuevo->cufd !== null ? $rNuevo->cufd->codigo : $cufdEvCod;
+
+                            $clienteOps = $cliente->operaciones($contribuyente);
+                            if ($motivo >= 5 && ! $esV2) {
+                                $cfgV2 = new ConfiguracionSistema(
+                                    ambiente: $cliente->configuracion()->ambiente,
+                                    modalidad: $cliente->configuracion()->modalidad,
+                                    codigoSistema: $cliente->configuracion()->codigoSistema,
+                                    urlBase: 'https://pilotosiatservicios.impuestos.gob.bo/v2/',
+                                );
+                                $clienteOps = (new ClienteSiat($cfgV2, new SoapTransporte))->operaciones($contribuyente);
+                            }
+
+                            $rEv = $clienteOps->registroEventoSignificativo(
+                                sucursal: 0,
+                                puntoVenta: $pv,
+                                cuis: $cuis,
+                                cufd: $cufdNuevoCod,
+                                cufdEvento: $cufdEvCod,
+                                codigoMotivoEvento: $motivo,
+                                descripcion: $descMotivo,
+                                fechaHoraInicio: $iniEv,
+                                fechaHoraFin: $finEv,
+                            );
+
+                            if ($rEv->transaccion && $rEv->codigoRecepcionEventoSignificativo !== null) {
+                                $evItem = [
+                                    'codigoRecepcion' => (string) $rEv->codigoRecepcionEventoSignificativo,
+                                    'codigoEvento' => $motivo,
+                                    'pv' => $pv,
+                                    'fechaInicio' => $iniEv->format('Y-m-d H:i:s'),
+                                    'fechaFin' => $finEv->format('Y-m-d H:i:s'),
+                                    'cufdEvento' => $cufdEvCod,
+                                    'codigoControl' => $cufdEvObj?->codigoControl,
+                                    'codigoInterno' => $cufdEvObj?->codigoInterno,
+                                ];
+                                $estado['eventos'][] = $evItem;
+                                $eventosPorPvYMotivo[$pv][$motivo][] = $evItem;
+                                $listaEventos[] = $evItem;
+                                $this->guardarEstado($estado);
+                                $cufdTransmision = $cufdNuevoCod;
+                                $cufdTransmisionPorPv[$pv] = $cufdNuevoCod;
+                            } else {
+                                $this->warn("   Registro de evento motivo {$motivo} falló: ".$this->mensajesTexto($rEv->mensajes));
+                            }
+                        } catch (\Throwable $e) {
+                            $this->warn("   No se pudo registrar evento dinámico para Motivo {$motivo}: {$e->getMessage()}");
+                        }
+                    }
+
+                    if (empty($listaEventos) && $ensayo) {
+                        $listaEventos = array_values(array_filter($estado['eventos'] ?? [], fn ($ev) => ($ev['pv'] ?? null) === $pv));
+                    }
+                    if (empty($listaEventos)) {
+                        $this->warn("   No hay evento vigente (<40h) para Motivo {$motivo} en PV {$pv}, omitiendo...");
+
+                        continue;
+                    }
+
+                    $idxEv = ($r - 1) % count($listaEventos);
+                    $eventoPv = $evItem ?? $listaEventos[$idxEv];
+
+                    $codigoEvento = $eventoPv['codigoRecepcion'] ?? 9973928;
+                    $fechaEmisionPaquete = isset($eventoPv['fechaInicio'])
+                        ? new DateTimeImmutable((string) $eventoPv['fechaInicio'], new DateTimeZone('America/La_Paz'))
+                        : new DateTimeImmutable('now', new DateTimeZone('America/La_Paz'));
+
+                    $cufdFacturas = new Cufd(
+                        codigo: $eventoPv['cufdEvento'] ?? $cufdTransmision,
+                        codigoControl: $eventoPv['codigoControl'] ?? $estado['cufd'][(string) $pv]['codigoControl'] ?? 'CONTROL123',
+                        codigoInterno: $eventoPv['codigoInterno'] ?? $estado['cufd'][(string) $pv]['codigoInterno'] ?? 'C',
+                        direccion: $estado['cufd'][(string) $pv]['direccion'] ?? 'Av. Principal #100',
+                    );
+
+                    $fechaHora = now('America/La_Paz')->format('Y-m-d H:i:s');
+                    $caso = "Paquete PV {$pv} Evento {$motivo} #{$r}";
+
+                    $this->line("-> Etapa VI: {$caso} ({$facturasPorPaquete} facturas) para Evento {$motivo} (recepción {$codigoEvento})...");
+
+                    $cafcV2 = ($esV2 && in_array($motivo, [5, 6, 7], true)) ? '101247DAC5A4C' : null;
                     $startBuild = microtime(true);
                     $xmlMap = [];
                     for ($f = 1; $f <= $facturasPorPaquete; $f++) {
-                        if (! $ensayo) {
-                            $estado['ultimo_numero'][(string) $pv] = ($estado['ultimo_numero'][(string) $pv] ?? self::NUMERO_INICIAL) + 1;
+                        if ($cafcV2 !== null) {
+                            if ($facturasPorPaquete === 500) {
+                                $baseNum = (($r - 1) % 2) * 500;
+                                $num = $baseNum + $f;
+                            } else {
+                                $baseNum = (($r - 1) % 100) * 5;
+                                $num = $baseNum + $f;
+                            }
+                        } else {
+                            if (! $ensayo) {
+                                $estado['ultimo_numero'][(string) $pv] = ($estado['ultimo_numero'][(string) $pv] ?? self::NUMERO_INICIAL) + 1;
+                            }
+                            $num = ($estado['ultimo_numero'][(string) $pv] ?? self::NUMERO_INICIAL) + ($ensayo ? $f : 0);
                         }
-
-                        $num = ($estado['ultimo_numero'][(string) $pv] ?? self::NUMERO_INICIAL) + ($ensayo ? $f : 0);
 
                         if ($esV2) {
                             $datosCuf = new DatosCuf(
@@ -1145,7 +1291,7 @@ class CertificacionSiat extends Command
                                 montoGiftCard: null,
                                 descuentoAdicional: '0.00',
                                 codigoExcepcion: 1,
-                                cafc: null,
+                                cafc: $cafcV2,
                                 leyenda: self::LEYENDA_DEFECTO,
                                 usuario: 'mozistock-cert',
                                 codigoDocumentoSector: 1,
@@ -1184,7 +1330,7 @@ class CertificacionSiat extends Command
                     $this->line("   Empaquetado en {$buildSec}s ({$tarKb} KB, hash {$hash})");
 
                     if ($ensayo) {
-                        $this->line("   [ENSAYO] Paquete PV {$pv} Evento {$motivo} #{$p} ({$facturasPorPaquete} facturas) · OK");
+                        $this->line("   [ENSAYO] {$caso} ({$facturasPorPaquete} facturas) · OK");
                         $this->registrarEvidencia('VI-paquetes.csv', [
                             $fechaHora, 'VI', $caso, 0, $pv, 'recepcionPaqueteFactura', '', '',
                             '901', 'true', 'REC-PAQ-ENSAYO', 'ENSAYO PAQUETE OK', 'ok', '-',
@@ -1193,7 +1339,7 @@ class CertificacionSiat extends Command
                             $fechaHora, 'VI', $caso.' validacion', 0, $pv, 'validacionRecepcionPaqueteFactura', '', '',
                             '908', 'true', 'REC-PAQ-ENSAYO', 'ENSAYO VALIDACION OK', 'ok', '-',
                         ]);
-                        $aprobadas += 2;
+                        $aprobadas++;
 
                         continue;
                     }
@@ -1218,6 +1364,7 @@ class CertificacionSiat extends Command
                                     archivoTarGz: $tarGz,
                                     cantidadFacturas: $facturasPorPaquete,
                                     codigoEvento: (int) $codigoEvento,
+                                    cafc: $cafcV2,
                                 );
                                 $codRec = $recepcion->codigoRecepcion ?? '';
                                 $okRecepcion = $recepcion->transaccion && $codRec !== '';
@@ -1252,21 +1399,20 @@ class CertificacionSiat extends Command
 
                         if (! $okRecepcion || $recepcion === null) {
                             $fallidas++;
-                            $this->warn("   ✗ Recepción de paquete PV {$pv} falló: ".($recepcion !== null ? $this->mensajesTexto($recepcion->mensajes) : 'Sin respuesta'));
+                            $this->warn("   ✗ Recepción de {$caso} falló: ".($recepcion !== null ? $this->mensajesTexto($recepcion->mensajes) : 'Sin respuesta'));
 
                             continue;
                         }
 
-                        $aprobadas++;
-                        $this->line("   ✓ Paquete PV {$pv} Evento {$motivo} #{$p} recibido con código {$codRec}");
+                        $this->line("   ✓ {$caso} recibido con código {$codRec}");
 
                         // Pausa para dar tiempo al SIN a descomprimir e indexar las facturas
                         $this->line('   Esperando procesamiento del paquete en SIN...');
-                        sleep($pv === 0 ? 2 : 5);
+                        sleep($pv === 0 ? 3 : 5);
 
                         // Validar paquete con reintento si sigue en proceso (901) o demora RCV
                         $intentosVal = 0;
-                        $maxIntentosVal = 8;
+                        $maxIntentosVal = 10;
                         $okVal = false;
                         $validacion = null;
                         while ($intentosVal < $maxIntentosVal) {
@@ -1300,10 +1446,10 @@ class CertificacionSiat extends Command
 
                         if ($okVal) {
                             $aprobadas++;
-                            $this->line("   ✓ Paquete PV {$pv} Evento {$motivo} #{$p} validado (908)");
+                            $this->line("   ✓ {$caso} validado (908)");
                         } else {
                             $fallidas++;
-                            $this->warn("   ✗ Validación de paquete PV {$pv} falló: ".($validacion !== null ? $this->mensajesTexto($validacion->mensajes) : 'Sin respuesta'));
+                            $this->warn("   ✗ Validación de {$caso} falló: ".($validacion !== null ? $this->mensajesTexto($validacion->mensajes) : 'Sin respuesta'));
                         }
 
                         $this->registrarEvidencia('VI-paquetes.csv', [
@@ -1580,6 +1726,8 @@ class CertificacionSiat extends Command
         $idxAprobadas = array_search('aprobadas', $header, true);
         $idxFallidas = array_search('fallidas', $header, true);
         $idxRevision = array_search('ultima_revision', $header, true);
+        $idxExigidas = array_search('exigidas_portal', $header, true);
+        $idxPorcentaje = array_search('porcentaje_portal', $header, true);
 
         if ($idxEtapa === false || $idxAprobadas === false || $idxFallidas === false) {
             return;
@@ -1589,8 +1737,14 @@ class CertificacionSiat extends Command
 
         foreach ($filas as &$fila) {
             if (isset($fila[$idxEtapa]) && strcasecmp($fila[$idxEtapa], $etapa) === 0) {
-                $fila[$idxAprobadas] = (string) (((int) ($fila[$idxAprobadas] ?? 0)) + $aprobadas);
+                $totalAprobadas = ((int) ($fila[$idxAprobadas] ?? 0)) + $aprobadas;
+                $fila[$idxAprobadas] = (string) $totalAprobadas;
                 $fila[$idxFallidas] = (string) (((int) ($fila[$idxFallidas] ?? 0)) + $fallidas);
+                if ($idxExigidas !== false && $idxPorcentaje !== false && (int) ($fila[$idxExigidas] ?? 0) > 0) {
+                    $exigidas = (int) $fila[$idxExigidas];
+                    $porcentaje = min(100, (int) round(($totalAprobadas / $exigidas) * 100));
+                    $fila[$idxPorcentaje] = "{$porcentaje}%";
+                }
                 if ($idxRevision !== false) {
                     $fila[$idxRevision] = $fechaHoy;
                 }

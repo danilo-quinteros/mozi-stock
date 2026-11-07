@@ -5,7 +5,7 @@ use App\Livewire\Creditos\Historial;
 use App\Livewire\Creditos\Lista;
 use App\Livewire\Reportes\Panel;
 use App\Models\Cliente;
-use App\Models\PagoVenta;
+use App\Models\Cobro;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
@@ -31,12 +31,12 @@ beforeEach(function () {
         [['producto_id' => $this->producto->id, 'cantidad' => '5']]), ['metodo' => 'efectivo']);
 });
 
-test('the credits list shows sold, collected and balance and only credit sales', function () {
+test('the receivables list shows sold, collected and balance and only credit sales', function () {
     Livewire::test(Lista::class)
         ->assertSee($this->credito->codigo())->assertDontSee($this->contado->codigo())
-        ->assertSee('Bs 200,00')->assertSee('Bs 150,00')->assertSee('Ver historial y abonar')
+        ->assertSee('Bs 200,00')->assertSee('Bs 150,00')->assertSee('Ver y cobrar')
         ->set('buscar', '4455667')->assertSee($this->credito->codigo())
-        ->set('buscar', '')->set('estado', 'pagados')->assertDontSee($this->credito->codigo());
+        ->set('buscar', '')->set('estado', 'pagadas')->assertDontSee($this->credito->codigo());
 });
 
 test('an installment is registered from the history page and the form renews its key', function () {
@@ -47,7 +47,7 @@ test('an installment is registered from the history page and the form renews its
         ->set('monto', '30')
         ->call('registrar')
         ->assertHasNoErrors()
-        ->assertSee('Abono de Bs 30,00 registrado.')
+        ->assertSee('Cobro COB-00001 de Bs 30,00 registrado.')
         ->assertSee('Bs 120,00');
 
     $clave = $pantalla->get('clave');
@@ -58,7 +58,7 @@ test('an installment is registered from the history page and the form renews its
 
     expect($pantalla->get('clave'))->not->toBe($clave)
         ->and($this->credito->refresh()->saldo_pendiente)->toBe('70.00')
-        ->and(PagoVenta::query()->where('tipo', 'abono')->count())->toBe(2);
+        ->and(Cobro::query()->count())->toBe(2);
 });
 
 test('the history page rejects an installment above the balance and closes when paid', function () {
@@ -68,7 +68,7 @@ test('the history page rejects an installment above the balance and closes when 
         ->set('monto', '150')->call('registrar')
         ->assertHasNoErrors()
         ->assertSee('Crédito pagado')
-        ->assertDontSee('Registrar abono</button>', false);
+        ->assertDontSee('Registrar cobro</button>', false);
 
     expect($this->credito->refresh()->saldo_pendiente)->toBe('0.00');
 });
@@ -85,12 +85,12 @@ test('a seller collects a credit of another branch at the own branch even if the
         ->call('registrar')
         ->assertHasNoErrors();
 
-    $abono = PagoVenta::query()->where('tipo', 'abono')->sole();
+    $abono = Cobro::query()->sole();
     expect($abono->sucursal_id)->toBe($this->norte->id)
         ->and($abono->recibido_por)->toBe($vendedor->id);
 
-    // Caja y reportes son solo para administradores.
-    $this->get(route('caja'))->assertForbidden();
+    // Reportes son solo para administradores; en Caja el vendedor ve solo «Mi caja» (01/11/2026).
+    $this->get(route('caja'))->assertOk()->assertSee('Mi caja')->assertDontSee('Cajas en este momento');
     $this->get(route('reportes'))->assertForbidden();
     $this->get(route('caja.exportar'))->assertForbidden();
     $this->get(route('reportes.exportar'))->assertForbidden();
@@ -99,10 +99,11 @@ test('a seller collects a credit of another branch at the own branch even if the
 test('T12/T16 the cash count of the day separates cash and electronic and excludes the unpaid balance', function () {
     Livewire::test(Arqueo::class)
         ->assertSet('fecha', '2026-10-19')
-        ->assertSee('Bs 120,00')   // efectivo: 20 + 100
-        ->assertSee('Bs 30,00')    // electrónico
+        ->assertSeeHtml('Efectivo <b>120,00</b>')      // efectivo: 20 + 100
+        ->assertSeeHtml('Electrónico <b>30,00</b>')    // electrónico
         ->assertSee('Bs 150,00')   // total cobrado, no 300
-        ->set('metodo', 'electronico')
+        ->call('cambiarPestana', 'movimientos')
+        ->set('medio', 'electronico')
         ->assertSee($this->credito->codigo())
         ->assertDontSee($this->contado->codigo());
 });
@@ -111,10 +112,10 @@ test('T20 the next day an installment appears only in that day cash count', func
     $this->travelTo(CarbonImmutable::parse('2026-10-20 10:00', 'America/La_Paz'));
     Livewire::test(Historial::class, ['venta' => $this->credito])->set('monto', '30')->call('registrar');
 
-    Livewire::test(Arqueo::class)->set('fecha', '2026-10-20')
-        ->assertSee('Abono · '.$this->credito->codigo())->assertDontSee('Cobro inicial');
-    Livewire::test(Arqueo::class)->set('fecha', '2026-10-19')
-        ->assertDontSee('Abono · ');
+    Livewire::test(Arqueo::class)->set('fecha', '2026-10-20')->call('cambiarPestana', 'movimientos')
+        ->assertSee('Abono · '.$this->credito->codigo())->assertDontSee('Cuota inicial');
+    Livewire::test(Arqueo::class)->set('fecha', '2026-10-19')->call('cambiarPestana', 'movimientos')
+        ->assertDontSee('Abono · ')->assertSee('Cuota inicial · '.$this->credito->codigo());
 });
 
 test('T23 report CSV exports match the screen filters and totals', function () {
@@ -156,6 +157,7 @@ test('report tabs for inventory and credits work and other companies stay invisi
 });
 
 test('the home page shows collected today apart from sold today', function () {
+    guiaTerminada($this->empresa);
     $this->get(route('dashboard'))->assertOk()
         ->assertSee('Cobrado hoy')->assertSee('Bs 150,00')
         ->assertSee('Valor vendido hoy')->assertSee('Bs 300,00');
@@ -166,9 +168,9 @@ test('paid credits stay visible by default and the tabs filter completed and pen
     Livewire::test(Historial::class, ['venta' => $this->credito])->set('monto', '150')->call('registrar')->assertHasNoErrors();
 
     Livewire::test(Lista::class)
-        ->assertSet('estado', 'todos')->assertSee($this->credito->codigo())->assertSee('Pagado')
-        ->assertSee('Completados')
-        ->set('estado', 'pagados')->assertSee($this->credito->codigo())
+        ->assertSet('estado', 'todas')->assertSee($this->credito->codigo())->assertSee('Pagada')
+        ->assertSee('Pagadas')
+        ->set('estado', 'pagadas')->assertSee($this->credito->codigo())
         ->set('estado', 'pendientes')->assertDontSee($this->credito->codigo());
 
     Livewire::test(Historial::class, ['venta' => $this->credito])->assertOk()->assertSee('Crédito pagado');

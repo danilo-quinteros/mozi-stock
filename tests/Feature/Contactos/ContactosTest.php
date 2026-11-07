@@ -128,3 +128,18 @@ test('suppliers are admin only, unique per company and isolated', function () {
     Livewire::test(Proveedores::class)->assertDontSee('Distribuidora Oriente');
     expect($accion->crear($adminB, ['nombre' => 'Distribuidora Oriente', 'documento' => '1029384756'])->empresa_id)->toBe($empresaB->id);
 });
+
+test('las exportaciones CSV se limitan a 30 por minuto por usuario, sin afectar a otro usuario', function () {
+    $this->actingAs($this->admin);
+
+    foreach (range(1, 30) as $intento) {
+        $this->get(route('clientes.exportar'))->assertOk();
+    }
+
+    $this->get(route('clientes.exportar'))->assertStatus(429);
+    // El límite es compartido entre exportaciones del mismo usuario.
+    $this->get(route('proveedores.exportar'))->assertStatus(429);
+
+    $otro = User::factory()->administrador($this->empresa)->create();
+    $this->actingAs($otro)->get(route('clientes.exportar'))->assertOk();
+});

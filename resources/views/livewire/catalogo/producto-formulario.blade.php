@@ -13,7 +13,49 @@
             <div class="stack">
                 <section class="card card-pad">
                     <div class="card-head"><div><div class="heading">{{ __('Datos del producto') }}</div><p class="subtle" style="margin:9px 0 0">{{ __('Solo los campos imprescindibles; el stock se controla por sucursal.') }}</p></div></div>
-                    <div class="product-details">
+                    <div class="product-details" x-data="{
+                        nombre: @entangle('nombre').live,
+                        tipoVenta: @entangle('tipo_venta').live,
+                        contenido: @entangle('contenido').live,
+                        unidadId: @entangle('unidad_medida_id').live,
+                        unidades: {{ json_encode($unidades->pluck('abreviatura', 'id')) }},
+                        init() {
+                            this.$watch('tipoVenta', val => {
+                                if (val === 'medida') {
+                                    this.contenido = '';
+                                }
+                            });
+                        },
+                        get previewName() {
+                            let n = (this.nombre || '').trim();
+                            if (!n) return '';
+                            return n;
+                        },
+                        get previewContent() {
+                            if (this.tipoVenta === 'medida') return '';
+                            let n = (this.nombre || '').trim();
+                            let c = (this.contenido || '').trim();
+                            if (!n || !c) return '';
+                            let u = this.unidades[this.unidadId] || '';
+                            return (c + (u ? ' ' + u : '')).trim();
+                        },
+                        get previewExample() {
+                            let n = (this.nombre || '').trim();
+                            if (this.tipoVenta === 'medida') {
+                                return '{{ __('Ejemplo:') }} ' + (n || 'Arroz') + ' — {{ __('se vende por peso o medida.') }}';
+                            }
+                            let c = (this.contenido || '').trim();
+                            let u = this.unidades[this.unidadId] || '';
+                            let descriptor = n || 'Cyclone';
+                            if (c) {
+                                descriptor += ' ' + c + (u ? ' ' + u : '');
+                            } else if (!n) {
+                                descriptor += ' 350 g';
+                            }
+                            return '{{ __('Ejemplo:') }} ' + descriptor + ' — {{ __('se vende por unidades.') }}';
+                        }
+                    }"
+                    @mozistock-scan-producto.window="$wire.set('codigo_barras', $event.detail.codigo)">
                         <div class="product-upload">
                             <label class="upload-box" for="imagen">
                                 @if ($imagen && $imagen->isPreviewable())
@@ -35,15 +77,137 @@
                             @endif
                         </div>
                         <div class="fields">
-                            <x-campo etiqueta="Nombre del producto *" campo="nombre">
-                                <input id="nombre" class="input" type="text" maxlength="150" wire:model="nombre" placeholder="{{ __('Ej. Coca-Cola 2L') }}" required autofocus>
-                            </x-campo>
-                            <x-campo etiqueta="Código / SKU *" campo="sku">
-                                <input id="sku" class="input" type="text" maxlength="40" wire:model="sku" placeholder="{{ __('Ej. BEB-001') }}" required>
-                            </x-campo>
-                            <x-campo etiqueta="Código de barras (opcional)" campo="codigo_barras">
-                                <input id="codigo_barras" class="input" type="text" maxlength="64" wire:model="codigo_barras" placeholder="{{ __('Escanéalo si tienes lector') }}" wire:keydown.enter.prevent>
-                            </x-campo>
+                            {{-- 1. Cuadro naranja superior con Nombre, Vista previa, ¿Cómo se vende? y Contenido / Presentación --}}
+                            <div class="field product-content-box">
+                                {{-- Fila 1: Nombre del producto (izq) y Vista previa del nombre completo (der) --}}
+                                <div class="product-content-grid">
+                                    <x-campo etiqueta="Nombre del producto *" campo="nombre">
+                                        <input id="nombre" class="input" type="text" maxlength="150"
+                                            wire:model.live.debounce.200ms="nombre"
+                                            x-model="nombre"
+                                            placeholder="{{ __('Ej. Cyclone') }}" required autofocus>
+                                    </x-campo>
+
+                                    <div style="display:flex; flex-direction:column; gap:8px; min-width:0;">
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <x-icon name="tag" size="sm" style="width:14px; height:14px; color:var(--muted);" />
+                                            <span class="field-label" style="margin:0; font-weight:600; color:var(--muted);">
+                                                {{ __('Vista previa del nombre completo') }}
+                                            </span>
+                                        </div>
+                                        <div class="product-preview-pill">
+                                            <strong x-show="previewName" style="font-size:20px; font-weight:800; letter-spacing:-0.02em; display:inline-flex; gap:8px; align-items:baseline; flex-wrap:wrap; justify-content:center; word-break:break-word; overflow-wrap:anywhere;">
+                                                <span style="color:var(--text-strong, #ffffff);" x-text="previewName">
+                                                    {{ $this->vistaPreviaNombreBase }}
+                                                </span>
+                                                <span style="color:var(--brand-bright, #e08441);" x-text="previewContent" x-show="tipoVenta === 'unidad' && previewContent">
+                                                    {{ $this->vistaPreviaContenido }}
+                                                </span>
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Fila 2: ¿Cómo se vende este producto? * ⓘ --}}
+                                <div style="display:flex; flex-direction:column; gap:8px;">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="field-label" style="margin:0; font-weight:700; color:var(--text-strong); font-size:12px;">
+                                            {{ __('¿Cómo se vende este producto? *') }}
+                                        </span>
+                                        <span class="subtle" title="{{ __('Elige si este producto se comercializa y despacha por unidad fija o por peso/medida fraccionable.') }}" style="cursor:help; display:inline-flex;">
+                                            <x-icon name="info" size="sm" style="width:14px; height:14px; color:var(--muted);" />
+                                        </span>
+                                    </div>
+
+                                    <div class="product-selling-type-grid" role="radiogroup" aria-label="{{ __('¿Cómo se vende este producto?') }}">
+                                        <label class="selling-type-card" :class="{ 'is-selected': tipoVenta === 'unidad' }">
+                                            <input type="radio" name="tipo_venta" value="unidad"
+                                                wire:model.live="tipo_venta"
+                                                x-model="tipoVenta"
+                                                class="sr-only">
+                                            <div class="selling-type-indicator">
+                                                <span class="radio-dot" x-show="tipoVenta === 'unidad'"></span>
+                                            </div>
+                                            <div class="selling-type-icon">
+                                                <x-icon name="box" style="width:22px; height:22px;" />
+                                            </div>
+                                            <div class="selling-type-text">
+                                                <span class="selling-type-title">{{ __('Por unidad') }}</span>
+                                                <span class="selling-type-desc">{{ __('Botellas, cajas, piezas, paquetes, etc.') }}</span>
+                                            </div>
+                                        </label>
+
+                                        <label class="selling-type-card" :class="{ 'is-selected': tipoVenta === 'medida' }">
+                                            <input type="radio" name="tipo_venta" value="medida"
+                                                wire:model.live="tipo_venta"
+                                                x-model="tipoVenta"
+                                                class="sr-only">
+                                            <div class="selling-type-indicator">
+                                                <span class="radio-dot" x-show="tipoVenta === 'medida'"></span>
+                                            </div>
+                                            <div class="selling-type-icon">
+                                                <x-icon name="scale" style="width:22px; height:22px;" />
+                                            </div>
+                                            <div class="selling-type-text">
+                                                <span class="selling-type-title">{{ __('Por peso o medida') }}</span>
+                                                <span class="selling-type-desc">{{ __('Kg, gramos, litros, metros, etc.') }}</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    @error('tipo_venta')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                                </div>
+
+                                {{-- Fila 3A: Contenido / Presentación (solo cuando es vendido por unidad) --}}
+                                <div style="display:flex; flex-direction:column; gap:8px;" x-show="tipoVenta === 'unidad'" x-cloak>
+                                    <label class="field-label" for="contenido" style="margin:0; font-weight:700; color:var(--text-strong); font-size:12px;">
+                                        {{ __('Contenido / Presentación') }} <span class="muted" style="font-weight:400">({{ __('opcional') }})</span>
+                                    </label>
+
+                                    <div class="product-content-inputs-grid">
+                                        <input id="contenido" class="input" type="text" inputmode="decimal"
+                                            x-model="contenido" wire:model.live.debounce.200ms="contenido"
+                                            placeholder="{{ __('350') }}"
+                                            aria-label="{{ __('Contenido numérico') }}">
+                                        <select id="unidad_medida_id" class="select"
+                                            x-model="unidadId" wire:model.live="unidad_medida_id"
+                                            required
+                                            aria-label="{{ __('Unidad de medida') }}">
+                                            @foreach ($unidades as $opcion)
+                                                <option value="{{ $opcion->id }}">{{ $opcion->abreviatura }} ({{ $opcion->nombre }})</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <small class="subtle" style="font-size:12px; margin-top:2px; display:block; color:var(--muted); line-height:1.4;">
+                                        <span x-text="previewExample">{{ $this->textoEjemplo }}</span>
+                                    </small>
+                                    @error('contenido')<p class="auth-error" id="contenido-error" role="alert">{{ $message }}</p>@enderror
+                                    @error('unidad_medida_id')<p class="auth-error" id="unidad_medida_id-error" role="alert">{{ $message }}</p>@enderror
+                                </div>
+
+                                {{-- Fila 3B: Unidad de medida (solo cuando es vendido por peso o medida) --}}
+                                <div style="display:flex; flex-direction:column; gap:8px;" x-show="tipoVenta === 'medida'" x-cloak>
+                                    <label class="field-label" for="unidad_medida_id_medida" style="margin:0; font-weight:700; color:var(--text-strong); font-size:12px;">
+                                        {{ __('Unidad de medida *') }}
+                                    </label>
+
+                                    <div>
+                                        <select id="unidad_medida_id_medida" class="select"
+                                            x-model="unidadId" wire:model.live="unidad_medida_id"
+                                            required
+                                            aria-label="{{ __('Unidad de medida') }}">
+                                            @foreach ($unidades as $opcion)
+                                                <option value="{{ $opcion->id }}">{{ $opcion->nombre }} ({{ $opcion->abreviatura }})</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <small class="subtle" style="font-size:12px; margin-top:2px; display:block; color:var(--muted); line-height:1.4;">
+                                        <span x-text="previewExample">{{ $this->textoEjemplo }}</span>
+                                    </small>
+                                    @error('unidad_medida_id')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                                </div>
+                            </div>
+
+                            {{-- 2. Categoría y Código de barras --}}
                             <x-campo etiqueta="Categoría" campo="categoria_id">
                                 <select id="categoria_id" class="select" wire:model="categoria_id">
                                     <option value="">{{ __('Sin categoría') }}</option>
@@ -52,12 +216,23 @@
                                     @endforeach
                                 </select>
                             </x-campo>
-                            <x-campo etiqueta="Unidad y medida" campo="unidad_medida_id">
-                                <select id="unidad_medida_id" class="select" wire:model="unidad_medida_id" required>
-                                    @foreach ($unidades as $opcion)
-                                        <option value="{{ $opcion->id }}">{{ $opcion->nombre }} ({{ $opcion->abreviatura }})</option>
-                                    @endforeach
-                                </select>
+                            <x-campo etiqueta="Código de barras (opcional)" campo="codigo_barras">
+                                <div style="position:relative;">
+                                    <input id="codigo_barras" class="input" type="text" maxlength="64"
+                                        wire:model="codigo_barras"
+                                        placeholder="{{ __('Escanéalo o ingrésalo') }}"
+                                        data-scan-target="codigo-barras"
+                                        wire:keydown.enter.prevent
+                                        style="padding-right:38px;">
+                                    <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--muted); display:inline-flex;">
+                                        <x-icon name="scan" size="sm" />
+                                    </span>
+                                </div>
+                            </x-campo>
+
+                            {{-- 3. Código / SKU (opcional) y Alerta de stock mínimo --}}
+                            <x-campo etiqueta="Código / SKU (opcional)" campo="sku">
+                                <input id="sku" class="input" type="text" maxlength="40" wire:model="sku" placeholder="{{ __('Ej. BEB-001') }}">
                             </x-campo>
                             <x-campo etiqueta="Alerta de stock mínimo" campo="stock_minimo">
                                 <input id="stock_minimo" class="input" type="text" inputmode="decimal" wire:model="stock_minimo">

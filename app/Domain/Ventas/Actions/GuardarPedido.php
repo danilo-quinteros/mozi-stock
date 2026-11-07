@@ -10,6 +10,7 @@ use App\Enums\MetodoPago;
 use App\Enums\Rol;
 use App\Enums\TipoPrecio;
 use App\Models\Pedido;
+use App\Models\Producto;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\User;
 use App\Support\Decimal;
@@ -183,8 +184,8 @@ final class GuardarPedido
             ->where('productos.empresa_id', $empresaId)
             ->where('productos.activo', true)
             ->whereIn('productos.id', $ids)
-            ->get(['productos.id', 'productos.nombre', 'productos.precio_consumidor', 'productos.precio_minorista',
-                'productos.precio_mayorista', 'unidades_medida.admite_decimales'])
+            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.tipo_venta', 'productos.precio_consumidor', 'productos.precio_minorista',
+                'productos.precio_mayorista', 'unidades_medida.admite_decimales', 'unidades_medida.abreviatura'])
             ->keyBy('id');
         $cotizados = $pedido === null ? collect() : DB::table('pedido_items')
             ->where('empresa_id', $empresaId)->where('pedido_id', $pedido->id)
@@ -201,14 +202,16 @@ final class GuardarPedido
                 throw ValidationException::withMessages(['lineas' => __('Un producto del pedido no existe o está inactivo.')]);
             }
 
+            $nombreProducto = Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->abreviatura);
             $cantidad = Decimal::normalizar(is_scalar($linea['cantidad'] ?? null) ? (string) $linea['cantidad'] : '', Decimal::ESCALA_CANTIDAD);
+            $esEntera = ($producto->tipo_venta ?? 'unidad') === 'unidad' || ! $producto->admite_decimales;
 
             if ($cantidad === null || Decimal::comparar($cantidad, '0') <= 0) {
-                throw ValidationException::withMessages(["{$campo}.cantidad" => __(':producto: la cantidad debe ser mayor que cero.', ['producto' => $producto->nombre])]);
+                throw ValidationException::withMessages(["{$campo}.cantidad" => __(':producto: la cantidad debe ser mayor que cero.', ['producto' => $nombreProducto])]);
             }
 
-            if (! $producto->admite_decimales && ! Decimal::esEntero($cantidad)) {
-                throw ValidationException::withMessages(["{$campo}.cantidad" => __(':producto: se vende en unidades enteras.', ['producto' => $producto->nombre])]);
+            if ($esEntera && ! Decimal::esEntero($cantidad)) {
+                throw ValidationException::withMessages(["{$campo}.cantidad" => __(':producto: se vende en unidades enteras.', ['producto' => $nombreProducto])]);
             }
 
             $tipo = TipoPrecio::tryFrom((string) ($linea['tipo_precio'] ?? ''))
@@ -216,7 +219,7 @@ final class GuardarPedido
             $precio = $cotizados->get($producto->id.':'.$tipo->value)->precio_unitario ?? $producto->{$tipo->columna()};
 
             if ($precio === null) {
-                throw ValidationException::withMessages(["{$campo}.tipo_precio" => __(':producto no tiene precio :lista.', ['producto' => $producto->nombre, 'lista' => mb_strtolower($tipo->etiqueta())])]);
+                throw ValidationException::withMessages(["{$campo}.tipo_precio" => __(':producto no tiene precio :lista.', ['producto' => $nombreProducto, 'lista' => mb_strtolower($tipo->etiqueta())])]);
             }
 
             $descuentoTipo = (string) ($linea['descuento_tipo'] ?? 'bs');

@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string $precio_mensual
  * @property int $dia_vencimiento
  * @property CarbonImmutable $vencimiento
+ * @property CarbonImmutable|null $prueba_hasta
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -39,6 +40,7 @@ class Suscripcion extends Model
             'precio_mensual' => 'decimal:2',
             'dia_vencimiento' => 'integer',
             'vencimiento' => 'date',
+            'prueba_hasta' => 'date',
         ];
     }
 
@@ -69,6 +71,12 @@ class Suscripcion extends Model
     public function estado(?CarbonImmutable $hoy = null): EstadoSuscripcion
     {
         return CalendarioSuscripcion::estado($this->vencimiento, $hoy);
+    }
+
+    /** Prueba gratis vigente (registro desde el sitio). Informativo: no cambia el acceso. */
+    public function enPrueba(?CarbonImmutable $hoy = null): bool
+    {
+        return $this->prueba_hasta !== null && CalendarioSuscripcion::diasHasta($this->prueba_hasta, $hoy) >= 0;
     }
 
     public function diasHastaVencimiento(?CarbonImmutable $hoy = null): int

@@ -5,6 +5,7 @@ namespace App\Livewire\Empresa;
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
 use App\Enums\Rol;
 use App\Livewire\Concerns\MuestraAvisos;
+use App\Models\Caja;
 use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -40,6 +41,8 @@ class Usuarios extends Component
 
     public ?string $sucursal_id = null;
 
+    public ?string $caja_id = null;
+
     public string $password = '';
 
     public string $password_confirmation = '';
@@ -54,6 +57,28 @@ class Usuarios extends Component
     public function updatedBuscar(): void
     {
         $this->resetPage();
+    }
+
+    public function updatedSucursalId(?string $valor): void
+    {
+        if ($valor !== null && $valor !== '' && ctype_digit($valor)) {
+            $cajas = Caja::query()
+                ->where('sucursal_id', (int) $valor)
+                ->where('activa', true)
+                ->orderByDesc('es_principal')
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'es_principal']);
+
+            if ($cajas->count() === 1) {
+                $this->caja_id = (string) $cajas->first()->id;
+            } elseif ($cajas->isNotEmpty() && ! $cajas->contains('id', (int) $this->caja_id)) {
+                $this->caja_id = (string) ($cajas->firstWhere('es_principal', true)->id ?? $cajas->first()->id);
+            } elseif ($cajas->isEmpty()) {
+                $this->caja_id = null;
+            }
+        } else {
+            $this->caja_id = null;
+        }
     }
 
     public function crear(): void
@@ -73,6 +98,7 @@ class Usuarios extends Component
         $this->email = $usuario->email;
         $this->rol = $usuario->rol->value ?? Rol::Vendedor->value;
         $this->sucursal_id = $usuario->sucursal_id === null ? null : (string) $usuario->sucursal_id;
+        $this->caja_id = $usuario->caja_id === null ? null : (string) $usuario->caja_id;
         $this->activo = $usuario->activo;
         $this->formularioAbierto = true;
     }
@@ -86,16 +112,21 @@ class Usuarios extends Component
             'rol' => ['required', Rule::enum(Rol::class)->only(Rol::asignablesPorEmpresa())],
             'sucursal_id' => [Rule::requiredIf($this->rol === Rol::Vendedor->value), 'nullable', 'integer',
                 Rule::exists('sucursales', 'id')->where('empresa_id', $actor->empresa_id)->where('activa', true)],
+            'caja_id' => [Rule::requiredIf($this->rol === Rol::Vendedor->value), 'nullable', 'integer',
+                Rule::exists('cajas', 'id')->where('empresa_id', $actor->empresa_id)->where('sucursal_id', (int) $this->sucursal_id)->where('activa', true)],
             'password' => [$this->editandoId === null ? 'required' : 'nullable', 'string',
                 Password::min(12)->letters()->numbers(), 'confirmed'],
             'activo' => ['boolean'],
         ], [
             'sucursal_id.required' => __('El vendedor necesita una sucursal asignada.'),
             'sucursal_id.exists' => __('Selecciona una sucursal activa de tu empresa.'),
+            'caja_id.required' => __('El vendedor necesita una caja asignada.'),
+            'caja_id.exists' => __('Selecciona una caja activa de la sucursal elegida.'),
         ], [
             'name' => __('nombre'),
             'email' => __('correo'),
             'sucursal_id' => __('sucursal'),
+            'caja_id' => __('caja'),
             'password' => __('contraseña'),
         ]);
 
@@ -104,6 +135,7 @@ class Usuarios extends Component
             'email' => $this->email,
             'rol' => Rol::from($this->rol),
             'sucursal_id' => $this->sucursal_id === null || $this->sucursal_id === '' ? null : (int) $this->sucursal_id,
+            'caja_id' => $this->caja_id === null || $this->caja_id === '' ? null : (int) $this->caja_id,
             'password' => $this->password,
             'activo' => $this->activo,
         ];
@@ -140,13 +172,16 @@ class Usuarios extends Component
         return view('livewire.empresa.usuarios', [
             'usuarios' => User::query()
                 ->where('empresa_id', $empresaId)
-                ->with('sucursal:id,nombre')
+                ->with(['sucursal:id,nombre', 'caja:id,nombre'])
                 ->buscar(trim($this->buscar))
                 ->orderByDesc('activo')
                 ->orderBy('name')
                 ->paginate(25),
             'conteo' => $conteo,
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'cajasDisponibles' => ($this->sucursal_id && ctype_digit($this->sucursal_id))
+                ? Caja::query()->where('sucursal_id', (int) $this->sucursal_id)->where('activa', true)->orderByDesc('es_principal')->orderBy('nombre')->get(['id', 'nombre', 'es_principal'])
+                : collect(),
             'editandoPropiaCuenta' => $this->editandoId === $this->actor()->id,
         ]);
     }
@@ -161,7 +196,7 @@ class Usuarios extends Component
 
     private function limpiarFormulario(): void
     {
-        $this->reset('editandoId', 'name', 'email', 'rol', 'sucursal_id', 'password', 'password_confirmation', 'activo');
+        $this->reset('editandoId', 'name', 'email', 'rol', 'sucursal_id', 'caja_id', 'password', 'password_confirmation', 'activo');
         $this->resetValidation();
     }
 

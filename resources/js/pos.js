@@ -21,3 +21,9 @@ document.addEventListener('keydown', event => {
         confirmar.click();
     }
 });
+
+// Al terminar la venta, desplaza la vista arriba para visibilizar el alert de confirmación (.pos-last).
+window.addEventListener('venta-finalizada', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('contenido')?.scrollTo({ top: 0, behavior: 'smooth' });
+});

@@ -1,0 +1,23 @@
+/* Superadmin › Sitio web: lista de páginas y vistas previas de Google y redes sociales. */
+.sw-lista{display:grid;gap:2px}
+.sw-grupo{margin:14px 0 6px;font-size:10px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.sw-grupo:first-child{margin-top:0}
+.sw-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:10px;background:none;color:var(--text);font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;transition:background .2s,border-color .2s}
+.sw-item:hover{background:var(--panel-soft,rgba(255,255,255,.03))}
+.sw-item[aria-current="true"]{border-color:var(--accent-border);background:var(--accent-soft)}
+.sw-item small{display:block;margin-top:2px;color:var(--faint);font-size:10.5px;font-weight:500}
+.sw-marcas{display:flex;gap:4px;flex-shrink:0}
+.sw-contador{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--faint)}
+.sw-contador .largo{color:var(--accent,#ffa456);font-weight:700}
+.sw-previa{display:grid;gap:4px;padding:16px;border:1px solid var(--border);border-radius:12px;background:#fff;color:#202124;font-family:Arial,sans-serif}
+.sw-previa .url{font-size:12px;color:#4d5156;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-previa .titulo{font-size:18px;line-height:1.3;color:#1a0dab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-previa .desc{font-size:13px;line-height:1.5;color:#4d5156;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sw-social{overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--panel-soft,#25211c)}
+.sw-social img{display:block;width:100%;aspect-ratio:1200/630;object-fit:cover;background:#151411}
+.sw-social div{display:grid;gap:3px;padding:12px 14px}
+.sw-social small{font-size:10.5px;text-transform:uppercase;color:var(--faint)}
+.sw-social b{font-size:13.5px;color:var(--text-strong,#fff9ef)}
+.sw-social span{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sw-previas{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;align-items:start}
+@media(max-width:1100px){.sw-previas{grid-template-columns:1fr}}

@@ -55,6 +55,7 @@ class UserFactory extends Factory
             'rol' => Rol::Vendedor,
             'empresa_id' => $sucursal->empresa_id,
             'sucursal_id' => $sucursal->id,
+            'caja_id' => $sucursal->cajaPrincipal()?->id,
         ]);
     }
 

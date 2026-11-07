@@ -44,6 +44,26 @@
                     <span class="badge success">{{ __('Vigente') }}</span>
                 @endif
             </div>
+            <div class="list-line">
+                <span class="subtle">{{ __('Modalidad') }}</span>
+                <span class="badge {{ $configuracion?->esElectronica() ? 'info' : 'secondary' }}">
+                    {{ $configuracion?->modalidad?->etiqueta() ?? __('Computarizada en Línea') }}
+                </span>
+            </div>
+            @if ($configuracion?->esElectronica())
+                <div class="list-line">
+                    <span class="subtle">{{ __('Firma digital') }}</span>
+                    @if (! $configuracion->tieneCertificado())
+                        <span class="badge danger">{{ __('Sin certificado .p12') }}</span>
+                    @elseif ($configuracion->certificadoVencido())
+                        <span class="badge danger">{{ __('Certificado vencido') }}</span>
+                    @elseif ($configuracion->certificadoPorVencer())
+                        <span class="badge warning">{{ __('Por vencer') }}</span>
+                    @else
+                        <span class="badge success">{{ __('Certificado activo') }}</span>
+                    @endif
+                </div>
+            @endif
         </section>
 
         @if ($impersonando)

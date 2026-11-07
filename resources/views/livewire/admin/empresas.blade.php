@@ -6,6 +6,9 @@
             <p class="lead">{{ __('Control de acceso exclusivamente manual.') }}</p>
         </div>
         <div class="page-actions">
+            <button class="btn ghost" type="button" wire:click="descargarCatalogoCyclone" wire:loading.attr="disabled" title="{{ __('Descargar catálogo central desde la API de Cyclone') }}">
+                <x-icon name="history" /> {{ __('Descargar catálogo Cyclone') }}
+            </button>
             <button class="btn primary" type="button" wire:click="crear"><x-icon name="plus" /> {{ __('Nueva empresa') }}</button>
         </div>
     </div>
@@ -25,7 +28,7 @@
         </div>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>{{ __('Empresa') }}</th><th>{{ __('Correo') }}</th><th>{{ __('Mensualidad') }}</th><th>{{ __('Vencimiento') }}</th><th>{{ __('Acceso') }}</th><th>{{ __('Facturación SIAT') }}</th><th>{{ __('Acciones') }}</th></tr></thead>
+                <thead><tr><th>{{ __('Empresa') }}</th><th>{{ __('Correo') }}</th><th>{{ __('Mensualidad') }}</th><th>{{ __('Vencimiento') }}</th><th>{{ __('Acceso') }}</th><th>{{ __('Facturación SIAT') }}</th><th>{{ __('Revendedora Cyclone') }}</th><th>{{ __('Acciones') }}</th></tr></thead>
                 <tbody>
                     @forelse ($empresas as $empresa)
                         <tr wire:key="empresa-{{ $empresa->id }}">
@@ -33,7 +36,7 @@
                             <td>{{ $empresa->email ?? '—' }}</td>
                             @if ($empresa->suscripcion)
                                 <td>{{ \App\Support\Decimal::bs((string) $empresa->suscripcion->precio_mensual) }}</td>
-                                <td>{{ $empresa->suscripcion->vencimiento->format('d/m/Y') }}</td>
+                                <td>{{ $empresa->suscripcion->vencimiento->format('d/m/Y') }}@if ($empresa->suscripcion->enPrueba()) <span class="badge warning">{{ __('Prueba gratis') }}</span>@endif</td>
                             @else
                                 <td colspan="2"><span class="badge info">{{ __('Sin plan configurado') }}</span></td>
                             @endif
@@ -44,6 +47,18 @@
                                     aria-label="{{ __('Habilitar o deshabilitar la facturación de :nombre', ['nombre' => $empresa->nombre]) }}" wire:click="confirmarSiat({{ $empresa->id }})"></button>
                                 <a class="btn sm ghost" href="{{ route('admin.empresas.facturacion', $empresa) }}" wire:navigate title="{{ __('Datos fiscales de :nombre', ['nombre' => $empresa->nombre]) }}"><x-icon name="receipt" size="sm" /> {{ __('Datos') }}</a>
                             </span></td>
+                            <td>
+                                @php($esCyclone = isset($revendedorasCyclone[$empresa->id]))
+                                <span class="row" style="gap:8px;flex-wrap:nowrap">
+                                    <button type="button" class="switch" role="switch" aria-checked="{{ $esCyclone ? 'true' : 'false' }}"
+                                        aria-label="{{ __('Vincular o desvincular a :nombre como revendedora de Cyclone', ['nombre' => $empresa->nombre]) }}" wire:click="confirmarCyclone({{ $empresa->id }})"></button>
+                                    @if ($esCyclone)
+                                        <button class="btn sm ghost" type="button" wire:click="sincronizarCyclone({{ $empresa->id }})" title="{{ __('Sincronizar productos ahora') }}">
+                                            <x-icon name="history" size="sm" />
+                                        </button>
+                                    @endif
+                                </span>
+                            </td>
                             <td><span class="row" style="gap:6px;flex-wrap:nowrap">
                                 <button class="btn sm ghost" type="button" wire:click="editar({{ $empresa->id }})"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</button>
                                 @if ($empresa->activa && isset($administradores[$empresa->id]))
@@ -54,7 +69,7 @@
                             </span></td>
                         </tr>
                     @empty
-                        <tr><td colspan="7"><div class="empty">{{ __('No hay empresas que coincidan con el filtro.') }}</div></td></tr>
+                        <tr><td colspan="8"><div class="empty">{{ __('No hay empresas que coincidan con el filtro.') }}</div></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -92,6 +107,16 @@
                     <x-campo etiqueta="NIT (opcional)" campo="nit">
                         <input id="nit" class="input" type="text" wire:model="nit" maxlength="30">
                     </x-campo>
+                    @unless ($editandoId)
+                        <x-campo etiqueta="Tipo de negocio" campo="rubro">
+                            <select id="rubro" class="select" wire:model="rubro" required>
+                                <option value="">{{ __('Elige el rubro…') }}</option>
+                                @foreach ($rubros as $opcion)
+                                    <option value="{{ $opcion->value }}">{{ $opcion->etiqueta() }} · {{ $opcion->descripcion() }}</option>
+                                @endforeach
+                            </select>
+                        </x-campo>
+                    @endunless
                 </div>
                 <div class="divider"></div>
                 <div class="heading" style="margin-bottom:6px">{{ __('Suscripción mensual') }}</div>
@@ -173,6 +198,19 @@
             <div class="modal-actions">
                 <button type="button" class="btn ghost" wire:click="cancelarSiat">{{ __('Cancelar') }}</button>
                 <button type="button" class="btn primary" wire:click="cambiarSiat" wire:loading.attr="disabled">{{ $confirmandoSiat->siat_habilitado ? __('Deshabilitar') : __('Habilitar') }}</button>
+            </div>
+        </x-modal>
+    @endif
+
+    @if ($confirmandoCyclone)
+        @php($esRevendedora = isset($revendedorasCyclone[$confirmandoCyclone->id]))
+        <x-modal :titulo="__($esRevendedora ? 'Desvincular :empresa de Cyclone' : 'Vincular :empresa como revendedora de Cyclone', ['empresa' => $confirmandoCyclone->nombre])" cerrar="cancelarCyclone"
+            :descripcion="$esRevendedora
+                ? 'La empresa dejará de recibir actualizaciones automáticas del catálogo de Cyclone. Sus productos, precios y existencias locales se conservan intactos.'
+                : 'La empresa importará los productos del catálogo central de Cyclone. Sus precios y existencias locales permanecen bajo su propio control y nunca se comparten con Cyclone.'">
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" wire:click="cancelarCyclone">{{ __('Cancelar') }}</button>
+                <button type="button" class="btn primary" wire:click="cambiarCyclone" wire:loading.attr="disabled">{{ $esRevendedora ? __('Desvincular') : __('Vincular e importar') }}</button>
             </div>
         </x-modal>
     @endif

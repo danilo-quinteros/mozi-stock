@@ -24,3 +24,17 @@ Schedule::command('mozistock:siat catalogos')
     ->dailyAt('03:30')
     ->timezone((string) config('mozistock.business_timezone'))
     ->withoutOverlapping();
+
+// Catálogo de proveedores externos (Cyclone): descarga diaria central y sincronización automática a revendedores.
+Schedule::command('mozistock:catalogo-externo descargar --proveedor=cyclone')
+    ->dailyAt('04:00')
+    ->timezone((string) config('mozistock.business_timezone'))
+    ->withoutOverlapping();
+
+// Hosting compartido (MOZISTOCK_COLA_DESDE_CRON=true): sin `queue:work` permanente, cada minuto se
+// procesan los trabajos pendientes durante 50 s como máximo. Va al final para no retrasar a los demás.
+if (config('mozistock.cola_desde_cron')) {
+    Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3 --backoff=30')
+        ->everyMinute()
+        ->withoutOverlapping(5);
+}

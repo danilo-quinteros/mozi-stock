@@ -27,6 +27,16 @@ class EmpresaPolicy
     }
 
     /**
+     * Rubro y funciones del negocio: el administrador de esa misma empresa o el superadministrador.
+     * Un vendedor nunca, aunque llame a la acción directamente.
+     */
+    public function cambiarFunciones(User $user, Empresa $empresa): bool
+    {
+        return $user->esSuperadmin()
+            || ($user->esAdministrador() && $user->empresa_id === $empresa->id);
+    }
+
+    /**
      * Activar o desactivar el acceso es una decisión manual exclusiva del superadministrador.
      */
     public function cambiarAcceso(User $user, Empresa $empresa): bool

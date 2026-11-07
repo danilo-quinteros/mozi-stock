@@ -3,8 +3,11 @@
 namespace App\Domain\Compras\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Caja\CajaOperacion;
 use App\Domain\Caja\LibroCaja;
 use App\Domain\Compras\CalculadoraCompra;
+use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
+use App\Domain\CuentasPagar\AbrirCuentaPagar;
 use App\Domain\Inventario\LibroStock;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Domain\Ventas\ValidadorPago;
@@ -22,23 +25,34 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Compra pagada (especificación § 3.7, V2 § 2 y V3 § 1). En una transacción: ingresa el stock
- * en la sucursal (operación tipo compra con correlativo COM), guarda la compra con su detalle
- * y registra una sola salida de caja por lo pagado, por medio. No crea egresos ni ajustes.
- * Sin compras a crédito ni cuentas por pagar. Decisiones del propietario (23/10/2026): solo
- * administradores y siempre con la fecha y hora actuales. Repetir la clave no repite la compra.
+ * Compra (especificación § 3.7, V2 § 2, V3 § 1 y Cuentas por pagar § 13). En una transacción:
+ * ingresa el stock en la sucursal (operación tipo compra con correlativo COM), guarda la compra
+ * con su detalle, registra una sola salida de caja por lo pagado al confirmar, por medio, y si
+ * queda saldo (crédito o parcial) abre su cuenta por pagar. No crea egresos ni ajustes.
+ *
+ * | Condición | Pago al confirmar     | Cuenta por pagar      |
+ * | Contado   | el total              | ninguna               |
+ * | Crédito   | Bs 0                  | por el total          |
+ * | Parcial   | 0 < pagado < total    | por total − pagado    |
+ *
+ * Proveedor obligatorio (§ 13.1); vencimiento obligatorio con saldo (§ 13.3). Decisiones del
+ * propietario: solo administradores y siempre con la fecha y hora actuales (23/10/2026); el
+ * efectivo sale de un turno abierto o, si el administrador lo indica, fuera de caja (30/10/2026).
+ * Repetir la clave no repite la compra.
  */
 final class RegistrarCompra
 {
     public function __construct(
         private readonly LibroStock $libro,
         private readonly LibroCaja $caja,
+        private readonly CajaOperacion $cajas,
+        private readonly AbrirCuentaPagar $cuentas,
         private readonly ResolverSucursal $resolverSucursal,
         private readonly Auditor $auditor,
     ) {}
 
     /**
-     * @param  array{sucursal_id: int|null, proveedor_id: int|null, referencia: string|null, lineas: array<int|string, array{cantidad?: mixed, costo?: mixed}>, metodo: string|null, efectivo: string|null, electronico: string|null, clave: string}  $datos
+     * @param  array{sucursal_id: int|null, proveedor_id: int|null, referencia: string|null, lineas: array<int|string, array{cantidad?: mixed, costo?: mixed}>, condicion?: string|null, pagado?: string|null, vencimiento?: string|null, metodo: string|null, efectivo: string|null, electronico: string|null, externo?: bool, turno_id?: int|null, clave: string}  $datos
      */
     public function ejecutar(User $actor, array $datos): Compra
     {
@@ -54,13 +68,9 @@ final class RegistrarCompra
         }
 
         $sucursal = $this->resolverSucursal->paraOperacion($actor, $datos['sucursal_id']);
-        $proveedor = null;
-
-        if ($datos['proveedor_id'] !== null) {
-            // El scope de empresa descarta proveedores de otra empresa.
-            $proveedor = Proveedor::query()->where('activo', true)->find($datos['proveedor_id'])
-                ?? throw ValidationException::withMessages(['proveedor_id' => __('Selecciona un proveedor activo de tu empresa.')]);
-        }
+        // El scope de empresa descarta proveedores de otra empresa.
+        $proveedor = ($datos['proveedor_id'] === null ? null : Proveedor::query()->where('activo', true)->find($datos['proveedor_id']))
+            ?? throw ValidationException::withMessages(['proveedor_id' => __('Selecciona un proveedor activo de tu empresa.')]);
 
         $referencia = trim((string) $datos['referencia']);
 
@@ -72,17 +82,23 @@ final class RegistrarCompra
         $total = array_reduce($lineas, fn (string $suma, array $l) => Decimal::sumar($suma, $l['subtotal'], 2), '0.00');
 
         if (Decimal::comparar($total, '0', 2) <= 0) {
-            throw ValidationException::withMessages(['lineas' => __('El total pagado debe ser mayor que Bs 0,00. Para ingresar stock sin pago usa Ajustes → Entrada.')]);
+            throw ValidationException::withMessages(['lineas' => __('El total de la compra debe ser mayor que Bs 0,00. Para ingresar stock sin costo usa Ajustes → Entrada.')]);
         }
 
-        $pago = ValidadorPago::exacto($total, $datos['metodo'], $datos['efectivo'], $datos['electronico'], 'total de la compra');
+        [$condicion, $pagado, $vencimiento] = self::condicion($datos, $total);
+        $pago = Decimal::comparar($pagado, '0', 2) > 0
+            ? ValidadorPago::exacto($pagado, $datos['metodo'], $datos['efectivo'], $datos['electronico'],
+                $condicion === 'contado' ? 'total de la compra' : 'pago inicial de la compra')
+            : null;
         $this->libro->asegurarNiveles($empresaId, array_map(
             fn (int $productoId) => ['sucursal_id' => $sucursal->id, 'producto_id' => $productoId], array_keys($lineas),
         ));
 
         try {
-            return DB::transaction(function () use ($actor, $datos, $sucursal, $proveedor, $referencia, $lineas, $total, $pago): Compra {
-                $nota = 'Compra'.($proveedor ? ' · '.$proveedor->nombre : '').($referencia !== '' ? ' · '.$referencia : '');
+            return DB::transaction(function () use ($actor, $datos, $sucursal, $proveedor, $referencia, $lineas, $total, $condicion, $pagado, $vencimiento, $pago): Compra {
+                $caja = $pago === null ? ['caja_id' => null, 'turno_id' => null, 'externo' => false]
+                    : $this->cajas->resolver($actor, $sucursal->id, $pago['efectivo'], (bool) ($datos['externo'] ?? false), 'externo', isset($datos['turno_id']) ? (int) $datos['turno_id'] : null);
+                $nota = 'Compra · '.$proveedor->nombre.($referencia !== '' ? ' · '.$referencia : '');
                 $operacion = $this->libro->aplicar($actor, [
                     'tipo' => TipoOperacionInventario::Compra,
                     'motivo' => null,
@@ -98,15 +114,21 @@ final class RegistrarCompra
                 $compra->empresa_id = (int) $actor->empresa_id;
                 $compra->numero = $operacion->numero;
                 $compra->sucursal_id = $sucursal->id;
-                $compra->proveedor_id = $proveedor?->id;
+                $compra->caja_id = $caja['caja_id'];
+                $compra->turno_caja_id = $caja['turno_id'];
+                $compra->proveedor_id = $proveedor->id;
                 $compra->usuario_id = $actor->id;
                 $compra->operacion_inventario_id = $operacion->id;
                 $compra->fecha = Carbon::now();
                 $compra->referencia = $referencia === '' ? null : $referencia;
                 $compra->total = $total;
-                $compra->metodo = $pago['metodo'];
-                $compra->monto_efectivo = $pago['efectivo'];
-                $compra->monto_electronico = $pago['electronico'];
+                $compra->condicion = $condicion;
+                $compra->pagado = $pagado;
+                $compra->vencimiento = $vencimiento === null ? null : Carbon::parse($vencimiento);
+                $compra->metodo = $pago['metodo'] ?? null;
+                $compra->monto_efectivo = $pago['efectivo'] ?? '0.00';
+                $compra->monto_electronico = $pago['electronico'] ?? '0.00';
+                $compra->pago_externo = $caja['externo'];
                 $compra->clave_idempotencia = $datos['clave'];
                 $compra->save();
 
@@ -127,12 +149,19 @@ final class RegistrarCompra
                     ], $lote));
                 }
 
-                $this->caja->registrar($actor, $sucursal->id, 'egreso',
-                    ['efectivo' => $pago['efectivo'], 'electronico' => $pago['electronico']], 'compra', $compra->id, $compra->fecha);
+                if ($pago !== null) {
+                    $this->caja->registrar($actor, $sucursal->id, 'egreso',
+                        ['efectivo' => $pago['efectivo'], 'electronico' => $pago['electronico']], 'compra', $compra->id, $compra->fecha,
+                        $caja['caja_id'], $caja['turno_id']);
+                }
+
+                $cuenta = $this->cuentas->desdeCompra($actor, $compra, $compra->codigo().($referencia !== '' ? ' · '.$referencia : ''));
 
                 $this->auditor->registrar('compra.registrada', $compra, $actor, $compra->empresa_id, despues: [
-                    'compra' => $compra->codigo(), 'sucursal_id' => $sucursal->id, 'proveedor_id' => $proveedor?->id,
-                    'total' => $total, 'metodo' => $pago['metodo']->value, 'lineas' => count($lineas),
+                    'compra' => $compra->codigo(), 'sucursal_id' => $sucursal->id, 'proveedor_id' => $proveedor->id,
+                    'total' => $total, 'condicion' => $condicion, 'pagado' => $pagado, 'metodo' => $pago['metodo']->value ?? null,
+                    'externo' => $caja['externo'], 'turno_caja_id' => $caja['turno_id'], 'cuenta_pagar' => $cuenta?->codigo(),
+                    'lineas' => count($lineas),
                 ]);
 
                 return $compra;
@@ -140,6 +169,50 @@ final class RegistrarCompra
         } catch (UniqueConstraintViolationException $e) {
             return $this->existente($empresaId, $datos['clave']) ?? throw $e;
         }
+    }
+
+    /**
+     * Condición de pago (§ 13.2 y § 13.3, § 14.1 para egresos): lo pagado al confirmar y el
+     * vencimiento de la deuda. $condiciones nombra, en orden, el pago total, el pago nulo y el parcial.
+     *
+     * @param  array<string, mixed>  $datos
+     * @param  array{0: string, 1: string, 2: string}  $condiciones
+     * @return array{0: string, 1: string, 2: string|null}
+     *
+     * @throws ValidationException
+     */
+    public static function condicion(array $datos, string $total, array $condiciones = ['contado', 'credito', 'parcial']): array
+    {
+        $condicion = (string) ($datos['condicion'] ?? $condiciones[0]);
+
+        if (! in_array($condicion, $condiciones, true)) {
+            throw ValidationException::withMessages(['condicion' => __('Elige la condición de pago.')]);
+        }
+
+        $pagado = match ($condicion) {
+            $condiciones[0] => Decimal::redondear($total),
+            $condiciones[1] => '0.00',
+            default => Decimal::normalizar(is_scalar($datos['pagado'] ?? null) ? (string) $datos['pagado'] : '', Decimal::ESCALA_DINERO),
+        };
+
+        if ($pagado === null || ($condicion === $condiciones[2]
+            && (Decimal::comparar($pagado, '0', 2) <= 0 || Decimal::comparar($pagado, $total, 2) >= 0))) {
+            throw ValidationException::withMessages(['pagado' => __('En un pago parcial lo pagado ahora debe ser mayor que Bs 0,00 y menor que el total (:total).', ['total' => Decimal::bs($total)])]);
+        }
+
+        if ($condicion === $condiciones[0]) {
+            return [$condicion, $pagado, null];
+        }
+
+        $hoy = Carbon::now(config('mozistock.business_timezone'))->format('Y-m-d');
+        $vencimiento = RegistrarCuentaCobrar::fecha(is_string($datos['vencimiento'] ?? null) ? $datos['vencimiento'] : null, 'vencimiento')
+            ?? throw ValidationException::withMessages(['vencimiento' => __('La fecha de vencimiento es obligatoria cuando queda saldo pendiente.')]);
+
+        if ($vencimiento < $hoy) {
+            throw ValidationException::withMessages(['vencimiento' => __('El vencimiento no puede ser anterior a hoy.')]);
+        }
+
+        return [$condicion, $pagado, $vencimiento];
     }
 
     /**

@@ -47,7 +47,7 @@
             </div>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>{{ __('Usuario') }}</th><th>{{ __('Correo') }}</th><th>{{ __('Rol') }}</th><th>{{ __('Sucursal') }}</th><th>{{ __('Estado') }}</th><th>{{ __('Acción') }}</th></tr></thead>
+                    <thead><tr><th>{{ __('Usuario') }}</th><th>{{ __('Correo') }}</th><th>{{ __('Rol') }}</th><th>{{ __('Sucursal') }}</th><th>{{ __('Caja') }}</th><th>{{ __('Estado') }}</th><th>{{ __('Acción') }}</th></tr></thead>
                     <tbody>
                         @forelse ($usuarios as $usuario)
                             <tr wire:key="usuario-{{ $usuario->id }}">
@@ -55,6 +55,7 @@
                                 <td>{{ $usuario->email }}</td>
                                 <td><span class="badge info">{{ $usuario->rol?->etiqueta() }}</span></td>
                                 <td>{{ $usuario->sucursal->nombre ?? __('Todas') }}</td>
+                                <td><span class="badge secondary">{{ $usuario->caja->nombre ?? ($usuario->esVendedor() ? __('Sin caja') : __('Supervisa')) }}</span></td>
                                 <td><span class="badge {{ $usuario->activo ? 'success' : 'danger' }}">{{ $usuario->activo ? __('Activo') : __('Inactivo') }}</span></td>
                                 <td><span class="row" style="gap:6px;flex-wrap:nowrap">
                                     <button class="btn sm ghost" type="button" wire:click="editar({{ $usuario->id }})"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</button>
@@ -117,7 +118,7 @@
                     </x-campo>
                     <x-campo etiqueta="Sucursal" campo="sucursal_id">
                         @if ($rol === \App\Enums\Rol::Vendedor->value)
-                            <select id="sucursal_id" class="select" wire:model="sucursal_id" required>
+                            <select id="sucursal_id" class="select" wire:model.live="sucursal_id" required>
                                 <option value="">{{ __('Selecciona una sucursal') }}</option>
                                 @foreach ($sucursales as $sucursal)
                                     <option value="{{ $sucursal->id }}">{{ $sucursal->nombre }}</option>
@@ -125,6 +126,19 @@
                             </select>
                         @else
                             <select id="sucursal_id" class="select" disabled><option>{{ __('Todas las sucursales') }}</option></select>
+                        @endif
+                    </x-campo>
+                    <x-campo etiqueta="Caja asignada" campo="caja_id">
+                        @if ($rol === \App\Enums\Rol::Vendedor->value)
+                            <select id="caja_id" class="select" wire:model="caja_id" required @disabled($cajasDisponibles->isEmpty())>
+                                <option value="">{{ $cajasDisponibles->isEmpty() ? __('Sin cajas en esta sucursal') : __('Selecciona una caja') }}</option>
+                                @foreach ($cajasDisponibles as $caja)
+                                    <option value="{{ $caja->id }}">{{ $caja->nombre }} {{ $caja->es_principal ? __('(Principal)') : '' }}</option>
+                                @endforeach
+                            </select>
+                            <small class="subtle" style="display:block;margin-top:6px">{{ __('Solo cajas de su sucursal. Varios vendedores pueden compartir una caja; si es compartida, trabajan en el mismo turno.') }}</small>
+                        @else
+                            <select id="caja_id" class="select" disabled><option>{{ __('Todas las cajas (supervisa)') }}</option></select>
                         @endif
                     </x-campo>
                     <x-campo :etiqueta="$editandoId ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'" campo="password">

@@ -28,7 +28,7 @@ class ProductoFactory extends Factory
                     'nombre' => 'Unidad '.fake()->unique()->numerify('####'),
                     'abreviatura' => 'und.',
                     'admite_decimales' => false,
-                    'unidad_medida_sin' => 58,
+                    'unidad_medida_sin' => 57,
                 ]);
                 $unidad->empresa_id = $atributos['empresa_id'];
                 $unidad->save();
@@ -48,5 +48,10 @@ class ProductoFactory extends Factory
     public function enUnidad(UnidadMedida $unidad): static
     {
         return $this->state(fn () => ['empresa_id' => $unidad->empresa_id, 'unidad_medida_id' => $unidad->id]);
+    }
+
+    public function porMedida(): static
+    {
+        return $this->state(fn () => ['tipo_venta' => 'medida']);
     }
 }

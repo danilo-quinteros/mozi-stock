@@ -8,7 +8,7 @@
     $impersonador = session()->has(\App\Http\Controllers\ImpersonacionController::SESION);
 @endphp
 <!doctype html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="dark" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="dark" class="dark" @isset($sidebarAuto) data-sidebar-auto="{{ $sidebarAuto }}" @endisset>
 <head>@include('partials.head')</head>
 <body>
 <a href="#contenido" class="btn primary skip-link">{{ __('Saltar al contenido') }}</a>
@@ -54,15 +54,37 @@
         @else
             <x-navigation />
         @endif
-        <div class="sidebar-footer">
-            <p class="side-help">{{ $panelGlobal ? __('El acceso de cada empresa solo cambia con su interruptor manual.') : __('Tus datos se guardan solo para tu empresa.') }}</p>
-            <div class="mini-profile" style="margin-bottom:10px">
-                <span class="avatar">{{ $usuario->initials() }}</span>
-                <span><b>{{ $usuario->name }}</b><small>{{ $usuario->rol?->etiqueta() ?? __('Sin rol asignado') }}</small></span>
+        <div class="sidebar-footer" x-data="{ profileOpen: false }">
+            <div class="profile-menu-container" @click.outside="profileOpen = false" @keydown.escape.stop="profileOpen = false">
+                <button type="button"
+                        class="mini-profile"
+                        @click="profileOpen = !profileOpen"
+                        :aria-expanded="profileOpen"
+                        aria-haspopup="true"
+                        aria-label="{{ __('Menú de usuario') }}">
+                    <span class="avatar">{{ $usuario->initials() }}</span>
+                    <span class="mini-profile-info">
+                        <b>{{ $usuario->name }}</b>
+                        <small>{{ $usuario->rol?->etiqueta() ?? __('Sin rol asignado') }}</small>
+                    </span>
+                    <x-icon name="chevron-down" size="sm" class="profile-arrow" />
+                </button>
+
+                <div class="profile-dropdown" x-show="profileOpen" x-transition.origin.bottom.left x-cloak>
+                    <a href="{{ route('profile.edit') }}" class="profile-dropdown-item">
+                        <x-icon name="user" size="sm" />
+                        <span>{{ __('Mi cuenta') }}</span>
+                    </a>
+                    <div class="profile-dropdown-divider"></div>
+                    <form method="POST" action="{{ route('logout') }}" class="profile-dropdown-form">
+                        @csrf
+                        <button type="submit" class="profile-dropdown-item logout-item">
+                            <x-icon name="logout" size="sm" />
+                            <span>{{ __('Cerrar sesión') }}</span>
+                        </button>
+                    </form>
+                </div>
             </div>
-            <form method="POST" action="{{ route('logout') }}">@csrf
-                <button class="btn ghost" type="submit" title="{{ __('Cerrar sesión') }}"><x-icon name="logout" size="sm" /> <span class="btn-text">{{ __('Cerrar sesión') }}</span></button>
-            </form>
         </div>
     </aside>
     <div class="main">
@@ -71,6 +93,9 @@
                 <button type="button" class="top-icon menu-trigger" aria-label="{{ __('Abrir menú') }}" aria-controls="sidebar" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen"><x-icon name="menu" /></button>
                 <div class="crumbs"><span class="crumb-pre">{{ $panelGlobal ? __('MoziStudios') : __('MoziStock') }}</span><span class="slash crumb-pre">/</span><b>{{ isset($title) ? __($title) : __('Inicio') }}</b></div>
             </div>
+            @if (! $panelGlobal && $usuario->perteneceAEmpresa())
+                <livewire:caja.control-caja-topbar />
+            @endif
             <div class="top-group">
                 <x-idioma-selector />
                 <button type="button" class="top-icon theme-toggle" data-theme-toggle data-label-light="{{ __('Modo claro') }}" data-label-dark="{{ __('Modo oscuro') }}" aria-label="{{ __('Cambiar modo claro u oscuro') }}"><x-icon name="sun" /><span>{{ __('Cambiar tema') }}</span></button>

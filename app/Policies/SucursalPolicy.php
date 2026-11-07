@@ -12,6 +12,11 @@ class SucursalPolicy
         return $user->esAdministrador();
     }
 
+    public function view(User $user, Sucursal $sucursal): bool
+    {
+        return $user->esAdministrador() && $user->empresa_id === $sucursal->empresa_id;
+    }
+
     public function create(User $user): bool
     {
         return $user->esAdministrador();

@@ -88,7 +88,8 @@
                         </div>
                         <p @class(['subtle', 'danger-text' => Decimal::comparar($mixto, $reembolso, 2) !== 0])>{{ __('Suma :suma de :total', ['suma' => Decimal::bs($mixto), 'total' => Decimal::bs($reembolso)]) }}</p>
                     @endif
-                    <p class="subtle">{{ __('El reembolso sale de la caja de :sucursal hoy, una sola vez.', ['sucursal' => $venta->sucursal->nombre]) }}</p>
+                    @include('livewire.partials.caja')
+                    <p class="subtle">{{ __('El reembolso se registra hoy en :sucursal, una sola vez.', ['sucursal' => $venta->sucursal->nombre]) }}</p>
                 @else
                     <p class="subtle">{{ __('No se devuelve dinero: el valor se descuenta del saldo pendiente.') }}</p>
                 @endif
@@ -107,6 +108,9 @@
                 <div><span class="subtle">{{ __('Reduce saldo') }}</span><b>{{ Decimal::bs($deuda) }}</b></div>
                 <div><span class="subtle">{{ __('Reembolso') }}</span><b>{{ Decimal::bs($reembolso) }}</b></div>
                 <div><span class="subtle">{{ __('Medio') }}</span><b>{{ Decimal::comparar($reembolso, '0', 2) > 0 ? (\App\Enums\MetodoPago::tryFrom($metodo)?->etiqueta() ?? '—') : '—' }}</b></div>
+                @if (Decimal::comparar($reembolso, '0', 2) > 0 && $metodo !== 'electronico')
+                    <div><span class="subtle">{{ __('Caja del efectivo') }}</span><b>{{ $this->opcionesCaja[$caja] ?? '—' }}</b></div>
+                @endif
             </div>
             <p class="subtle">{{ __('Motivo: :motivo', ['motivo' => $motivo]) }}</p>
             <div class="modal-actions">

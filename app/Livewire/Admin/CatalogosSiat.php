@@ -36,7 +36,7 @@ class CatalogosSiat extends Component
 
     public function ver(string $catalogo): void
     {
-        $this->viendo = self::catalogo($catalogo)?->name ?? '';
+        $this->viendo = self::catalogo($catalogo)->name ?? '';
         $this->buscar = '';
     }
 

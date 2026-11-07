@@ -31,7 +31,7 @@ test('authenticated home contains only the current account and its modules', fun
     $this->actingAs($user)->get(route('dashboard'))->assertOk()
         ->assertSee('Cuenta A')->assertSee('Empresa A')
         ->assertDontSee('Cuenta B')->assertDontSee('Empresa B')
-        ->assertSee('Pedidos')->assertSee('Créditos')
+        ->assertSee('Pedidos')->assertSee('Cuentas por cobrar')->assertSee('Cuentas por pagar')
         ->assertSee('Ventas y finanzas')->assertSee('Ajustes y traspasos')->assertSee('Reportes generales')
         ->assertSee('Todas las sucursales')->assertDontSee('Análisis y cuenta')->assertDontSee('· Pendiente')
         ->assertDontSee('Bs 500')->assertDontSee('Carlos Mendoza')

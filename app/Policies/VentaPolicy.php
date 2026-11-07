@@ -23,6 +23,15 @@ class VentaPolicy
     }
 
     /**
+     * Vencimiento único o plan de cuotas de un crédito: el administrador, o el vendedor que
+     * puede ver la venta (de su sucursal).
+     */
+    public function condicionesCredito(User $user, Venta $venta): bool
+    {
+        return $this->view($user, $venta);
+    }
+
+    /**
      * Decisión del propietario (23/10/2026): solo el administrador registra devoluciones.
      */
     public function devolver(User $user, Venta $venta): bool

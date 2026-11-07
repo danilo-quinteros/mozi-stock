@@ -2,7 +2,7 @@
 
 namespace App\Livewire\Reportes;
 
-use App\Domain\Creditos\Consultas\ListadoCreditos;
+use App\Domain\Creditos\Consultas\CuentasPorCobrar;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Consultas\InventarioSucursales;
 use App\Domain\Reportes\Consultas\VentasPeriodo;
@@ -19,8 +19,8 @@ use Livewire\WithPagination;
 
 /**
  * Reportes mínimos (§ 3.11): cobros por fecha real, ventas confirmadas (valor vendido como
- * dato comercial separado), inventario por sucursal y créditos. Cada pestaña exporta CSV
- * con su misma consulta y filtros.
+ * dato comercial separado, menos las devoluciones del período = venta neta), inventario por
+ * sucursal y créditos. Cada pestaña exporta CSV con su misma consulta y filtros.
  */
 #[Title('Reportes generales')]
 class Panel extends Component
@@ -44,6 +44,15 @@ class Panel extends Component
     #[Url(as: 'q', except: '')]
     public string $buscar = '';
 
+    /** Créditos: por documento o saldos por cliente (§ 10 de cuentas por cobrar). */
+    #[Url(except: 'documento')]
+    public string $agrupar = 'documento';
+
+    /** Ventas: las ventas del período o las devoluciones registradas en él. */
+    #[Url(except: 'ventas')]
+    public string $vista = 'ventas';
+
+    #[Url(as: 'alertas', except: false)]
     public bool $soloAlertas = false;
 
     public function mount(): void
@@ -56,6 +65,14 @@ class Panel extends Component
 
         if (! in_array($this->pestana, self::PESTANAS, true)) {
             $this->pestana = 'cobros';
+        }
+
+        if ($this->agrupar !== 'cliente') {
+            $this->agrupar = 'documento';
+        }
+
+        if ($this->vista !== 'devoluciones') {
+            $this->vista = 'ventas';
         }
     }
 
@@ -73,9 +90,13 @@ class Panel extends Component
         $sucursalId = ctype_digit($this->sucursal) ? (int) $this->sucursal : null;
 
         $filas = match ($this->pestana) {
-            'ventas' => VentasPeriodo::consulta($empresaId, $periodo, $sucursalId, $this->buscar)->paginate(25),
+            'ventas' => $this->vista === 'devoluciones'
+                ? VentasPeriodo::devoluciones($empresaId, $periodo, $sucursalId, $this->buscar)->paginate(25)
+                : VentasPeriodo::consulta($empresaId, $periodo, $sucursalId, $this->buscar)->paginate(25),
             'inventario' => InventarioSucursales::consulta($empresaId, $sucursalId, $this->buscar, $this->soloAlertas)->paginate(25),
-            'creditos' => ListadoCreditos::consulta($empresaId, 'pendientes', $sucursalId, $this->buscar)->paginate(25),
+            'creditos' => $this->agrupar === 'cliente'
+                ? CuentasPorCobrar::porCliente($empresaId, $sucursalId, $this->buscar)->paginate(25)
+                : CuentasPorCobrar::consulta($empresaId, 'abiertas', $sucursalId, $this->buscar)->paginate(25),
             default => Cobros::detalle($empresaId, $periodo, $sucursalId, '', $this->buscar)->paginate(25),
         };
 
@@ -88,7 +109,9 @@ class Panel extends Component
             'sucursales' => Sucursal::query()->orderBy('nombre')->get(['id', 'nombre']),
             'filtrosCsv' => array_filter(['pestana' => $this->pestana, 'desde' => $periodo->desde->format('Y-m-d'),
                 'hasta' => $periodo->hasta->format('Y-m-d'), 'sucursal' => $this->sucursal, 'q' => trim($this->buscar),
-                'alertas' => $this->pestana === 'inventario' && $this->soloAlertas ? '1' : null]),
+                'alertas' => $this->pestana === 'inventario' && $this->soloAlertas ? '1' : null,
+                'agrupar' => $this->pestana === 'creditos' && $this->agrupar === 'cliente' ? 'cliente' : null,
+                'vista' => $this->pestana === 'ventas' && $this->vista === 'devoluciones' ? 'devoluciones' : null]),
         ]);
     }
 }

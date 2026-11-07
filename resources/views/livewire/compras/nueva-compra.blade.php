@@ -17,14 +17,14 @@
         <div class="rapid-form-fields">
             <x-campo etiqueta="Proveedor" campo="proveedor_id">
                 <select id="proveedor_id" class="select" wire:model="proveedor_id">
-                    <option value="">{{ __('Selecciona proveedor (opcional)') }}</option>
+                    <option value="">{{ __('Selecciona el proveedor') }}</option>
                     @foreach ($proveedores as $proveedor)
                         <option value="{{ $proveedor->id }}">{{ $proveedor->nombre }}</option>
                     @endforeach
                 </select>
             </x-campo>
             <x-campo etiqueta="Sucursal" campo="sucursal_id">
-                <select id="sucursal_id" class="select" wire:model="sucursal_id">
+                <select id="sucursal_id" class="select" wire:model.live="sucursal_id">
                     @foreach ($sucursales as $sucursal)
                         <option value="{{ $sucursal->id }}">{{ $sucursal->nombre }}</option>
                     @endforeach
@@ -43,8 +43,27 @@
                 <div class="heading">{{ __('Resumen') }}</div>
                 <p class="subtle" style="margin-top:10px">{{ __('Productos comprados ·') }} <b>{{ count($filas) }}</b></p>
                 <div class="summary-count"><span>{{ __('Unidades') }}</span><b>{{ Decimal::formatear($unidades) }}</b></div>
-                <div class="summary-money"><span>{{ __('Total pagado') }}</span><b>{{ Decimal::bs($total) }}</b></div>
+                <div class="summary-money"><span>{{ __('Total de la compra') }}</span><b>{{ Decimal::bs($total) }}</b></div>
                 <div class="divider"></div>
+                <x-campo etiqueta="Condición de pago" campo="condicion">
+                    <select id="condicion" class="select" wire:model.live="condicion">
+                        <option value="contado">{{ __('Contado · pago total ahora') }}</option>
+                        <option value="credito">{{ __('Crédito · pago posterior') }}</option>
+                        <option value="parcial">{{ __('Pago parcial') }}</option>
+                    </select>
+                </x-campo>
+                @if ($condicion === 'parcial')
+                    <x-campo etiqueta="Pagado ahora (Bs)" campo="pagado">
+                        <input id="pagado" class="input" type="text" inputmode="decimal" placeholder="0,00" wire:model.live.debounce.400ms="pagado">
+                    </x-campo>
+                @endif
+                @if ($condicion !== 'contado')
+                    <x-campo etiqueta="Vencimiento del saldo" campo="vencimiento">
+                        <input id="vencimiento" class="input" type="date" wire:model="vencimiento" required>
+                    </x-campo>
+                    <div class="summary-count"><span>{{ __('Saldo a cuentas por pagar') }}</span><b>{{ Decimal::bs(Decimal::restar($total, $aPagar, 2)) }}</b></div>
+                @endif
+                @if ($condicion !== 'credito')
                 <x-campo etiqueta="Medio de pago" campo="metodo">
                     <select id="metodo" class="select" wire:model.live="metodo">
                         <option value="efectivo">{{ __('Efectivo') }}</option>
@@ -61,9 +80,11 @@
                             <input id="electronico" class="input" type="text" inputmode="decimal" placeholder="0,00" wire:model.live.debounce.400ms="electronico">
                         </x-campo>
                     </div>
-                    <p @class(['subtle', 'danger-text' => Decimal::comparar($mixto, $total, 2) !== 0])>{{ __('Suma :mixto de :total', ['mixto' => Decimal::bs($mixto), 'total' => Decimal::bs($total)]) }}</p>
+                    <p @class(['subtle', 'danger-text' => Decimal::comparar($mixto, $aPagar, 2) !== 0])>{{ __('Suma :mixto de :total', ['mixto' => Decimal::bs($mixto), 'total' => Decimal::bs($aPagar)]) }}</p>
                 @endif
-                <p class="subtle">{{ __('Una compra pagada actualiza stock y registra una sola salida de dinero. No dupliques el egreso.') }}</p>
+                @include('livewire.partials.caja')
+                @endif
+                <p class="subtle">{{ __('La compra actualiza stock y registra una sola salida por lo pagado ahora. Un saldo pendiente va a Cuentas por pagar; no dupliques el egreso.') }}</p>
                 <div class="rapid-final-actions">
                     <button class="btn primary" type="button" wire:click="revisar" @disabled($sucursales->isEmpty())>{{ __('Revisar y confirmar') }} <x-icon name="arrow" size="sm" /></button>
                     <a class="btn ghost" href="{{ route('compras.index') }}">{{ __('Volver sin guardar') }}</a>
@@ -73,12 +94,13 @@
     </div>
 
     @if ($confirmando)
-        <x-modal titulo="Confirmar compra" descripcion="Al confirmar se ingresa el stock en la sucursal y se registra el pago en caja, en una sola operación." cerrar="$set('confirmando', false)">
+        <x-modal titulo="Confirmar compra" descripcion="Al confirmar se ingresa el stock en la sucursal, se registra lo pagado ahora y el saldo pasa a Cuentas por pagar, en una sola operación." cerrar="$set('confirmando', false)">
             <div class="confirm-grid">
                 <div><span class="subtle">{{ __('Sucursal') }}</span><b>{{ $sucursales->firstWhere('id', (int) $sucursal_id)?->nombre }}</b></div>
-                <div><span class="subtle">{{ __('Proveedor') }}</span><b>{{ $proveedores->firstWhere('id', (int) $proveedor_id)?->nombre ?? __('Sin proveedor') }}</b></div>
+                <div><span class="subtle">{{ __('Proveedor') }}</span><b>{{ $proveedores->firstWhere('id', (int) $proveedor_id)?->nombre }}</b></div>
                 <div><span class="subtle">{{ __('Productos') }}</span><b>{{ count($filas) }}</b></div>
-                <div><span class="subtle">{{ __('Total pagado') }}</span><b>{{ Decimal::bs($total) }}</b></div>
+                <div><span class="subtle">{{ __('Total') }}</span><b>{{ Decimal::bs($total) }}</b></div>
+                <div><span class="subtle">{{ __('Pagado ahora') }}</span><b>{{ Decimal::bs($aPagar) }}</b></div>
             </div>
             <div class="table-wrap" style="max-height:260px">
                 <table>

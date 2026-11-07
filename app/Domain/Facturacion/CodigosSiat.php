@@ -2,7 +2,9 @@
 
 namespace App\Domain\Facturacion;
 
+use App\Enums\ModalidadFacturacion;
 use App\Models\Empresa;
+use App\Models\SiatConfiguracion;
 use App\Models\SiatCufd;
 use App\Models\SiatCuis;
 use App\Models\SiatPuntoVenta;
@@ -55,7 +57,7 @@ final class CodigosSiat
             }
 
             [$contribuyente, $emision] = $this->preparar($punto);
-            $respuesta = $this->cliente->codigos($contribuyente)->cuis($emision);
+            $respuesta = $this->clientePara($punto->empresa_id)->codigos($contribuyente)->cuis($emision);
 
             // Con un CUIS vigente en el SIN la respuesta trae el mismo código y el mensaje 980: se guarda igual.
             if ($respuesta->codigo === null || $respuesta->fechaVigencia === null) {
@@ -85,31 +87,43 @@ final class CodigosSiat
             ->first();
     }
 
+    public function invalidarCufdVigente(SiatPuntoVenta $punto): void
+    {
+        DeEmpresa::consulta(SiatCufd::class, $punto->empresa_id)
+            ->where('siat_punto_venta_id', $punto->id)
+            ->where('vence_en', '>', now())
+            ->update(['vence_en' => now()->subMinute()]);
+    }
+
     /**
      * Pide un CUFD nuevo. Con $soloSiHaceFalta conserva el vigente que aún tenga margen (job horario).
      * Un pedido simultáneo espera al primero y recibe el CUFD recién obtenido en vez de pedir otro.
+     * Con $forzar = true ignora cualquier CUFD previo y solicita uno fresco al SIN.
      *
      * @throws ErrorFacturacion|SiatException
      */
-    public function renovarCufd(SiatPuntoVenta $punto, bool $soloSiHaceFalta = false): SiatCufd
+    public function renovarCufd(SiatPuntoVenta $punto, bool $soloSiHaceFalta = false, bool $forzar = false): SiatCufd
     {
-        return $this->conBloqueo("siat:cufd:{$punto->id}", function () use ($punto, $soloSiHaceFalta): SiatCufd {
-            $actual = $this->cufdVigente($punto, $soloSiHaceFalta ? self::MARGEN_RENOVACION_MINUTOS : 0);
+        return $this->conBloqueo("siat:cufd:{$punto->id}", function () use ($punto, $soloSiHaceFalta, $forzar): SiatCufd {
+            if (! $forzar) {
+                $actual = $this->cufdVigente($punto, $soloSiHaceFalta ? self::MARGEN_RENOVACION_MINUTOS : 0);
 
-            if ($actual !== null && ($soloSiHaceFalta || $actual->created_at?->greaterThan(now()->subMinute()))) {
-                return $actual;
+                if ($actual !== null && ($soloSiHaceFalta || $actual->created_at?->greaterThan(now()->subMinute()))) {
+                    return $actual;
+                }
             }
 
             $cuis = $this->cuis($punto);
             [$contribuyente, $emision] = $this->preparar($punto);
-            $cufd = $this->cliente->codigos($contribuyente)->cufd($emision, $cuis->codigo);
+            $cliente = $this->clientePara($punto->empresa_id);
+            $cufd = $cliente->codigos($contribuyente)->cufd($emision, $cuis->codigo);
 
             if ($cufd->cufd === null || $cufd->cufd->codigoInterno === null || $cufd->cufd->fechaVigencia === null) {
                 // Si el SIN indica que el CUIS guardado es inválido (código 913), se fuerza su renovación y se reintenta
                 $esCuisInvalido = collect($cufd->mensajes)->contains(fn (Mensaje $m): bool => $m->codigo === 913);
                 if ($esCuisInvalido) {
                     $cuis = $this->cuis($punto, forzar: true);
-                    $cufd = $this->cliente->codigos($contribuyente)->cufd($emision, $cuis->codigo);
+                    $cufd = $cliente->codigos($contribuyente)->cufd($emision, $cuis->codigo);
                 }
 
                 if ($cufd->cufd === null || $cufd->cufd->codigoInterno === null || $cufd->cufd->fechaVigencia === null) {
@@ -158,6 +172,14 @@ final class CodigosSiat
     public static function enZonaApp(DateTimeInterface $fecha): Carbon
     {
         return Carbon::instance($fecha)->setTimezone((string) config('app.timezone'));
+    }
+
+    private function clientePara(int $empresaId): ClienteSiat
+    {
+        $configuracion = DeEmpresa::consulta(SiatConfiguracion::class, $empresaId)->first();
+        $modalidadSiat = ($configuracion?->modalidad ?? ModalidadFacturacion::Computarizada)->siat();
+
+        return $this->cliente->conModalidad($modalidadSiat);
     }
 
     /**

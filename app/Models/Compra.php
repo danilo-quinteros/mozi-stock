@@ -7,32 +7,41 @@ use App\Models\Concerns\BelongsToEmpresa;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
- * Compra pagada: ingresó stock en su sucursal y generó una sola salida de caja por lo pagado.
+ * Compra: ingresó stock en su sucursal y generó una sola salida de caja por lo pagado al
+ * confirmar. Si quedó saldo (crédito o parcial), su deuda vive en CuentaPagar.
  * Inmutable; comparte el correlativo COM con su operación de inventario.
  *
  * @property int $id
  * @property int $empresa_id
  * @property int $numero
  * @property int $sucursal_id
+ * @property int|null $caja_id
+ * @property int|null $turno_caja_id
  * @property int|null $proveedor_id
  * @property int $usuario_id
  * @property int $operacion_inventario_id
  * @property Carbon $fecha
  * @property string|null $referencia
  * @property string $total
- * @property MetodoPago $metodo
+ * @property string $condicion
+ * @property string $pagado
+ * @property Carbon|null $vencimiento
+ * @property MetodoPago|null $metodo
  * @property string $monto_efectivo
  * @property string $monto_electronico
+ * @property bool $pago_externo
  * @property string $clave_idempotencia
  * @property Carbon $created_at
  * @property-read Sucursal $sucursal
  * @property-read Proveedor|null $proveedor
  * @property-read User $usuario
  * @property-read OperacionInventario $operacion
+ * @property-read CuentaPagar|null $cuentaPagar
  */
 class Compra extends Model
 {
@@ -47,7 +56,10 @@ class Compra extends Model
         return [
             'fecha' => 'datetime',
             'total' => 'decimal:2',
+            'pagado' => 'decimal:2',
+            'vencimiento' => 'date',
             'metodo' => MetodoPago::class,
+            'pago_externo' => 'boolean',
             'monto_efectivo' => 'decimal:2',
             'monto_electronico' => 'decimal:2',
         ];
@@ -102,5 +114,13 @@ class Compra extends Model
     public function operacion(): BelongsTo
     {
         return $this->belongsTo(OperacionInventario::class, 'operacion_inventario_id');
+    }
+
+    /**
+     * @return HasOne<CuentaPagar, $this>
+     */
+    public function cuentaPagar(): HasOne
+    {
+        return $this->hasOne(CuentaPagar::class);
     }
 }

@@ -8,12 +8,13 @@
         texto: '',
         cola: [],
         ocupado: false,
-        agregar() {
-            const valor = this.texto.trim();
+        agregar(forzado = null) {
+            const valor = (forzado ?? this.texto).trim();
             if (valor === '') return;
             this.texto = '';
             this.cola.push(valor);
             this.procesar();
+            this.$nextTick(() => this.$refs.buscador?.focus());
         },
         async procesar() {
             if (this.ocupado) return;
@@ -24,9 +25,11 @@
                 if (! agregado && this.texto === '') this.texto = valor;
             }
             this.ocupado = false;
+            this.$nextTick(() => this.$refs.buscador?.focus());
         },
     }"
     x-init="texto = $refs.buscador.value"
+    @mozistock-scan.window="agregar($event.detail.codigo)"
     @keydown.f2.window.prevent="$refs.buscador.focus()">
     <span class="scan-symbol" aria-hidden="true"><x-icon name="scan" /></span>
     <input x-ref="buscador" class="input" type="search" autocomplete="off" spellcheck="false" autofocus

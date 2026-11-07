@@ -3,9 +3,13 @@
 use App\Enums\Rol;
 use App\Livewire\Admin\Empresas;
 use App\Models\Auditoria;
+use App\Models\Caja;
 use App\Models\Empresa;
+use App\Models\EmpresaProveedorExterno;
+use App\Models\ProveedorExterno;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 
 test('the superadmin registers a company with its first administrator', function () {
@@ -13,7 +17,7 @@ test('the superadmin registers a company with its first administrator', function
 
     Livewire::actingAs($superadmin)->test(Empresas::class)
         ->call('crear')
-        ->set('nombre', 'Comercial Santa Cruz')->set('nit', '1234567')->set('email', 'contacto@comercial.test')
+        ->set('nombre', 'Comercial Santa Cruz')->set('nit', '1234567')->set('email', 'contacto@comercial.test')->set('rubro', 'general')
         ->set('admin_nombre', 'Administradora')->set('admin_email', 'Admin@Comercial.test')
         ->set('admin_password', 'ClaveSegura12345')->set('admin_password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
@@ -29,7 +33,8 @@ test('the superadmin registers a company with its first administrator', function
         ->and($admin->rol)->toBe(Rol::Administrador)
         ->and($admin->sucursal_id)->toBeNull()
         ->and(Hash::check('ClaveSegura12345', $admin->password))->toBeTrue()
-        ->and(Auditoria::query()->pluck('accion')->all())->toBe(['empresa.creada', 'sucursal.creada', 'usuario.creado']);
+        ->and(Caja::withoutGlobalScopes()->where('empresa_id', $empresa->id)->where('es_principal', true)->exists())->toBeTrue()
+        ->and(Auditoria::query()->pluck('accion')->sort()->values()->all())->toBe(['caja.creada', 'empresa.creada', 'sucursal.creada', 'usuario.creado']);
 
     $this->post(route('logout'));
     $this->post(route('login.store'), ['email' => 'admin@comercial.test', 'password' => 'ClaveSegura12345']);
@@ -126,4 +131,36 @@ test('the superadmin command promotes an existing account without company', func
 
     expect($cuenta->refresh()->rol)->toBe(Rol::Superadmin)
         ->and(Auditoria::query()->where('accion', 'usuario.rol_superadmin')->count())->toBe(1);
+});
+
+test('the superadmin can link and unlink a company as a Cyclone reseller', function () {
+    Http::fake([
+        'https://cyclone.test/*' => Http::response(['data' => []]),
+    ]);
+
+    $superadmin = User::factory()->superadmin()->create();
+    [$empresa] = empresaConAdministrador();
+    ProveedorExterno::query()->firstOrCreate(
+        ['codigo' => 'cyclone'],
+        ['nombre' => 'Cyclone', 'driver' => 'cyclone', 'activo' => true]
+    );
+
+    Livewire::actingAs($superadmin)->test(Empresas::class)
+        ->call('confirmarCyclone', $empresa->id)
+        ->assertSet('confirmandoCycloneId', $empresa->id)
+        ->call('cambiarCyclone')
+        ->assertSet('confirmandoCycloneId', null)
+        ->assertSee('Vinculada a Cyclone como revendedora');
+
+    expect(EmpresaProveedorExterno::withoutGlobalScopes()->where('empresa_id', $empresa->id)->where('activo', true)->exists())->toBeTrue()
+        ->and(Auditoria::query()->where('accion', 'empresa.proveedor_externo_vinculado')->count())->toBe(1);
+
+    // Desvincular
+    Livewire::actingAs($superadmin)->test(Empresas::class)
+        ->call('confirmarCyclone', $empresa->id)
+        ->call('cambiarCyclone')
+        ->assertSee('Desvinculada de Cyclone');
+
+    expect(EmpresaProveedorExterno::withoutGlobalScopes()->where('empresa_id', $empresa->id)->where('activo', false)->exists())->toBeTrue()
+        ->and(Auditoria::query()->where('accion', 'empresa.proveedor_externo_desvinculado')->count())->toBe(1);
 });

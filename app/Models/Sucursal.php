@@ -52,4 +52,21 @@ class Sucursal extends Model
         // La FK compuesta (empresa_id, sucursal_id) garantiza que el usuario es de la misma empresa.
         return $this->hasMany(User::class);
     }
+
+    /**
+     * @return HasMany<Caja, $this>
+     */
+    public function cajas(): HasMany
+    {
+        return $this->hasMany(Caja::class);
+    }
+
+    public function cajaPrincipal(): ?Caja
+    {
+        return Caja::withoutGlobalScopes()
+            ->where('empresa_id', $this->empresa_id)
+            ->where('sucursal_id', $this->id)
+            ->where('es_principal', true)
+            ->first();
+    }
 }

@@ -39,10 +39,38 @@
     html[data-sidebar="collapsed"] .nav-subitems .nav-item .nav-short{display:none}
 
     html[data-sidebar="collapsed"] .sidebar-footer{padding:12px 0 0}
-    html[data-sidebar="collapsed"] .mini-profile{justify-content:center;padding:8px;margin-bottom:8px!important}
+    html[data-sidebar="collapsed"] .mini-profile{justify-content:center;padding:8px;margin-bottom:0!important}
+    html[data-sidebar="collapsed"] .profile-arrow{display:none}
+    html[data-sidebar="collapsed"] .profile-dropdown{position:fixed;left:calc(var(--sidebar-width) + 8px);bottom:14px;right:auto;width:190px;z-index:75}
     html[data-sidebar="collapsed"] .sidebar-footer .btn{width:100%;padding:0}
 }
 @media(min-width:761px) and (hover:hover){
     html[data-sidebar="collapsed"] .nav-group:hover .nav-subitems{opacity:1;visibility:visible;transform:none;transition-delay:0s}
 }
 @media(max-width:760px){.sidebar-toggle{display:none}}
+
+/* Menú desplegable de perfil de usuario en el menú lateral */
+.profile-menu-container{position:relative;width:100%}
+button.mini-profile{width:100%;border:1px solid var(--border);color:var(--text);font:inherit;text-align:left;cursor:pointer;padding:10px 11px;border-radius:12px;background:var(--panel);display:flex;align-items:center;gap:10px;transition:transform .2s var(--ease),border-color .2s,background .2s,box-shadow .2s}
+button.mini-profile:hover{background:var(--panel-elevated);border-color:var(--accent-border);transform:translateY(-1px)}
+button.mini-profile[aria-expanded="true"]{background:var(--panel-elevated);border-color:var(--brand-bright);box-shadow:0 0 0 2px var(--accent-soft)}
+.mini-profile-info{flex:1;min-width:0}
+.mini-profile-info b{display:block;font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-profile-info small{display:block;color:var(--muted);font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-arrow{margin-left:auto;color:var(--muted);transition:transform .2s var(--ease),color .2s;flex-shrink:0}
+button.mini-profile:hover .profile-arrow{color:var(--brand-bright)}
+button.mini-profile[aria-expanded="true"] .profile-arrow{transform:rotate(180deg);color:var(--brand-bright)}
+
+.profile-dropdown{position:absolute;bottom:calc(100% + 8px);left:0;right:0;background:var(--panel-elevated);border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 36px rgba(0,0,0,.35);padding:6px;z-index:70;display:flex;flex-direction:column;gap:3px}
+.profile-dropdown-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;color:var(--text);font-size:12.5px;font-weight:600;text-decoration:none;background:transparent;border:0;width:100%;cursor:pointer;text-align:left;font-family:inherit;transition:background .16s,color .16s,transform .16s var(--ease)}
+.profile-dropdown-item .ico{color:var(--muted);transition:color .16s;flex-shrink:0}
+.profile-dropdown-item:hover{background:var(--panel-soft);color:var(--brand-bright);transform:translateX(2px)}
+.profile-dropdown-item:hover .ico{color:var(--brand-bright)}
+.profile-dropdown-divider{height:1px;background:var(--border-soft);margin:3px 2px}
+.profile-dropdown-form{margin:0;padding:0}
+.profile-dropdown-item.logout-item:hover{background:rgba(240,141,129,.1);color:var(--red,#f08d81)}
+.profile-dropdown-item.logout-item:hover .ico{color:var(--red,#f08d81)}
+
+/* Agente Mozi: el icono lleva el acento naranja aunque la entrada no esté activa, sin colores nuevos. */
+.nav-agente .nav-symbol{color:var(--brand-bright)}
+.nav-agente .nav-symbol .ico{filter:drop-shadow(0 0 6px rgba(241,146,77,.35))}

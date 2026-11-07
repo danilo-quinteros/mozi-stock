@@ -58,7 +58,11 @@ function empresaFacturable(int $nit = 1023456029, ModoFacturacion $modo = ModoFa
     $empresaId = $datos['empresa']->id;
     $catalogos = [
         Catalogo::TiposDocumentoIdentidad->name => [['1', 'CI - CEDULA DE IDENTIDAD'], ['5', 'NIT - NÚMERO DE IDENTIFICACIÓN TRIBUTARIA']],
-        Catalogo::TiposMetodoPago->name => [['1', 'EFECTIVO'], ['2', 'TARJETA'], ['7', 'TRANSFERENCIA BANCARIA'], ['13', 'EFECTIVO – TRANSFERENCIA BANCARIA'], ['33', 'PAGO POSTERIOR']],
+        Catalogo::TiposMetodoPago->name => [
+            ['1', 'EFECTIVO'], ['2', 'TARJETA'], ['7', 'TRANSFERENCIA BANCARIA'],
+            ['13', 'EFECTIVO – TRANSFERENCIA BANCARIA'], ['33', 'PAGO POSTERIOR'],
+            ['34', 'EFECTIVO – PAGO POSTERIOR'], ['57', 'PAGO POSTERIOR – TRANSFERENCIA BANCARIA'],
+        ],
         Catalogo::Actividades->name => [[ACTIVIDAD_PRUEBA, 'VENTA AL POR MENOR DE PRODUCTOS FARMACÉUTICOS']],
         Catalogo::ProductosServicios->name => [['62271', 'MEDICAMENTOS', ['codigoActividad' => ACTIVIDAD_PRUEBA]], ['83141', 'SERVICIOS DE SOFTWARE', ['codigoActividad' => '620100']]],
         Catalogo::UnidadesMedida->name => [['57', 'UNIDAD (BIENES)'], ['58', 'UNIDAD (SERVICIOS)']],
@@ -105,7 +109,7 @@ function ventaFacturable(array $datos, string $cantidad = '1', ?DatosFactura $fa
     $pedido = crearPedido($datos['admin'], $datos['sucursal'], [['producto_id' => $datos['producto']->id, 'cantidad' => $cantidad]]);
 
     return app(ConfirmarVenta::class)->ejecutar($datos['admin'], $pedido, ['metodo' => 'efectivo', 'en_cuotas' => false,
-        'cuota_inicial' => null, 'efectivo' => null, 'electronico' => null, 'clave' => (string) Str::uuid()], $factura);
+        'cuota_inicial' => null, 'efectivo' => null, 'electronico' => null, 'externo' => true, 'clave' => (string) Str::uuid()], $factura);
 }
 
 function facturaDe(Venta $venta): SiatFactura
@@ -360,6 +364,61 @@ test('la confirmación propone los datos fiscales y la factura sale con lo que c
         ->and($factura->estado)->toBe(EstadoFactura::Pendiente);
 });
 
+test('venta a crédito con cuota inicial sugiere método fiscal compuesto y confirma sin error de validación', function () {
+    Queue::fake();
+    $datos = empresaFacturable();
+    $this->actingAs($datos['admin']);
+    cargarStock($datos['admin'], $datos['sucursal'], $datos['producto'], '10');
+
+    $cliente = \App\Models\Cliente::create([
+        'empresa_id' => $datos['empresa']->id,
+        'nombre' => 'Ana Morales',
+        'documento' => '5566778',
+        'tipo_documento' => 'ci',
+    ]);
+
+    // Método sugerido: 34 (EFECTIVO – PAGO POSTERIOR)
+    $metodoSugerido = DatosFactura::metodoSugerido(
+        $datos['empresa']->id,
+        \App\Enums\MetodoPago::Efectivo,
+        conSaldo: true,
+        electronicoEmpresa: null,
+    );
+    expect($metodoSugerido)->toBe(34);
+
+    Livewire::test(Editor::class)
+        ->call('agregarProducto', $datos['producto']->id)
+        ->call('seleccionarCliente', $cliente->id)
+        ->set('pago_en_cuotas', true)
+        ->set('pago_cuota_inicial', '13.00')
+        ->set('pago_vencimiento', now()->addDays(30)->toDateString())
+        ->call('elegirMetodo', 'efectivo')
+        ->call('revisar')
+        ->assertSet('confirmando', true)
+        ->assertSet('factura.metodo_pago', '34')
+        ->call('confirmar')
+        ->assertHasNoErrors();
+
+    $factura = facturaDe(Venta::query()->sole());
+    expect($factura->metodo_pago)->toBe(34)
+        ->and($factura->estado)->toBe(EstadoFactura::Pendiente);
+});
+
+test('metodoSugerido propone códigos correctos para crédito y contado', function () {
+    $datos = empresaFacturable();
+    $id = $datos['empresa']->id;
+
+    // Con saldo (a crédito)
+    expect(DatosFactura::metodoSugerido($id, null, conSaldo: true))->toBe(33)
+        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Efectivo, conSaldo: true))->toBe(34)
+        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Electronico, conSaldo: true))->toBe(57);
+
+    // Sin saldo (al contado)
+    expect(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Efectivo, conSaldo: false))->toBe(1)
+        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Electronico, conSaldo: false))->toBe(7)
+        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Mixto, conSaldo: false))->toBe(13);
+});
+
 test('en modo manual la confirmación no factura si no se marca y avisa cuando el total no es facturable', function () {
     Queue::fake();
     $datos = empresaFacturable(modo: ModoFacturacion::Manual);
@@ -475,6 +534,7 @@ test('venta con metodo mixto envia a siat codigoMetodoPago 13 Efectivo + transfe
         'cuota_inicial' => null,
         'efectivo' => '50.00',
         'electronico' => '63.00',
+        'externo' => true,
         'clave' => (string) Str::uuid(),
     ]);
 

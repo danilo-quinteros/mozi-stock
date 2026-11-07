@@ -19,7 +19,7 @@
         </tbody>
     </table>
     <div class="totales">
-        <div><span>{{ __('Medio de pago') }}</span><span>{{ $compra->metodo->etiqueta() }}</span></div>
+        <div><span>{{ __('Medio de pago') }}</span><span>{{ $compra->metodo?->etiqueta() ?? __('Sin pago al registrar') }}</span></div>
         <div><span>{{ __('Efectivo') }}</span><span>{{ Decimal::bs($compra->monto_efectivo) }}</span></div>
         <div><span>{{ __('Electrónico') }}</span><span>{{ Decimal::bs($compra->monto_electronico) }}</span></div>
         <div class="total"><span>{{ __('Total pagado') }}</span><span>{{ Decimal::bs($compra->total) }}</span></div>

@@ -19,7 +19,7 @@ final class ListadoProductos
     /**
      * @return Builder<Producto>
      */
-    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null): Builder
+    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null, ?string $filtroStock = null): Builder
     {
         $termino = trim($buscar);
         $patron = '%'.addcslashes($termino, '\\%_').'%';
@@ -31,15 +31,20 @@ final class ListadoProductos
                     ->on('sn.empresa_id', '=', 'productos.empresa_id')
                     ->where('sn.sucursal_id', '=', $sucursalId ?? 0);
             })
+            ->leftJoin('unidades_medida as um', 'um.id', '=', 'productos.unidad_medida_id')
             ->select('productos.*')
             ->selectRaw('COALESCE(sn.cantidad, 0) as stock')
             ->selectRaw('COALESCE(sn.stock_minimo, productos.stock_minimo) as minimo')
-            ->with(['categoria:id,nombre', 'unidad:id,nombre,abreviatura'])
+            ->with(['categoria:id,nombre', 'unidad:id,nombre,abreviatura', 'vinculoExterno:id,empresa_id,producto_id,proveedor_externo_id,externo_id'])
             ->when($termino !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('productos.nombre', 'like', $patron)
                 ->orWhere('productos.sku', 'like', $patron)
-                ->orWhere('productos.codigo_barras', $termino)))
+                ->orWhere('productos.codigo_barras', $termino)
+                ->orWhere('productos.contenido', 'like', $patron)
+                ->orWhereRaw("CONCAT_WS(' ', productos.nombre, productos.contenido, um.abreviatura) LIKE ?", [$patron])))
             ->when($categoriaId !== null, fn (Builder $q) => $q->where('productos.categoria_id', $categoriaId))
+            ->when($filtroStock === 'con_stock', fn (Builder $q) => $q->whereRaw('COALESCE(sn.cantidad, 0) > 0'))
+            ->when($filtroStock === 'sin_stock', fn (Builder $q) => $q->whereRaw('COALESCE(sn.cantidad, 0) <= 0'))
             ->orderByDesc('productos.activo')
             ->orderBy('productos.nombre');
     }
@@ -79,7 +84,10 @@ final class ListadoProductos
     {
         return (int) DB::table('productos as p')
             ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.empresa_id', '=', 'p.empresa_id')->where('s.activa', true))
-            ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.producto_id', '=', 'p.id')->on('sn.sucursal_id', '=', 's.id'))
+            // Con empresa_id el join usa el índice único (empresa, sucursal, producto); sin él, recorre
+            // stock_niveles completo por cada producto y sucursal (minutos con miles de productos).
+            ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'p.empresa_id')
+                ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
             ->where('p.empresa_id', $empresaId)
             ->where('p.activo', true)
             ->when($sucursalId !== null, fn ($q) => $q->where('s.id', $sucursalId))

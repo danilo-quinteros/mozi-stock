@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Ventas;
 
+use App\Domain\Creditos\Consultas\HistorialPagos;
 use App\Enums\EstadoFactura;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\DevolucionItem;
@@ -39,13 +40,14 @@ class Detalle extends Component
     {
         $venta = Venta::query()
             ->with(['pedido:id,numero,nota', 'sucursal:id,nombre', 'cliente:id,nombre,documento,telefono', 'vendedor:id,name',
-                'items', 'pagos.receptor:id,name', 'devoluciones.usuario:id,name', 'devoluciones.items.ventaItem:id,descripcion,unidad'])
+                'items', 'devoluciones.usuario:id,name', 'devoluciones.items.ventaItem:id,descripcion,unidad'])
             ->findOrFail($this->ventaId);
         $devueltas = $venta->devoluciones->flatMap->items
             ->reduce(fn (string $suma, DevolucionItem $item) => Decimal::sumar($suma, $item->cantidad), '0');
         $vendidas = $venta->items->reduce(fn (string $suma, VentaItem $item) => Decimal::sumar($suma, $item->cantidad), '0');
 
         return view('livewire.ventas.detalle', [
+            'pagos' => HistorialPagos::de($venta),
             'venta' => $venta,
             // Decisión D4: con factura que existe o puede existir en el SIN, primero se anula.
             'puedeDevolver' => Gate::allows('devolver', $venta) && Decimal::comparar($devueltas, $vendidas) < 0

@@ -2,6 +2,9 @@
 
 namespace App\Livewire\Admin;
 
+use App\Domain\CatalogoExterno\Actions\DescargarCatalogoCentral;
+use App\Domain\CatalogoExterno\Actions\SincronizarEmpresa;
+use App\Domain\CatalogoExterno\Actions\VincularEmpresaProveedor;
 use App\Domain\Facturacion\Actions\CambiarFacturacionEmpresa;
 use App\Domain\Suscripciones\Actions\ConfigurarSuscripcion;
 use App\Domain\Tenancy\Actions\ActualizarEmpresa;
@@ -9,9 +12,13 @@ use App\Domain\Tenancy\Actions\CambiarAccesoEmpresa;
 use App\Domain\Tenancy\Actions\CrearEmpresa;
 use App\Domain\Tenancy\DatosEmpresa;
 use App\Enums\Rol;
+use App\Enums\Rubro;
 use App\Livewire\Concerns\MuestraAvisos;
+use App\Models\CatalogoExternoProducto;
 use App\Models\Empresa;
+use App\Models\EmpresaProveedorExterno;
 use App\Models\Plan;
+use App\Models\ProveedorExterno;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\Suscripcion;
 use App\Models\User;
@@ -49,6 +56,9 @@ class Empresas extends Component
     #[Locked]
     public ?int $confirmandoSiatId = null;
 
+    #[Locked]
+    public ?int $confirmandoCycloneId = null;
+
     public string $nombre = '';
 
     public string $razon_social = '';
@@ -58,6 +68,9 @@ class Empresas extends Component
     public string $email = '';
 
     public string $telefono = '';
+
+    /** Tipo de negocio: obligatorio al crear, sin valor por defecto (como en el registro público). */
+    public string $rubro = '';
 
     public string $admin_nombre = '';
 
@@ -159,11 +172,13 @@ class Empresas extends Component
 
         if ($this->editandoId === null) {
             $reglas += [
+                'rubro' => ['required', 'string', Rule::enum(Rubro::class)],
                 'admin_nombre' => ['required', 'string', 'max:255'],
                 'admin_email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
                 'admin_password' => ['required', 'string', Password::min(12)->letters()->numbers(), 'confirmed'],
             ];
             $atributos += [
+                'rubro' => __('tipo de negocio'),
                 'admin_nombre' => __('nombre del administrador'),
                 'admin_email' => __('correo del administrador'),
                 'admin_password' => __('contraseña inicial'),
@@ -175,7 +190,7 @@ class Empresas extends Component
         $suscripcion = $conSuscripcion ? ['precio_mensual' => $this->precio_mensual, 'vencimiento' => $this->vencimiento, 'plan_id' => $this->plan_id] : null;
 
         if ($this->editandoId === null) {
-            $crear->ejecutar($this->actor(), $datos, [
+            $crear->ejecutar($this->actor(), $datos + ['rubro' => Rubro::from($this->rubro)], [
                 'name' => trim($this->admin_nombre),
                 'email' => trim($this->admin_email),
                 'password' => $this->admin_password,
@@ -251,6 +266,97 @@ class Empresas extends Component
         $this->confirmandoSiatId = null;
     }
 
+    public function confirmarCyclone(int $id): void
+    {
+        $empresa = Empresa::query()->findOrFail($id);
+        $this->authorize('cambiarAcceso', $empresa);
+        $this->confirmandoCycloneId = $empresa->id;
+    }
+
+    public function cambiarCyclone(VincularEmpresaProveedor $accion, SincronizarEmpresa $sincronizar, DescargarCatalogoCentral $descargador): void
+    {
+        if ($this->confirmandoCycloneId === null) {
+            return;
+        }
+
+        $empresa = Empresa::query()->findOrFail($this->confirmandoCycloneId);
+        $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
+
+        $vinculoActual = EmpresaProveedorExterno::withoutGlobalScopes()
+            ->where('empresa_id', $empresa->id)
+            ->where('proveedor_externo_id', $proveedor->id)
+            ->first();
+
+        $nuevoEstado = ! ($vinculoActual->activo ?? false);
+        $accion->ejecutar($this->actor(), $empresa, $proveedor, $nuevoEstado);
+
+        if ($nuevoEstado) {
+            // Si el catálogo central está vacío, descargarlo automáticamente
+            if (CatalogoExternoProducto::query()->where('proveedor_externo_id', $proveedor->id)->count() === 0) {
+                try {
+                    $descargador->ejecutar($proveedor);
+                } catch (\Throwable $e) {
+                    $this->avisar(__('Empresa vinculada, pero falló la conexión con Cyclone: :error', ['error' => $e->getMessage()]));
+                    $this->confirmandoCycloneId = null;
+
+                    return;
+                }
+            }
+
+            $this->avisar(__('Vinculada a Cyclone como revendedora. La empresa puede elegir qué productos vender desde el Catálogo Cyclone.'));
+        } else {
+            $this->avisar(__('Desvinculada de Cyclone. Sus productos se conservan intactos.'));
+        }
+
+        $this->confirmandoCycloneId = null;
+    }
+
+    public function cancelarCyclone(): void
+    {
+        $this->confirmandoCycloneId = null;
+    }
+
+    public function sincronizarCyclone(int $id, SincronizarEmpresa $sincronizar, DescargarCatalogoCentral $descargador): void
+    {
+        $empresa = Empresa::query()->findOrFail($id);
+        $this->authorize('cambiarAcceso', $empresa);
+        $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
+
+        // Si el catálogo central está vacío, descargarlo automáticamente
+        if (CatalogoExternoProducto::query()->where('proveedor_externo_id', $proveedor->id)->count() === 0) {
+            try {
+                $descargador->ejecutar($proveedor);
+            } catch (\Throwable $e) {
+                $this->avisar(__('No se pudo conectar con la API de Cyclone: :error', ['error' => $e->getMessage()]));
+
+                return;
+            }
+        }
+
+        $res = $sincronizar->ejecutar($empresa, $proveedor, $this->actor(), soloActualizarVinculados: true);
+        $this->avisar(__('Sincronización con Cyclone: :creados nuevos, :act actualizados, :sin sin cambios.', [
+            'creados' => $res['creados'],
+            'act' => $res['actualizados'],
+            'sin' => $res['sin_cambios'],
+        ]));
+    }
+
+    public function descargarCatalogoCyclone(DescargarCatalogoCentral $descargador): void
+    {
+        $this->authorize('viewAny', Empresa::class);
+        $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
+
+        try {
+            $res = $descargador->ejecutar($proveedor);
+            $this->avisar(__('Catálogo central de Cyclone descargado (:procesados productos, :nuevos nuevos).', [
+                'procesados' => $res['procesados'],
+                'nuevos' => $res['nuevos'],
+            ]));
+        } catch (\Throwable $e) {
+            $this->avisar(__('Error al descargar catálogo de Cyclone: :error', ['error' => $e->getMessage()]));
+        }
+    }
+
     /**
      * Corregir a mano un vencimiento ya configurado exige un motivo (queda en la auditoría).
      */
@@ -276,6 +382,13 @@ class Empresas extends Component
             ->orderBy('nombre')
             ->paginate(25);
 
+        $proveedorCyclone = ProveedorExterno::query()->where('codigo', 'cyclone')->first();
+        $revendedorasCyclone = $proveedorCyclone === null ? collect() : EmpresaProveedorExterno::withoutGlobalScopes()
+            ->where('proveedor_externo_id', $proveedorCyclone->id)
+            ->where('activo', true)
+            ->get(['empresa_id', 'ultima_sincronizacion_en'])
+            ->keyBy('empresa_id');
+
         return view('livewire.admin.empresas', [
             'empresas' => $empresas,
             // Administrador activo más antiguo de cada empresa de la página, para «Entrar como».
@@ -284,13 +397,16 @@ class Empresas extends Component
                 ->get(['id', 'empresa_id'])->unique('empresa_id')->pluck('id', 'empresa_id'),
             'confirmando' => $this->confirmandoAccesoId === null ? null : Empresa::query()->find($this->confirmandoAccesoId),
             'confirmandoSiat' => $this->confirmandoSiatId === null ? null : Empresa::query()->find($this->confirmandoSiatId),
+            'confirmandoCyclone' => $this->confirmandoCycloneId === null ? null : Empresa::query()->find($this->confirmandoCycloneId),
+            'revendedorasCyclone' => $revendedorasCyclone,
             'planes' => Plan::query()->where('activo', true)->orderBy('orden')->get(),
+            'rubros' => Rubro::cases(),
         ]);
     }
 
     private function limpiarFormulario(): void
     {
-        $this->reset('editandoId', 'nombre', 'razon_social', 'nit', 'email', 'telefono',
+        $this->reset('editandoId', 'nombre', 'razon_social', 'nit', 'email', 'telefono', 'rubro',
             'admin_nombre', 'admin_email', 'admin_password', 'admin_password_confirmation',
             'plan_id', 'precio_mensual', 'vencimiento', 'motivo_vencimiento', 'vencimientoGuardado');
         $this->resetValidation();

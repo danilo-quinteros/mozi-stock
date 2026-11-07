@@ -23,7 +23,7 @@ final class GuardarProducto
 {
     public const DISCO = 'local';
 
-    private const CAMPOS = ['nombre', 'sku', 'codigo_barras', 'descripcion', 'categoria_id', 'unidad_medida_id',
+    private const CAMPOS = ['nombre', 'contenido', 'tipo_venta', 'sku', 'codigo_barras', 'descripcion', 'categoria_id', 'unidad_medida_id',
         'precio_consumidor', 'precio_minorista', 'precio_mayorista', 'stock_minimo', 'activo'];
 
     public function __construct(private readonly Auditor $auditor) {}
@@ -50,6 +50,28 @@ final class GuardarProducto
         Gate::forUser($actor)->authorize('update', $producto);
 
         return $this->guardar($actor, $producto, $datos, $imagen, $quitarImagen, 'producto.actualizado');
+    }
+
+    public function actualizarPrecioConsumidor(User $actor, Producto $producto, string $nuevoPrecio): Producto
+    {
+        Gate::forUser($actor)->authorize('update', $producto);
+
+        $precio = $this->precio($nuevoPrecio);
+        if ($precio === null) {
+            throw ValidationException::withMessages([
+                'precio_consumidor' => __('Ingresa un precio válido en Bs, mayor o igual a 0 y con hasta 2 decimales.'),
+            ]);
+        }
+
+        $antes = $this->resumen($producto);
+        $producto->precio_consumidor = $precio;
+
+        DB::transaction(function () use ($actor, $producto, $antes): void {
+            $producto->save();
+            $this->auditor->registrar('producto.actualizado', $producto, $actor, $producto->empresa_id, $antes, $this->resumen($producto));
+        });
+
+        return $producto;
     }
 
     /**
@@ -115,6 +137,14 @@ final class GuardarProducto
             $errores['unidad_medida_id'] = __('Selecciona una unidad de medida de tu empresa.');
         }
 
+        $contenido = filled($datos['contenido'] ?? null)
+            ? Decimal::normalizar((string) $datos['contenido'], Decimal::ESCALA_CANTIDAD)
+            : null;
+
+        if (filled($datos['contenido'] ?? null) && ($contenido === null || Decimal::comparar($contenido, '0') <= 0)) {
+            $errores['contenido'] = __('Ingresa un contenido válido mayor a 0 (hasta 3 decimales).');
+        }
+
         $consumidor = $this->precio($datos['precio_consumidor'] ?? null);
         $minorista = filled($datos['precio_minorista'] ?? null) ? $this->precio($datos['precio_minorista']) : '';
         $mayorista = filled($datos['precio_mayorista'] ?? null) ? $this->precio($datos['precio_mayorista']) : '';
@@ -135,7 +165,10 @@ final class GuardarProducto
         }
 
         $producto->nombre = trim((string) $datos['nombre']);
-        $producto->sku = Str::upper(trim((string) $datos['sku']));
+        $producto->contenido = $contenido;
+        $producto->tipo_venta = in_array($datos['tipo_venta'] ?? 'unidad', ['unidad', 'medida'], true) ? (string) $datos['tipo_venta'] : 'unidad';
+        $sku = trim((string) ($datos['sku'] ?? ''));
+        $producto->sku = $sku === '' ? null : Str::upper($sku);
         $codigo = trim((string) ($datos['codigo_barras'] ?? ''));
         $producto->codigo_barras = $codigo === '' ? null : $codigo;
         $descripcion = trim((string) ($datos['descripcion'] ?? ''));

@@ -5,13 +5,13 @@ use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Consultas\VentasPeriodo;
 use App\Domain\Reportes\Periodo;
 use App\Models\Cliente;
+use App\Models\Cobro;
 use App\Models\MovimientoCaja;
-use App\Models\PagoVenta;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
 use Carbon\CarbonImmutable;
-use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -25,11 +25,11 @@ function enLaPaz(string $momento): void
     test()->travelTo(CarbonImmutable::parse($momento, 'America/La_Paz'));
 }
 
-function abonar(User $actor, Venta $venta, array $datos): PagoVenta
+function abonar(User $actor, Venta $venta, array $datos): Cobro
 {
     return app(RegistrarAbono::class)->ejecutar($actor, $venta, $datos + [
         'sucursal_id' => null, 'metodo' => 'efectivo', 'monto' => null, 'efectivo' => null,
-        'electronico' => null, 'nota' => null, 'clave' => (string) Str::uuid(),
+        'electronico' => null, 'nota' => null, 'externo' => true, 'clave' => (string) Str::uuid(),
     ]);
 }
 
@@ -94,7 +94,7 @@ test('T15 a quotation never appears in income or confirmed sales', function () {
     crearPedido($this->admin, $this->matriz, [['producto_id' => $this->producto->id, 'cantidad' => '10']]);
 
     expect(cobradoEl($this->empresa->id, '2026-10-19'))->toBe('0.00')
-        ->and(VentasPeriodo::totales($this->empresa->id, Periodo::dia('2026-10-19')))->toBe(['valor_vendido' => '0.00', 'cantidad' => 0])
+        ->and(VentasPeriodo::totales($this->empresa->id, Periodo::dia('2026-10-19')))->toBe(['valor_vendido' => '0.00', 'cantidad' => 0, 'devoluciones' => '0.00', 'cantidad_devoluciones' => 0, 'venta_neta' => '0.00'])
         ->and(VentasPeriodo::pendientes($this->empresa->id)['cotizaciones'])->toBe(1);
 });
 
@@ -104,10 +104,10 @@ test('V3-2 a mixed installment 20 cash + 30 electronic on a balance of 150 leave
     $pago = abonar($this->admin, $venta, ['sucursal_id' => $this->matriz->id, 'metodo' => 'mixto', 'efectivo' => '20', 'electronico' => '30']);
 
     expect($venta->refresh()->saldo_pendiente)->toBe('100.00')
-        ->and($pago->only(['tipo', 'monto', 'monto_efectivo', 'monto_electronico']))
-        ->toBe(['tipo' => 'abono', 'monto' => '50.00', 'monto_efectivo' => '20.00', 'monto_electronico' => '30.00'])
-        ->and(PagoVenta::query()->where('tipo', 'abono')->count())->toBe(1)
-        ->and(MovimientoCaja::query()->where('origen_id', $pago->id)->pluck('monto', 'metodo')->all())
+        ->and($pago->only(['monto', 'monto_efectivo', 'monto_electronico']))
+        ->toBe(['monto' => '50.00', 'monto_efectivo' => '20.00', 'monto_electronico' => '30.00'])
+        ->and(Cobro::query()->count())->toBe(1)
+        ->and(MovimientoCaja::query()->where('origen_tipo', 'cobro')->where('origen_id', $pago->id)->pluck('monto', 'metodo')->all())
         ->toBe(['efectivo' => '20.00', 'electronico' => '30.00'])
         ->and(Cobros::resumen($this->empresa->id, Periodo::dia('2026-10-20')))
         ->toMatchArray(['efectivo' => '20.00', 'electronico' => '30.00', 'total' => '50.00']);
@@ -118,7 +118,7 @@ test('V3-3 installments above the balance, negative, zero or repeated are reject
 
     expect(fn () => abonar($this->admin, $venta, $datos + ['sucursal_id' => $this->matriz->id]))->toThrow(ValidationException::class);
     expect($venta->refresh()->saldo_pendiente)->toBe('150.00')
-        ->and(PagoVenta::query()->where('tipo', 'abono')->count())->toBe(0);
+        ->and(Cobro::query()->count())->toBe(0);
 })->with([
     'mayor que el saldo' => [['monto' => '150.01']],
     'negativo' => [['monto' => '-5']],
@@ -180,7 +180,7 @@ test('an installment cannot be charged on a paid credit nor by another company',
 
     [, $adminB] = empresaConAdministrador();
     $this->actingAs($adminB);
-    expect(fn () => abonar($adminB, $venta, ['monto' => '1']))->toThrow(AuthorizationException::class);
+    expect(fn () => abonar($adminB, $venta, ['monto' => '1']))->toThrow(ModelNotFoundException::class);
 });
 
 test('reports never mix companies', function () {

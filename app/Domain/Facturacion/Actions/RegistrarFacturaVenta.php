@@ -137,12 +137,16 @@ final class RegistrarFacturaVenta
 
         $items = DeEmpresa::consulta(VentaItem::class, $empresaId)->where('venta_id', $venta->id)->orderBy('orden')->get();
         $productoIds = $items->pluck('producto_id')->filter()->unique()->all();
-        $productos = DeEmpresa::consulta(Producto::class, $empresaId)->whereIn('id', $productoIds)->with('unidad')->get()->keyBy('id');
+        $productos = DeEmpresa::consulta(Producto::class, $empresaId)
+            ->whereIn('id', $productoIds)
+            ->with(['unidad' => fn ($q) => $q->withoutGlobalScopes()->where('empresa_id', $empresaId)])
+            ->get()
+            ->keyBy('id');
 
         $faltanUnidades = [];
         foreach ($items as $item) {
             $prod = $productos->get($item->producto_id);
-            $unidadSin = $prod?->unidad?->unidad_medida_sin ?? $configuracion?->unidad_medida;
+            $unidadSin = $prod?->unidad->unidad_medida_sin ?? $configuracion?->unidad_medida;
             if ($unidadSin === null) {
                 $faltanUnidades[] = $item->descripcion;
             } elseif (! CatalogoEmpresa::existe($empresaId, Catalogo::UnidadesMedida, $unidadSin)) {
@@ -176,7 +180,7 @@ final class RegistrarFacturaVenta
             /** @var VentaItem $item */
             $item = $items[$linea->indiceVenta];
             $prod = $productos->get($item->producto_id);
-            $unidadSin = (int) ($prod?->unidad?->unidad_medida_sin ?? $configuracion->unidad_medida ?? 58);
+            $unidadSin = (int) ($prod?->unidad->unidad_medida_sin ?? $configuracion->unidad_medida ?? 58);
 
             return [
                 'venta_item_id' => $item->id,

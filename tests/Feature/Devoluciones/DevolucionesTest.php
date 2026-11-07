@@ -1,7 +1,7 @@
 <?php
 
 use App\Domain\Creditos\Actions\RegistrarAbono;
-use App\Domain\Creditos\Consultas\ListadoCreditos;
+use App\Domain\Creditos\Consultas\CuentasPorCobrar;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Periodo;
 use App\Domain\Ventas\Actions\RegistrarDevolucion;
@@ -41,7 +41,7 @@ function devolver(User $admin, Venta $venta, array $lineas, array $extra = []): 
     return app(RegistrarDevolucion::class)->ejecutar($admin, $venta, $extra + [
         'lineas' => array_map(fn ($l) => is_array($l) ? $l + ['reingresa' => true] : ['cantidad' => $l, 'reingresa' => true], $lineas),
         'motivo' => 'Producto defectuoso', 'metodo' => 'efectivo', 'efectivo' => null, 'electronico' => null,
-        'clave' => (string) Str::uuid(),
+        'externo' => ! isset($extra['turno_id']), 'clave' => (string) Str::uuid(),
     ]);
 }
 
@@ -97,8 +97,8 @@ test('T21 a Bs 20 cash refund leaves on the refund day; the original collection 
         ->and(stockDe($this->matriz, $this->producto))->toBe('41.000')
         ->and(MovimientoCaja::query()->where('sentido', 'egreso')->sole()->origen_tipo)->toBe('devolucion');
 
-    Livewire::test(Arqueo::class)->set('fecha', '2026-10-20')->assertSee('Reembolso · DEV-00001')->assertSee('− Bs 20,00');
-    Livewire::test(Arqueo::class)->set('fecha', '2026-10-19')->assertDontSee('Reembolso · DEV-00001');
+    Livewire::test(Arqueo::class)->set('fecha', '2026-10-20')->call('cambiarPestana', 'movimientos')->assertSee('Reembolso · DEV-00001')->assertSee('− Bs 20,00');
+    Livewire::test(Arqueo::class)->set('fecha', '2026-10-19')->call('cambiarPestana', 'movimientos')->assertDontSee('Reembolso · DEV-00001');
     $csvMartes = $this->get(route('caja.exportar', ['fecha' => '2026-10-20']))->streamedContent();
     expect($csvMartes)->toContain('Salida;Reembolso;DEV-00001')->toContain(';20.00;0.00;20.00')->not->toContain('Ingreso;');
 });
@@ -119,13 +119,13 @@ test('on a credit sale the return reduces the debt first and moves no money', fu
         ->and(MovimientoCaja::query()->where('sentido', 'egreso')->count())->toBe(0)
         ->and(Cobros::resumen($this->empresa->id, Periodo::dia('2026-10-20'))['neto'])->toBe('0.00');
 
-    $resumen = ListadoCreditos::resumen($this->empresa->id);
-    expect($resumen['saldo'])->toBe('50.00')->and($resumen['cobrado'])->toBe('50.00');
+    expect(CuentasPorCobrar::resumen($this->empresa->id)['pendiente'])->toBe('50.00')
+        ->and((string) CuentasPorCobrar::consulta($this->empresa->id)->sole()->cobrado)->toBe('50.00');
 
     // Un abono posterior respeta el saldo reducido.
     expect(fn () => app(RegistrarAbono::class)->ejecutar($this->admin, $venta, [
         'sucursal_id' => $this->matriz->id, 'metodo' => 'efectivo', 'monto' => '60', 'efectivo' => null,
-        'electronico' => null, 'nota' => null, 'clave' => (string) Str::uuid(),
+        'electronico' => null, 'nota' => null, 'externo' => true, 'clave' => (string) Str::uuid(),
     ]))->toThrow(ValidationException::class);
 });
 

@@ -3,6 +3,7 @@
 namespace App\Domain\Ventas\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Caja\CajaOperacion;
 use App\Domain\Caja\LibroCaja;
 use App\Domain\Inventario\LibroStock;
 use App\Domain\Tenancy\Numerador;
@@ -16,6 +17,7 @@ use App\Models\SiatFactura;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
+use App\Models\VentaCuota;
 use App\Models\VentaItem;
 use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Collection;
@@ -33,19 +35,22 @@ use Illuminate\Validation\ValidationException;
  * crédito y solo el resto se reembolsa, con una salida de caja por medio y la fecha y hora
  * actuales. Reingresa al stock solo las líneas marcadas y acumula devuelto/reembolsado en la
  * venta sin reescribirla. Stock y dinero se mueven en la sucursal de la venta.
- * Decisiones del propietario (23/10/2026): solo administradores; importe automático.
+ * Decisiones del propietario (23/10/2026): solo administradores; importe automático. El efectivo
+ * reembolsado sale, como un egreso, de un turno abierto de esa sucursal que el usuario opera o,
+ * si el administrador lo indica, fuera de caja (01/11/2026, § 18.7).
  */
 final class RegistrarDevolucion
 {
     public function __construct(
         private readonly LibroStock $libro,
         private readonly LibroCaja $caja,
+        private readonly CajaOperacion $cajas,
         private readonly Numerador $numerador,
         private readonly Auditor $auditor,
     ) {}
 
     /**
-     * @param  array{lineas: array<int|string, array{cantidad?: mixed, reingresa?: bool}>, motivo: string, metodo: string|null, efectivo: string|null, electronico: string|null, clave: string}  $datos  lineas por id de línea de venta
+     * @param  array{lineas: array<int|string, array{cantidad?: mixed, reingresa?: bool}>, motivo: string, metodo: string|null, efectivo: string|null, electronico: string|null, externo?: bool, turno_id?: int|null, clave: string}  $datos  lineas por id de línea de venta
      */
     public function ejecutar(User $actor, Venta $venta, array $datos): Devolucion
     {
@@ -100,7 +105,7 @@ final class RegistrarDevolucion
 
     /**
      * @param  Collection<int, VentaItem>  $items
-     * @param  array{lineas: array<int|string, array{cantidad?: mixed, reingresa?: bool}>, motivo: string, metodo: string|null, efectivo: string|null, electronico: string|null, clave: string}  $datos
+     * @param  array{lineas: array<int|string, array{cantidad?: mixed, reingresa?: bool}>, motivo: string, metodo: string|null, efectivo: string|null, electronico: string|null, externo?: bool, turno_id?: int|null, clave: string}  $datos
      */
     private function registrar(User $actor, int $ventaId, Collection $items, array $datos, string $motivo): Devolucion
     {
@@ -124,6 +129,8 @@ final class RegistrarDevolucion
         $pago = Decimal::comparar($reembolso, '0', 2) > 0
             ? ValidadorPago::exacto($reembolso, $datos['metodo'], $datos['efectivo'], $datos['electronico'], 'el reembolso')
             : null;
+        $caja = $pago === null ? ['caja_id' => null, 'turno_id' => null, 'externo' => false]
+            : $this->cajas->resolver($actor, $venta->sucursal_id, $pago['efectivo'], (bool) ($datos['externo'] ?? false), 'externo', isset($datos['turno_id']) ? (int) $datos['turno_id'] : null);
         $fecha = Carbon::now();
         $cambios = [];
 
@@ -182,16 +189,19 @@ final class RegistrarDevolucion
         $venta->devuelto = Decimal::sumar($venta->devuelto, $importe, Decimal::ESCALA_DINERO);
         $venta->reembolsado = Decimal::sumar($venta->reembolsado, $reembolso, Decimal::ESCALA_DINERO);
         $venta->save();
+        $this->reducirCuotas($venta, $deuda);
 
         if ($pago !== null) {
             $this->caja->registrar($actor, $venta->sucursal_id, 'egreso',
-                ['efectivo' => $pago['efectivo'], 'electronico' => $pago['electronico']], 'devolucion', $devolucion->id, $fecha);
+                ['efectivo' => $pago['efectivo'], 'electronico' => $pago['electronico']], 'devolucion', $devolucion->id, $fecha,
+                $caja['caja_id'], $caja['turno_id']);
         }
 
         $this->auditor->registrar('venta.devolucion', $venta, $actor, $venta->empresa_id, $antes, [
             ...$venta->only(['saldo_pendiente', 'devuelto', 'reembolsado']),
             'devolucion' => $devolucion->codigo(), 'importe' => $importe, 'deuda_reducida' => $deuda,
             'reembolso' => $reembolso, 'metodo' => $pago === null ? null : $pago['metodo']->value, 'lineas' => count($lineas),
+            'turno_caja_id' => $caja['turno_id'], 'externo' => $caja['externo'],
         ]);
 
         return $devolucion;
@@ -213,7 +223,11 @@ final class RegistrarDevolucion
             ->join('unidades_medida', 'unidades_medida.id', '=', 'productos.unidad_medida_id')
             ->where('productos.empresa_id', $venta->empresa_id)
             ->whereIn('productos.id', $items->pluck('producto_id')->all())
-            ->where('unidades_medida.admite_decimales', false)
+            ->where(function ($query) {
+                $query->where('productos.tipo_venta', 'unidad')
+                    ->orWhereNull('productos.tipo_venta')
+                    ->orWhere('unidades_medida.admite_decimales', false);
+            })
             ->pluck('productos.id')->map(fn ($id) => (int) $id)->all();
         $lineas = [];
         $errores = [];
@@ -278,5 +292,27 @@ final class RegistrarDevolucion
     {
         return Devolucion::withoutGlobalScope(EmpresaScope::class)
             ->where('empresa_id', $empresaId)->where('clave_idempotencia', $clave)->first();
+    }
+
+    /**
+     * Con plan de cuotas, la deuda reducida sale de las cuotas desde la última hacia la primera,
+     * para que la suma de sus saldos siga siendo el saldo de la venta.
+     */
+    private function reducirCuotas(Venta $venta, string $deuda): void
+    {
+        $restante = $deuda;
+        $cuotas = VentaCuota::query()->where('venta_id', $venta->id)->where('saldo', '>', 0)
+            ->orderByDesc('numero')->lockForUpdate()->get();
+
+        foreach ($cuotas as $cuota) {
+            if (Decimal::comparar($restante, '0', 2) <= 0) {
+                break;
+            }
+
+            $parte = Decimal::comparar($cuota->saldo, $restante, 2) < 0 ? $cuota->saldo : $restante;
+            $cuota->saldo = Decimal::restar($cuota->saldo, $parte, Decimal::ESCALA_DINERO);
+            $cuota->save();
+            $restante = Decimal::restar($restante, $parte, Decimal::ESCALA_DINERO);
+        }
     }
 }

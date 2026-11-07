@@ -188,9 +188,9 @@ final class GeneradorXmlCompraVentaV2
         $detallesXml = '';
         foreach ($detalles as $d) {
             $desc = htmlspecialchars((string) $d['descripcion'], ENT_XML1, 'UTF-8');
-            $descMonto = isset($d['montoDescuento']) && $d['montoDescuento'] !== null ? "<montoDescuento>{$d['montoDescuento']}</montoDescuento>" : '<montoDescuento xsi:nil="true"/>';
-            $serie = isset($d['numeroSerie']) && $d['numeroSerie'] !== null ? "<numeroSerie>{$d['numeroSerie']}</numeroSerie>" : '<numeroSerie xsi:nil="true"/>';
-            $imei = isset($d['numeroImei']) && $d['numeroImei'] !== null ? "<numeroImei>{$d['numeroImei']}</numeroImei>" : '<numeroImei xsi:nil="true"/>';
+            $descMonto = isset($d['montoDescuento']) ? "<montoDescuento>{$d['montoDescuento']}</montoDescuento>" : '<montoDescuento xsi:nil="true"/>';
+            $serie = isset($d['numeroSerie']) ? "<numeroSerie>{$d['numeroSerie']}</numeroSerie>" : '<numeroSerie xsi:nil="true"/>';
+            $imei = isset($d['numeroImei']) ? "<numeroImei>{$d['numeroImei']}</numeroImei>" : '<numeroImei xsi:nil="true"/>';
             $detallesXml .= "<detalle><actividadEconomica>{$d['actividadEconomica']}</actividadEconomica><codigoProductoSin>{$d['codigoProductoSin']}</codigoProductoSin><codigoProducto>{$d['codigoProducto']}</codigoProducto><descripcion>{$desc}</descripcion><cantidad>{$d['cantidad']}</cantidad><unidadMedida>{$d['unidadMedida']}</unidadMedida><precioUnitario>{$d['precioUnitario']}</precioUnitario>{$descMonto}<subTotal>{$d['subTotal']}</subTotal>{$serie}{$imei}</detalle>";
         }
 

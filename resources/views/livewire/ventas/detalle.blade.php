@@ -55,13 +55,13 @@
 
         <section class="card card-pad">
             <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="lock" /></span>{{ __('Cobros recibidos') }}</div></div>
-            @forelse ($venta->pagos as $pago)
-                <div class="list-line" wire:key="pago-{{ $pago->id }}">
+            @forelse ($pagos as $indice => $pago)
+                <div class="list-line" wire:key="pago-{{ $indice }}">
                     <div>
-                        <b>{{ Decimal::bs($pago->monto) }}</b> · {{ $pago->metodo->etiqueta() }}
+                        <b @if ($pago['anulado']) style="text-decoration:line-through" @endif>{{ Decimal::bs($pago['monto']) }}</b> · {{ $pago['metodo'] }}@if ($pago['anulado']) <span class="badge">{{ __('Anulado') }}</span>@endif
                         <p class="subtle" style="margin:5px 0 0">
-                            {{ $pago->tipo === 'inicial' ? __('Cobro inicial') : __('Abono') }} · {{ $pago->fecha_cobro->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }} · {{ $pago->receptor->name }}
-                            @if ($pago->metodo->value === 'mixto')<br>{{ __('Efectivo :efectivo · Electrónico :electronico', ['efectivo' => Decimal::bs($pago->monto_efectivo), 'electronico' => Decimal::bs($pago->monto_electronico)]) }}@endif
+                            {{ $pago['concepto'] }} · {{ $pago['fecha']->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }} · {{ $pago['receptor'] }}
+                            @if ($pago['mixto'])<br>{{ __('Efectivo :efectivo · Electrónico :electronico', ['efectivo' => Decimal::bs($pago['efectivo']), 'electronico' => Decimal::bs($pago['electronico'])]) }}@endif
                         </p>
                     </div>
                 </div>
@@ -70,7 +70,7 @@
             @endforelse
             <div class="divider"></div>
             @if (Decimal::comparar($venta->saldo_pendiente, '0', 2) > 0)
-                <div class="notice"><x-icon name="info" /><div><b>{{ __('Saldo :saldo', ['saldo' => Decimal::bs($venta->saldo_pendiente)]) }}</b><p>{{ __('Los abonos se registran en el historial de pagos con su fecha real de cobro.') }}</p><a class="btn soft sm" style="margin-top:10px" href="{{ route('creditos.historial', $venta) }}">{{ __('Historial de pagos y abonar') }} <x-icon name="arrow" size="sm" /></a></div></div>
+                <div class="notice"><x-icon name="info" /><div><b>{{ __('Saldo :saldo', ['saldo' => Decimal::bs($venta->saldo_pendiente)]) }}</b><p>{{ __('Los cobros se registran en el historial de pagos con su fecha real.') }}</p><a class="btn soft sm" style="margin-top:10px" href="{{ route('creditos.historial', $venta) }}">{{ __('Historial de pagos y cobrar') }} <x-icon name="arrow" size="sm" /></a></div></div>
             @else
                 <div class="notice"><x-icon name="check" /><div><b>{{ __('Sin saldo pendiente') }}</b><p>{{ Decimal::comparar($venta->devuelto, '0', 2) > 0 ? __('Los cobros y las devoluciones cubren el total de la venta.') : __('La venta está pagada por completo.') }}</p></div></div>
             @endif

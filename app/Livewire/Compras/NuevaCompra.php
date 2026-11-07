@@ -5,6 +5,7 @@ namespace App\Livewire\Compras;
 use App\Domain\Compras\Actions\RegistrarCompra;
 use App\Domain\Compras\CalculadoraCompra;
 use App\Livewire\Concerns\CapturaProductos;
+use App\Livewire\Concerns\EligeCaja;
 use App\Models\Compra;
 use App\Models\Proveedor;
 use App\Models\Sucursal;
@@ -18,19 +19,26 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * Nueva compra pagada (compra-nueva.html V3). Los importes en pantalla son informativos:
- * RegistrarCompra recalcula el total y valida el pago en el servidor.
+ * Nueva compra (compra-nueva.html V3 y Cuentas por pagar § 13): al contado, a crédito o con
+ * pago parcial; con saldo se abre su cuenta por pagar. Los importes en pantalla son
+ * informativos: RegistrarCompra recalcula el total y valida el pago en el servidor.
  */
 #[Title('Nueva compra')]
 class NuevaCompra extends Component
 {
-    use CapturaProductos;
+    use CapturaProductos, EligeCaja;
 
     public ?string $proveedor_id = null;
 
     public ?string $sucursal_id = null;
 
     public string $referencia = '';
+
+    public string $condicion = 'contado';
+
+    public string $pagado = '';
+
+    public string $vencimiento = '';
 
     public string $metodo = 'efectivo';
 
@@ -52,6 +60,7 @@ class NuevaCompra extends Component
         $this->clave = (string) Str::uuid();
         $primera = Auth::user()?->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
         $this->sucursal_id = $primera === null ? null : (string) $primera;
+        $this->elegirCajaPorDefecto();
     }
 
     /**
@@ -67,12 +76,17 @@ class NuevaCompra extends Component
         $this->resetValidation();
         $this->validate([
             'sucursal_id' => ['required'],
+            'proveedor_id' => ['required'],
             'referencia' => ['nullable', 'string', 'max:150'],
+            'condicion' => ['required', 'in:contado,credito,parcial'],
             'metodo' => ['required', 'in:efectivo,electronico,mixto'],
+            'vencimiento' => [$this->condicion === 'contado' ? 'nullable' : 'required'],
             'lineas' => ['required', 'array', 'min:1'],
         ], [
             'lineas.required' => __('Agrega al menos un producto.'),
             'lineas.min' => __('Agrega al menos un producto.'),
+            'proveedor_id.required' => __('Selecciona el proveedor de la compra.'),
+            'vencimiento.required' => __('La fecha de vencimiento es obligatoria cuando queda saldo pendiente.'),
         ], ['sucursal_id' => __('sucursal'), 'metodo' => __('medio de pago')]);
 
         $this->confirmando = true;
@@ -89,18 +103,24 @@ class NuevaCompra extends Component
 
         /** @var User $actor */
         $actor = Auth::user();
-        $compra = $accion->ejecutar($actor, [
+        $compra = $accion->ejecutar($actor, $this->datosCaja() + [
             'sucursal_id' => $this->sucursal_id === null ? null : (int) $this->sucursal_id,
             'proveedor_id' => blank($this->proveedor_id) ? null : (int) $this->proveedor_id,
             'referencia' => $this->referencia,
             'lineas' => $lineas,
+            'condicion' => $this->condicion,
+            'pagado' => $this->pagado,
+            'vencimiento' => $this->vencimiento === '' ? null : $this->vencimiento,
             'metodo' => $this->metodo,
             'efectivo' => $this->efectivo,
             'electronico' => $this->electronico,
             'clave' => $this->clave,
         ]);
 
-        session()->flash('aviso', __(':codigo registrada: stock ingresado y pago de :importe en caja.', ['codigo' => $compra->codigo(), 'importe' => Decimal::bs($compra->total)]));
+        session()->flash('aviso', $compra->condicion === 'contado'
+            ? __(':codigo registrada: stock ingresado y pago de :importe.', ['codigo' => $compra->codigo(), 'importe' => Decimal::bs($compra->total)])
+            : __(':codigo registrada: stock ingresado, pagado :pagado y :saldo en cuentas por pagar.', ['codigo' => $compra->codigo(),
+                'pagado' => Decimal::bs($compra->pagado), 'saldo' => Decimal::bs(Decimal::restar($compra->total, $compra->pagado, 2))]));
         $this->redirectRoute('compras.ver', $compra, navigate: false);
     }
 
@@ -143,6 +163,11 @@ class NuevaCompra extends Component
             'total' => $total,
             'valido' => $valido,
             'mixto' => $mixto,
+            'aPagar' => match ($this->condicion) {
+                'contado' => $total,
+                'parcial' => Decimal::normalizar($this->pagado, 2) ?? '0.00',
+                default => '0.00',
+            },
         ]);
     }
 }

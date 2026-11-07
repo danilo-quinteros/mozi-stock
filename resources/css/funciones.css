@@ -1,0 +1,30 @@
+/* Configuración → Funciones del negocio (rubros y capacidades). */
+.funciones-lista { display: grid; gap: 8px; border: 0; margin: 16px 0 0; padding: 0; min-width: 0; }
+.funciones-lista legend { display: block; margin-bottom: 8px; padding: 0; }
+.funcion-linea {
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--panel); transition: border-color .2s, background .2s;
+}
+.funcion-linea:hover { border-color: var(--accent-border); }
+.funcion-linea:has(input:checked) { border-color: var(--brand); background: var(--accent-soft); }
+.funcion-linea:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.funcion-linea input { flex: none; margin-top: 2px; width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+.funcion-linea.is-bloqueada { cursor: not-allowed; border-style: dashed; }
+.funcion-linea.is-bloqueada:hover { border-color: var(--border); }
+/* Solo se atenúa la función; el aviso que explica el bloqueo conserva su contraste. */
+.funcion-linea.is-bloqueada input,
+.funcion-linea.is-bloqueada .funcion-texto > :not(.funcion-aviso) { cursor: not-allowed; opacity: .55; }
+.funcion-texto { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.funcion-texto b { color: var(--text-strong); font-size: 12.5px; }
+.funcion-texto .badge { padding: 3px 8px; }
+.funcion-texto small { flex-basis: 100%; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.funcion-texto small.funcion-aviso { color: var(--brand-bright); }
+.funciones-pie { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; }
+.funciones-pie .subtle { margin: 0; line-height: 1.5; }
+.funciones-pie .btn { flex: none; }
+.funciones-resumen .list-line { padding: 11px 0; }
+.funciones-resumen .list-line b { text-align: right; }
+
+@media (max-width: 600px) {
+    .funciones-pie { flex-direction: column; align-items: stretch; }
+}

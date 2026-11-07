@@ -166,7 +166,7 @@ test('the subscriptions screen and its CSV share filters and show only plan data
 test('the superadmin sets price and first due date when creating a company and needs a reason to move it', function () {
     Livewire::actingAs($this->superadmin)->test(Empresas::class)
         ->call('crear')
-        ->set('nombre', 'Tienda Los Pinos')->set('email', 'pinos@ejemplo.test')
+        ->set('nombre', 'Tienda Los Pinos')->set('email', 'pinos@ejemplo.test')->set('rubro', 'general')
         ->set('precio_mensual', '129,50')->set('vencimiento', '2026-11-21')
         ->set('admin_nombre', 'Admin Pinos')->set('admin_email', 'admin@pinos.test')
         ->set('admin_password', 'ClaveSegura12345')->set('admin_password_confirmation', 'ClaveSegura12345')
@@ -218,6 +218,8 @@ test('the private QR is uploaded by the superadmin and shown only to company adm
 });
 
 test('the dashboard and menu warn administrators, not sellers, about the due date', function () {
+    guiaTerminada($this->empresa);
+    guiaTerminada($this->otra);
     $this->actingAs($this->admin)->get(route('dashboard'))->assertOk()
         ->assertSee('Tu suscripción vence en 4 días')->assertSee('Ir a Mi suscripción');
     $this->actingAs($this->vendedor)->get(route('dashboard'))->assertOk()

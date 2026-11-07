@@ -66,13 +66,18 @@ final class ConfiguracionTest extends TestCase
         );
     }
 
+    public function test_acepta_modalidad_electronica(): void
+    {
+        $configuracion = new ConfiguracionSistema('ABC', modalidad: Modalidad::Electronica);
+        $this->assertSame(Modalidad::Electronica, $configuracion->modalidad);
+    }
+
     public function test_no_mezcla_ambiente_y_url(): void
     {
         $casos = [
             fn () => new ConfiguracionSistema('ABC', Ambiente::Produccion),
             fn () => new ConfiguracionSistema('ABC', Ambiente::Pruebas, urlBase: 'https://siatrest.impuestos.gob.bo/sfd/'),
             fn () => new ConfiguracionSistema('ABC', urlBase: 'http://pilotosiatservicios.impuestos.gob.bo/sfd/'),
-            fn () => new ConfiguracionSistema('ABC', modalidad: Modalidad::Electronica),
             fn () => new ConfiguracionSistema('ABC-123'),
             fn () => new ConfiguracionSistema('ABC', segundosRespuesta: 0),
         ];
