@@ -11,6 +11,8 @@ use App\Enums\EstadoPagoSaas;
 use App\Enums\Rol;
 use App\Livewire\Admin\Suscripciones;
 use App\Livewire\Empresa\MiSuscripcion;
+use App\Livewire\Empresa\Sucursales as PantallaSucursales;
+use App\Livewire\Empresa\Usuarios as PantallaUsuarios;
 use App\Models\Empresa;
 use App\Models\PagoSaas;
 use App\Models\Plan;
@@ -247,6 +249,29 @@ test('limits only count the own company and do not apply without a plan', functi
 
     $this->actingAs($this->admin);
     expect(nuevaSucursal($this->admin, 'A1')->exists)->toBeTrue();
+});
+
+test('branches and users screens show how much of the plan is in use', function () {
+    // Sin suscripción no se muestra el cupo.
+    Livewire::test(PantallaUsuarios::class)->assertDontSee('de tu plan');
+
+    suscripcionExtras($this->empresa);
+    Sucursal::factory()->create(['empresa_id' => $this->empresa->id]);
+
+    Livewire::test(PantallaUsuarios::class)
+        ->assertSee('1 de 3 de tu plan')
+        ->assertDontSee('Sumar usuarios');
+    Livewire::test(PantallaSucursales::class)
+        ->assertSee('1 de 1 de tu plan')
+        ->assertSee('Usas la 1 sucursal que incluye tu plan')
+        ->assertSee('Ir a Mi suscripción');
+
+    nuevoUsuario($this->admin, 'dos');
+    nuevoUsuario($this->admin, 'tres');
+    Suscripcion::withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $this->empresa->id)->update(['sucursales_extra' => 1]);
+
+    Livewire::test(PantallaUsuarios::class)->assertSee('3 de 3 de tu plan')->assertSee('Sumar usuarios');
+    Livewire::test(PantallaSucursales::class)->assertSee('1 de 2 de tu plan')->assertDontSee('Ir a Mi suscripción');
 });
 
 test('the company screen shows the bill and walks through paying for extras', function () {

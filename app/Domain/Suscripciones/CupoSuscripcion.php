@@ -48,6 +48,23 @@ final class CupoSuscripcion
         ];
     }
 
+    /**
+     * «X de Y» para las pantallas de Sucursales y Usuarios (sin bloqueo). limite null = sin límite
+     * (o sin plan: entonces no se muestra nada).
+     *
+     * @return array{sucursales: array{uso: int, limite: int|null}, usuarios: array{uso: int, limite: int|null}}
+     */
+    public static function resumen(int $empresaId): array
+    {
+        $limites = self::limites(Suscripcion::withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $empresaId)->with('plan')->first());
+        $uso = self::uso($empresaId);
+
+        return [
+            'sucursales' => ['uso' => $uso['sucursales'], 'limite' => $limites['sucursales']],
+            'usuarios' => ['uso' => $uso['usuarios'], 'limite' => $limites['usuarios']],
+        ];
+    }
+
     public function asegurarSucursalNueva(int $empresaId, string $campo = 'nombre'): void
     {
         $limite = self::limites($this->bloquear($empresaId))['sucursales'];

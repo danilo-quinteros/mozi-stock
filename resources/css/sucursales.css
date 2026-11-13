@@ -3,6 +3,8 @@
 .sc-resumen div{font-size:11.5px;color:var(--muted);display:flex;align-items:baseline;gap:7px}
 .sc-resumen b{font-size:20px;color:var(--text-strong);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
 .sc-resumen .alerta b{color:var(--brand-bright)}
+.sc-resumen .sc-cupo{font-size:10.5px;color:var(--faint);padding:2px 8px;border:1px solid var(--border);border-radius:999px}
+.sc-cupo-aviso{margin-bottom:18px;align-items:center}
 .sc-avisos{display:grid;gap:10px;margin-bottom:18px}
 .notice.sc-aviso{border-color:var(--accent-border);align-items:center}
 .notice.sc-aviso>div{flex:1 1 0;min-width:0}

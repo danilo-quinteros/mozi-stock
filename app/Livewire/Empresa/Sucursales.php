@@ -4,11 +4,13 @@ namespace App\Livewire\Empresa;
 
 use App\Domain\Caja\Actions\GuardarCaja;
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
+use App\Domain\Suscripciones\CupoSuscripcion;
 use App\Domain\Tenancy\Actions\GuardarSucursal;
 use App\Enums\Rol;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Caja;
 use App\Models\Sucursal;
+use App\Models\Suscripcion;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
@@ -354,6 +356,8 @@ class Sucursales extends Component
             'sinCaja' => $vendedores->filter(fn (User $v) => $v->caja_id === null && in_array((int) $v->sucursal_id, $activas, true))->values(),
             'abrio' => $abrio,
             'resumen' => $this->resumen($sucursales, $cajas, $vendedores, $activas),
+            // Sucursales que permite el plan + extras (Mi suscripción); null = sin límite.
+            'cupo' => ['uso' => count($activas), 'limite' => CupoSuscripcion::limites(Suscripcion::query()->with('plan')->first())['sucursales']],
             'confirmando' => $sucursales->firstWhere('id', $this->confirmandoEstadoId),
             'sucursalCaja' => $sucursales->firstWhere('id', $this->cajaSucursalId),
             'cajaEditada' => $cajas->firstWhere('id', $this->editandoCajaId),

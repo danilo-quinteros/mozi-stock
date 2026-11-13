@@ -44,6 +44,11 @@
             $enlace('Reportes generales', 'reportes', 'reportes|reportes.*', 'chart', $administra, 'Reportes'),
         ],
     ];
+    // Despachos (rubro distribuidora): es la pestaña Despachos de Pedidos, con acceso directo en el menú.
+    $conDespachos = $usuario->perteneceAEmpresa() && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::Despachos);
+    $despachosActivo = $conDespachos && request()->routeIs('pedidos.index') && request()->query('pestana') === 'despachos';
+    // Con Despachos abierto, Pedidos no se marca como activo.
+    $esActivo = fn (array $item): bool => request()->routeIs(...explode('|', $item['patron'])) && ! ($despachosActivo && $item['ruta'] === 'pedidos.index');
     $agenteActivo = request()->routeIs('agente-mozi');
     $cuentaActiva = request()->routeIs('*.edit');
     $empresaActiva = request()->routeIs('configuracion', 'configuracion.*', 'suscripcion', 'suscripcion.*', 'facturacion');
@@ -54,11 +59,14 @@
     @can('usar-agente-mozi')
         <a class="nav-item nav-agente {{ $agenteActivo ? 'active' : '' }}" href="{{ route('agente-mozi') }}" title="{{ __('Agente Mozi') }}" @if ($agenteActivo) aria-current="page" @endif><span class="nav-symbol"><x-icon name="sparkles" /></span><span class="nav-text">{{ __('Agente Mozi') }}</span><span class="nav-short">{{ __('Mozi') }}</span></a>
     @endcan
+    @if ($conDespachos)
+        <a class="nav-item {{ $despachosActivo ? 'active' : '' }}" href="{{ route('pedidos.index', ['pestana' => 'despachos']) }}" title="{{ __('Despachos') }}" @if ($despachosActivo) aria-current="page" @endif data-test="nav-despachos"><span class="nav-symbol"><x-icon name="truck" /></span><span class="nav-text">{{ __('Despachos') }}</span><span class="nav-short">{{ __('Despachos') }}</span></a>
+    @endif
     @if ($usuario->perteneceAEmpresa())
         @foreach ($grupos as $grupo => $items)
             @php
                 $items = array_filter($items, fn ($item) => $item['visible']);
-                $abierto = collect($items)->contains(fn ($item) => request()->routeIs(...explode('|', $item['patron'])));
+                $abierto = collect($items)->contains($esActivo);
             @endphp
             @continue($items === [])
             <details class="nav-group {{ $abierto ? 'has-active' : '' }}" @if ($abierto) open @endif>
@@ -66,7 +74,7 @@
                 <div class="nav-subitems">
                     <div class="nav-flyout-title">{{ __($grupo) }}</div>
                     @foreach ($items as $item)
-                        @php($activo = request()->routeIs(...explode('|', $item['patron'])))
+                        @php($activo = $esActivo($item))
                         <a class="nav-item {{ $activo ? 'active' : '' }}" href="{{ route($item['ruta']) }}" title="{{ __($item['etiqueta']) }}" @if ($activo) aria-current="page" @endif><span class="nav-symbol"><x-icon :name="$item['icono']" /></span><span class="nav-text">{{ __($item['etiqueta']) }}</span><span class="nav-short">{{ __($item['corto'] ?? $item['etiqueta']) }}</span></a>
                     @endforeach
                 </div>

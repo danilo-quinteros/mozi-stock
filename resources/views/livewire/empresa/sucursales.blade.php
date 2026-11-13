@@ -29,11 +29,19 @@
         </section>
     @else
         <div class="card sc-resumen">
-            <div><b>{{ $resumen['sucursales'] }}</b>{{ trans_choice('sucursal activa|sucursales activas', $resumen['sucursales']) }}</div>
+            <div><b>{{ $resumen['sucursales'] }}</b>{{ trans_choice('sucursal activa|sucursales activas', $resumen['sucursales']) }}@if ($cupo['limite'] !== null)<small class="sc-cupo" data-test="cupo-sucursales">{{ __(':uso de :limite de tu plan', ['uso' => $cupo['uso'], 'limite' => $cupo['limite']]) }}</small>@endif</div>
             <div><b>{{ $resumen['cajas'] }}</b>{{ trans_choice('caja activa|cajas activas', $resumen['cajas']) }}</div>
             <div><b>{{ $resumen['abiertas'] }}</b>{{ trans_choice('abierta ahora|abiertas ahora', $resumen['abiertas']) }}</div>
             <div @class(['alerta' => $resumen['sin_caja'] > 0])><b>{{ $resumen['sin_caja'] }}</b>{{ trans_choice('vendedor sin caja|vendedores sin caja', $resumen['sin_caja']) }}</div>
         </div>
+
+        @if ($cupo['limite'] !== null && $cupo['uso'] >= $cupo['limite'])
+            <div class="notice sc-cupo-aviso">
+                <x-icon name="info" />
+                <div class="grow"><p>{{ trans_choice('Usas la :count sucursal que incluye tu plan. Para abrir otra, suma una sucursal extra.|Usas las :count sucursales que incluye tu plan. Para abrir otra, suma una sucursal extra.', $cupo['limite']) }}</p></div>
+                <a class="btn soft sm" href="{{ route('suscripcion') }}">{{ __('Ir a Mi suscripción') }}</a>
+            </div>
+        @endif
 
         @if ($sinCaja->isNotEmpty())
             <div class="sc-avisos">

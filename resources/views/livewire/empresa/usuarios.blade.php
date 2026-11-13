@@ -14,7 +14,16 @@
         <article class="card stat">
             <span class="stat-label">{{ __('Usuarios activos') }}</span>
             <div class="stat-value">{{ (int) $conteo->activos }}</div>
-            <div class="stat-foot">{{ __('Con acceso a tu empresa') }}</div>
+            @if ($cupo['limite'] !== null)
+                <div class="stat-foot" data-test="cupo-usuarios">
+                    {{ __(':uso de :limite de tu plan', ['uso' => $cupo['uso'], 'limite' => $cupo['limite']]) }}
+                    @if ($cupo['uso'] >= $cupo['limite'])
+                        · <a class="link" href="{{ route('suscripcion') }}">{{ __('Sumar usuarios') }}</a>
+                    @endif
+                </div>
+            @else
+                <div class="stat-foot">{{ __('Con acceso a tu empresa') }}</div>
+            @endif
         </article>
         <article class="card stat">
             <span class="stat-label">{{ __('Administradores') }}</span>

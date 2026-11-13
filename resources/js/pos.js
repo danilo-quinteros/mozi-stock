@@ -1,3 +1,5 @@
+import { CAJA_MP3_B64 } from './pos-caja-audio.js';
+
 // Atajos del punto de venta (pos.html): F2 enfoca el buscador/escáner y F4 pulsa «Confirmar venta» si está
 // habilitado. Solo enfoca y pulsa botones de la pantalla; importes, stock y cobros los valida el servidor.
 document.addEventListener('keydown', event => {
@@ -37,6 +39,34 @@ document.addEventListener('keydown', event => {
 // Sonidos de Caja Registradora con Web Audio API (Sin archivos externos)
 // ==========================================================================
 let audioCtx = null;
+let bufferCaja = null;
+let promesaBufferCaja = null;
+let ultimoSonidoVentaMs = 0;
+
+function cargarBufferCaja(ctx) {
+    if (bufferCaja) {
+        return Promise.resolve(bufferCaja);
+    }
+    if (! promesaBufferCaja && ctx) {
+        try {
+            const bin = atob(CAJA_MP3_B64);
+            const len = bin.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = bin.charCodeAt(i);
+            }
+            promesaBufferCaja = ctx.decodeAudioData(bytes.buffer)
+                .then(decoded => {
+                    bufferCaja = decoded;
+                    return decoded;
+                })
+                .catch(() => null);
+        } catch (_) {
+            promesaBufferCaja = Promise.resolve(null);
+        }
+    }
+    return promesaBufferCaja || Promise.resolve(null);
+}
 
 function getAudioContext() {
     if (! audioCtx) {
@@ -48,12 +78,18 @@ function getAudioContext() {
     if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
+    if (audioCtx && ! bufferCaja && ! promesaBufferCaja) {
+        cargarBufferCaja(audioCtx);
+    }
     return audioCtx;
 }
 
 // Desbloqueo proactivo en la primera interacción del usuario
 const desbloquearAudio = () => {
-    getAudioContext();
+    const ctx = getAudioContext();
+    if (ctx) {
+        cargarBufferCaja(ctx);
+    }
     document.removeEventListener('pointerdown', desbloquearAudio);
     document.removeEventListener('keydown', desbloquearAudio);
 };
@@ -107,6 +143,105 @@ function sonarCampana(ctx, t, frecuenciaBase = 2093, duracion = 0.45) {
 }
 
 /**
+ * Reproduce la variante 3A de caja registradora al confirmar una venta:
+ * 1) Apertura mecánica completa de la caja (0.025s a 0.38s)
+ * 2) Ataque real de campana filtrado (> 3000 Hz, sin ruido grave de fondo)
+ * 3) Campana de caja registradora con apagado exponencial progresivo (~1.6 s)
+ */
+function reproducirCajaRegistradora3A(ctx, buf) {
+    const t = ctx.currentTime;
+
+    // 1. Apertura completa de la caja (ambos golpes "ka-clack", 0.025s a 0.38s)
+    const srcDrawer = ctx.createBufferSource();
+    srcDrawer.buffer = buf;
+    const gDrawer = ctx.createGain();
+    gDrawer.gain.setValueAtTime(0.95, t);
+    gDrawer.gain.setValueAtTime(0.95, t + 0.335);
+    gDrawer.gain.linearRampToValueAtTime(0.0001, t + 0.365);
+    srcDrawer.connect(gDrawer);
+    gDrawer.connect(ctx.destination);
+    srcDrawer.start(t, 0.025, 0.37);
+
+    // 2. Ataque inicial real de la campana (filtrado > 3000 Hz para eliminar ruido grave/medio)
+    const srcBell = ctx.createBufferSource();
+    srcBell.buffer = buf;
+
+    const hp1 = ctx.createBiquadFilter();
+    hp1.type = 'highpass';
+    hp1.frequency.setValueAtTime(3000, t);
+    hp1.Q.setValueAtTime(0.707, t);
+
+    const hp2 = ctx.createBiquadFilter();
+    hp2.type = 'highpass';
+    hp2.frequency.setValueAtTime(3000, t);
+    hp2.Q.setValueAtTime(0.707, t);
+
+    const hp3 = ctx.createBiquadFilter();
+    hp3.type = 'highpass';
+    hp3.frequency.setValueAtTime(3000, t);
+    hp3.Q.setValueAtTime(0.707, t);
+
+    const gBell = ctx.createGain();
+    gBell.gain.setValueAtTime(0.0001, t + 0.33);
+    gBell.gain.linearRampToValueAtTime(1.10, t + 0.355);
+    gBell.gain.setTargetAtTime(0.00001, t + 0.38, 0.085);
+
+    srcBell.connect(hp1);
+    hp1.connect(hp2);
+    hp2.connect(hp3);
+    hp3.connect(gBell);
+    gBell.connect(ctx.destination);
+    srcBell.start(t + 0.33, 0.365, 0.48);
+
+    // 3. Campana de caja registradora con apagado progresivo suave (~1.6 s)
+    const tBell = t + 0.35;
+    const tauBase = 0.22;
+
+    try {
+        const oscGolpe = ctx.createOscillator();
+        const gananciaGolpe = ctx.createGain();
+        oscGolpe.type = 'triangle';
+        oscGolpe.frequency.setValueAtTime(4800, tBell);
+        oscGolpe.frequency.exponentialRampToValueAtTime(1400, tBell + 0.022);
+        gananciaGolpe.gain.setValueAtTime(0.20, tBell);
+        gananciaGolpe.gain.exponentialRampToValueAtTime(0.0001, tBell + 0.022);
+        oscGolpe.connect(gananciaGolpe);
+        gananciaGolpe.connect(ctx.destination);
+        oscGolpe.start(tBell);
+        oscGolpe.stop(tBell + 0.025);
+    } catch (_) {}
+
+    const parcialesCaja = [
+        { freq: 3135.96, gain: 0.16, tauFactor: 1.05 },
+        { freq: 3142.50, gain: 0.13, tauFactor: 0.98 },
+        { freq: 4185.00, gain: 0.12, tauFactor: 0.90 },
+        { freq: 6271.90, gain: 0.06, tauFactor: 0.55 },
+        { freq: 1567.98, gain: 0.04, tauFactor: 1.15 }
+    ];
+
+    const maxStop = tBell + tauBase * 8.5;
+
+    parcialesCaja.forEach(({ freq, gain, tauFactor }) => {
+        try {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            const tau = tauBase * (tauFactor || 1.0);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, tBell);
+
+            g.gain.setValueAtTime(0.0001, tBell);
+            g.gain.linearRampToValueAtTime(gain, tBell + 0.003);
+            g.gain.setTargetAtTime(0.000001, tBell + 0.004, tau);
+
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(tBell);
+            osc.stop(tBell + Math.min(maxStop - tBell, tau * 8.5));
+        } catch (_) {}
+    });
+}
+
+/**
  * Sonido "Trin": cuando se agrega un producto al carrito.
  */
 export function sonarTrin() {
@@ -120,17 +255,28 @@ export function sonarTrin() {
 }
 
 /**
- * Sonido "Trin Trin": cuando se confirma y finaliza una venta.
+ * Sonido de Caja Registradora (3A): cuando se confirma y finaliza una venta.
  */
 export function sonarTrinTrin() {
     try {
+        const ahoraMs = performance.now();
+        if (ahoraMs - ultimoSonidoVentaMs < 80) {
+            return;
+        }
+        ultimoSonidoVentaMs = ahoraMs;
+
         const ctx = getAudioContext();
         if (! ctx) return;
-        const ahora = ctx.currentTime;
-        // Primer "Trin"
-        sonarCampana(ctx, ahora, 2093, 0.38);
-        // Segundo "Trin" (un poco más agudo y con mayor brillo/eco)
-        sonarCampana(ctx, ahora + 0.13, 2349, 0.65);
+
+        if (bufferCaja) {
+            reproducirCajaRegistradora3A(ctx, bufferCaja);
+        } else {
+            cargarBufferCaja(ctx).then(buf => {
+                if (buf) {
+                    reproducirCajaRegistradora3A(ctx, buf);
+                }
+            });
+        }
     } catch (e) {
         console.warn('Audio no disponible:', e);
     }

@@ -3,6 +3,7 @@
 namespace App\Livewire\Empresa;
 
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
+use App\Domain\Suscripciones\CupoSuscripcion;
 use App\Enums\Capacidad;
 use App\Enums\Rol;
 use App\Livewire\Concerns\MuestraAvisos;
@@ -187,6 +188,7 @@ class Usuarios extends Component
                 ->orderBy('name')
                 ->paginate(25),
             'conteo' => $conteo,
+            'cupo' => CupoSuscripcion::resumen((int) $empresaId)['usuarios'],
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
             'cajasDisponibles' => ($this->sucursal_id && ctype_digit($this->sucursal_id))
                 ? Caja::query()->where('sucursal_id', (int) $this->sucursal_id)->where('activa', true)->orderByDesc('es_principal')->orderBy('nombre')->get(['id', 'nombre', 'es_principal'])
