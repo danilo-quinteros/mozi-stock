@@ -9,13 +9,23 @@
     "isEntry": true
   },
   "resources/css/app.css": {
-    "file": "assets/app-Bjcq_lad.css",
+    "file": "assets/app-CFt0icfk.css",
     "name": "app",
     "names": [
       "app.css"
     ],
     "src": "resources/css/app.css",
-    "isEntry": true
+    "isEntry": true,
+    "assets": [
+      "assets/space-grotesk-latin-BhU9QXUp.woff2",
+      "assets/space-grotesk-latin-ext-D9tNdqV9.woff2",
+      "assets/ibm-plex-mono-400-latin-B6RhGwqP.woff2",
+      "assets/ibm-plex-mono-400-latin-ext-BAy4Vx0-.woff2",
+      "assets/ibm-plex-mono-500-latin-DCk7SIos.woff2",
+      "assets/ibm-plex-mono-500-latin-ext-DWtoqVZb.woff2",
+      "assets/ibm-plex-mono-600-latin-BIgdCK9e.woff2",
+      "assets/ibm-plex-mono-600-latin-ext-Zgpisk-P.woff2"
+    ]
   },
   "resources/css/pos.css": {
     "file": "assets/pos-u2zM5Dge.css",
@@ -34,6 +44,38 @@
     ],
     "src": "resources/css/sitio.css",
     "isEntry": true
+  },
+  "resources/fonts/ibm-plex-mono-400-latin-ext.woff2": {
+    "file": "assets/ibm-plex-mono-400-latin-ext-BAy4Vx0-.woff2",
+    "src": "resources/fonts/ibm-plex-mono-400-latin-ext.woff2"
+  },
+  "resources/fonts/ibm-plex-mono-400-latin.woff2": {
+    "file": "assets/ibm-plex-mono-400-latin-B6RhGwqP.woff2",
+    "src": "resources/fonts/ibm-plex-mono-400-latin.woff2"
+  },
+  "resources/fonts/ibm-plex-mono-500-latin-ext.woff2": {
+    "file": "assets/ibm-plex-mono-500-latin-ext-DWtoqVZb.woff2",
+    "src": "resources/fonts/ibm-plex-mono-500-latin-ext.woff2"
+  },
+  "resources/fonts/ibm-plex-mono-500-latin.woff2": {
+    "file": "assets/ibm-plex-mono-500-latin-DCk7SIos.woff2",
+    "src": "resources/fonts/ibm-plex-mono-500-latin.woff2"
+  },
+  "resources/fonts/ibm-plex-mono-600-latin-ext.woff2": {
+    "file": "assets/ibm-plex-mono-600-latin-ext-Zgpisk-P.woff2",
+    "src": "resources/fonts/ibm-plex-mono-600-latin-ext.woff2"
+  },
+  "resources/fonts/ibm-plex-mono-600-latin.woff2": {
+    "file": "assets/ibm-plex-mono-600-latin-BIgdCK9e.woff2",
+    "src": "resources/fonts/ibm-plex-mono-600-latin.woff2"
+  },
+  "resources/fonts/space-grotesk-latin-ext.woff2": {
+    "file": "assets/space-grotesk-latin-ext-D9tNdqV9.woff2",
+    "src": "resources/fonts/space-grotesk-latin-ext.woff2"
+  },
+  "resources/fonts/space-grotesk-latin.woff2": {
+    "file": "assets/space-grotesk-latin-BhU9QXUp.woff2",
+    "src": "resources/fonts/space-grotesk-latin.woff2"
   },
   "resources/js/agente-mozi.js": {
     "file": "assets/agente-mozi-Do4wGrYL.js",

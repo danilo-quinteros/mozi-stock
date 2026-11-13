@@ -20,6 +20,7 @@
 @import './sin-stock.css';
 @import './lotes.css';
 @import './variantes.css';
+@import './tipografia.css';
 @import './custom.css';
 
 @source '../views';
@@ -31,6 +32,7 @@
 
 @theme {
     --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 
     --color-zinc-50: #fafafa;
     --color-zinc-100: #f5f5f5;

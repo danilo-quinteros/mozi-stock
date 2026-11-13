@@ -1,0 +1,56 @@
+/*
+ * Tipografía corporativa. El cuerpo sigue en Inter (mozistock.css); aquí solo se añaden:
+ *  - Space Grotesk para títulos, marca y cifras destacadas.
+ *  - IBM Plex Mono para textos pequeños de apoyo, cabeceras de tabla, códigos e importes en tablas.
+ * Las fuentes se sirven desde el propio servidor (resources/fonts, licencia OFL): sin peticiones a terceros.
+ */
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("../fonts/space-grotesk-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("../fonts/space-grotesk-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/ibm-plex-mono-400-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/ibm-plex-mono-400-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;font-display:swap;src:url("../fonts/ibm-plex-mono-500-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;font-display:swap;src:url("../fonts/ibm-plex-mono-500-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:600;font-display:swap;src:url("../fonts/ibm-plex-mono-600-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:600;font-display:swap;src:url("../fonts/ibm-plex-mono-600-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
+:root{
+    --font-display:"Space Grotesk",Inter,ui-sans-serif,system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+
+/* Títulos y marca */
+h1,h2,h3,h4,
+.brand-name,.heading,.modal-head h2,.login-box h1,
+.sub-card-title,.fit-title,.rapid-title,.section-heading,.credit-heading,.pos-title,.pos-pay-title,
+.sc-suc-title,.selling-type-title,.visual-title,.nav-flyout-title{
+    font-family:var(--font-display);
+}
+/* Space Grotesk es más ancha que Inter: el tracking muy negativo de los títulos se suaviza. */
+h1{letter-spacing:-.035em}
+.brand-name{letter-spacing:-.04em}
+
+/* Cifras destacadas (KPI, totales) */
+.stat-value,.callout-number,.lienzo-kpi .valor,.total-number,.invoice-total,.quote-total,
+.caja-monto,.caja-monto-hero,.inicio-monto,.ventas-neto-total,.cocina-panel-total{
+    font-family:var(--font-display);
+    font-variant-numeric:tabular-nums;
+}
+.stat-value{letter-spacing:-.035em}
+
+/* Textos pequeños de apoyo y etiquetas técnicas */
+.nav-label,.brand-sub,.eyebrow,.nav-group-title,
+th,td small,.table-footer,.sku-cell,.kbd-quiet,
+code,kbd,samp,.mono{
+    font-family:var(--font-mono);
+}
+.eyebrow{letter-spacing:.12em}
+/* La mono es más ancha: menos tracking y sin cortes de línea en el menú lateral. */
+.brand-sub{letter-spacing:.1em;white-space:nowrap}
+.nav-group-title{letter-spacing:.03em;white-space:nowrap}
+th{letter-spacing:.06em}
+
+/* Importes y cantidades en tablas: monoespaciada para que las columnas alineen. */
+td.num,td.right,td.der,th.num,.variante-total{
+    font-family:var(--font-mono);
+    font-variant-numeric:tabular-nums;
+}
