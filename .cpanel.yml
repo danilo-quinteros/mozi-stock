@@ -9,6 +9,6 @@ deployment:
     - export PHP=/opt/cpanel/ea-php85/root/usr/bin/php
     - /bin/rsync -a --exclude='.git' --exclude='.cpanel.yml' --exclude='.env' --exclude='/storage/' --exclude='/vendor/' --exclude='/bootstrap/cache/' --exclude='/public/.htaccess' ./ $DEPLOYPATH
     # Bluehost no trae Composer: se usa ~/composer.phar si existe; si no, se conserva el vendor actual.
-    - cd $DEPLOYPATH && if [ -f $HOME/composer.phar ]; then $PHP $HOME/composer.phar install --no-dev --optimize-autoloader --no-interaction; else echo "Sin ~/composer.phar: se conserva vendor"; fi
+    - cd $DEPLOYPATH && if [ -f $HOME/composer.phar ]; then $PHP $HOME/composer.phar install --no-dev --optimize-autoloader --no-interaction; else echo "Sin composer.phar, se conserva vendor"; fi
     - cd $DEPLOYPATH && $PHP artisan migrate --force
     - cd $DEPLOYPATH && $PHP artisan optimize:clear
