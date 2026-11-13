@@ -1,0 +1,77 @@
+{
+  "resources/css/agente-mozi.css": {
+    "file": "assets/agente-mozi-DfiS6LB_.css",
+    "name": "agente-mozi",
+    "names": [
+      "agente-mozi.css"
+    ],
+    "src": "resources/css/agente-mozi.css",
+    "isEntry": true
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-Bjcq_lad.css",
+    "name": "app",
+    "names": [
+      "app.css"
+    ],
+    "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/css/pos.css": {
+    "file": "assets/pos-u2zM5Dge.css",
+    "name": "pos",
+    "names": [
+      "pos.css"
+    ],
+    "src": "resources/css/pos.css",
+    "isEntry": true
+  },
+  "resources/css/sitio.css": {
+    "file": "assets/sitio-K-w_rBpO.css",
+    "name": "sitio",
+    "names": [
+      "sitio.css"
+    ],
+    "src": "resources/css/sitio.css",
+    "isEntry": true
+  },
+  "resources/js/agente-mozi.js": {
+    "file": "assets/agente-mozi-Do4wGrYL.js",
+    "name": "agente-mozi",
+    "src": "resources/js/agente-mozi.js",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/agente-mozi/echarts.js"
+    ]
+  },
+  "resources/js/agente-mozi/echarts.js": {
+    "file": "assets/echarts-sAf74GZY.js",
+    "name": "echarts",
+    "src": "resources/js/agente-mozi/echarts.js",
+    "isDynamicEntry": true
+  },
+  "resources/js/app.js": {
+    "file": "assets/app-8wCa8DF4.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/passkeys.js": {
+    "file": "assets/passkeys-ZWACIUjA.js",
+    "name": "passkeys",
+    "src": "resources/js/passkeys.js",
+    "isEntry": true
+  },
+  "resources/js/pos.js": {
+    "file": "assets/pos-OFIvRH-F.js",
+    "name": "pos",
+    "src": "resources/js/pos.js",
+    "isEntry": true
+  },
+  "resources/js/sitio.js": {
+    "file": "assets/sitio--BDi6_Sh.js",
+    "name": "sitio",
+    "src": "resources/js/sitio.js",
+    "isEntry": true
+  }
+}

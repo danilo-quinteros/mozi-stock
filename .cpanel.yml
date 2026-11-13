@@ -1,0 +1,13 @@
+---
+# Despliegue desde cPanel › Git Version Control › «Deploy HEAD Commit».
+# Copia el repositorio (Laravel) a ~/mozistock sin tocar .env, storage ni el .htaccess de public
+# (Bluehost escribe ahí la versión de PHP), instala dependencias y migra con PHP 8.5.
+# No borra archivos del servidor: lo eliminado del repositorio queda allí hasta borrarlo a mano.
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/mozistock/
+    - export PHP=/opt/cpanel/ea-php85/root/usr/bin/php
+    - /bin/rsync -a --exclude='.git' --exclude='.cpanel.yml' --exclude='.env' --exclude='/storage/' --exclude='/vendor/' --exclude='/bootstrap/cache/' --exclude='/public/.htaccess' ./ $DEPLOYPATH
+    - cd $DEPLOYPATH && $PHP /opt/cpanel/composer/bin/composer install --no-dev --optimize-autoloader --no-interaction
+    - cd $DEPLOYPATH && $PHP artisan migrate --force
+    - cd $DEPLOYPATH && $PHP artisan optimize:clear
