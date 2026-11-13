@@ -3,6 +3,8 @@
 use App\Domain\SitioWeb\CatalogoPaginas;
 use App\Models\AjusteGlobal;
 use App\Models\PaginaWeb;
+use App\Models\Plan;
+use Illuminate\Support\Str;
 
 /**
  * @return list<array<string, mixed>>
@@ -83,6 +85,46 @@ test('home and pricing publish the real plan prices in BOB', function (string $c
         ->and(collect($app['offers'])->pluck('priceCurrency')->unique()->all())->toBe(['BOB'])
         ->and($html)->toContain('<b>150</b>')->toContain('<b>300</b>');
 })->with(['inicio', 'precios']);
+
+test('three plans show in three columns and the AI plan card carries the agent', function () {
+    Plan::factory()->agenteIa()->create(['codigo' => 'agente-ia', 'orden' => 3]);
+
+    $html = $this->get(route('sitio.precios'))->assertOk()->getContent();
+    $app = collect(bloquesJsonLd($html)[0]['@graph'])->firstWhere('@type', 'SoftwareApplication');
+
+    expect($html)->toContain('class="plans is-3"')
+        ->toContain('SIAT + Agente IA')
+        ->toContain('Con agente de IA')
+        ->toContain('Mozi, tu agente de IA, dentro del sistema')
+        ->toContain('Todo el plan Inventario + SIAT')
+        ->toContain('href="'.route('registro', ['plan' => 'agente-ia']).'"')
+        ->and(collect($app['offers'])->pluck('price')->all())->toBe(['150.00', '300.00', '599.00']);
+
+    // El agente solo aparece en la tarjeta del plan que lo incluye, no en la base.
+    $primera = Str::before(Str::after($html, '<article class="plan reveal"'), '</article>');
+    expect($primera)->not->toContain('agente de IA');
+});
+
+test('with two plans the grid keeps two columns', function () {
+    expect($this->get(route('sitio.precios'))->getContent())->toContain('class="plans"')->not->toContain('is-3');
+});
+
+test('the AI page is now the agent page and the old URL redirects permanently', function () {
+    $this->get('/asistente-ia')->assertStatus(301)->assertRedirect(route('sitio.agente-ia'));
+
+    $html = $this->get(route('sitio.agente-ia'))->assertOk()->getContent();
+    expect($html)->toContain('agente de IA')
+        ->and(CatalogoPaginas::buscar('agente-ia')->url())->toEndWith('/agente-ia');
+});
+
+test('the rename migration keeps the SEO already edited for the AI page', function () {
+    (new PaginaWeb)->forceFill(['clave' => 'asistente-ia', 'titulo_seo' => 'Mi título editado'])->save();
+
+    (require database_path('migrations/2026_11_11_110000_rename_asistente_ia_pagina_web.php'))->up();
+
+    expect(PaginaWeb::query()->where('clave', 'asistente-ia')->exists())->toBeFalse()
+        ->and(PaginaWeb::query()->where('clave', 'agente-ia')->value('titulo_seo'))->toBe('Mi título editado');
+});
 
 test('pages with questions publish exactly one FAQPage', function (string $clave) {
     $html = $this->get(route(CatalogoPaginas::buscar($clave)->nombreRuta()))->assertOk()->getContent();

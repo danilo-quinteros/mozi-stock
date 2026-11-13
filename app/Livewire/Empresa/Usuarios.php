@@ -3,6 +3,7 @@
 namespace App\Livewire\Empresa;
 
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
+use App\Enums\Capacidad;
 use App\Enums\Rol;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Caja;
@@ -10,6 +11,7 @@ use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Locked;
@@ -48,6 +50,9 @@ class Usuarios extends Component
     public string $password_confirmation = '';
 
     public bool $activo = true;
+
+    /** Permiso de almacén (Despachos): el vendedor puede despachar las ventas de su sucursal. */
+    public bool $puede_despachar = false;
 
     public function mount(): void
     {
@@ -100,6 +105,7 @@ class Usuarios extends Component
         $this->sucursal_id = $usuario->sucursal_id === null ? null : (string) $usuario->sucursal_id;
         $this->caja_id = $usuario->caja_id === null ? null : (string) $usuario->caja_id;
         $this->activo = $usuario->activo;
+        $this->puede_despachar = $usuario->puede_despachar;
         $this->formularioAbierto = true;
     }
 
@@ -117,6 +123,7 @@ class Usuarios extends Component
             'password' => [$this->editandoId === null ? 'required' : 'nullable', 'string',
                 Password::min(12)->letters()->numbers(), 'confirmed'],
             'activo' => ['boolean'],
+            'puede_despachar' => ['boolean'],
         ], [
             'sucursal_id.required' => __('El vendedor necesita una sucursal asignada.'),
             'sucursal_id.exists' => __('Selecciona una sucursal activa de tu empresa.'),
@@ -138,6 +145,8 @@ class Usuarios extends Component
             'caja_id' => $this->caja_id === null || $this->caja_id === '' ? null : (int) $this->caja_id,
             'password' => $this->password,
             'activo' => $this->activo,
+            // La acción solo lo aplica a vendedores y con la capacidad «despachos» activa.
+            'puede_despachar' => $this->puede_despachar,
         ];
 
         if ($this->editandoId === null) {
@@ -183,6 +192,7 @@ class Usuarios extends Component
                 ? Caja::query()->where('sucursal_id', (int) $this->sucursal_id)->where('activa', true)->orderByDesc('es_principal')->orderBy('nombre')->get(['id', 'nombre', 'es_principal'])
                 : collect(),
             'editandoPropiaCuenta' => $this->editandoId === $this->actor()->id,
+            'conDespachos' => Gate::allows('capacidad', Capacidad::Despachos),
         ]);
     }
 
@@ -196,7 +206,7 @@ class Usuarios extends Component
 
     private function limpiarFormulario(): void
     {
-        $this->reset('editandoId', 'name', 'email', 'rol', 'sucursal_id', 'caja_id', 'password', 'password_confirmation', 'activo');
+        $this->reset('editandoId', 'name', 'email', 'rol', 'sucursal_id', 'caja_id', 'password', 'password_confirmation', 'activo', 'puede_despachar');
         $this->resetValidation();
     }
 

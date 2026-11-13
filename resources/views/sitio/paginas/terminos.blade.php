@@ -12,7 +12,7 @@
                 <p class="updated">Última actualización: 6 de noviembre de 2026.</p>
 
                 <h2>1. El servicio</h2>
-                <p>MoziStock es un sistema web de gestión comercial (inventario, ventas, cobros, caja, reportes, facturación en línea con el SIAT y asistente de inteligencia artificial) que MoziStudios ofrece como servicio por suscripción. Al crear una cuenta o usar el sistema aceptas estos términos en nombre de tu empresa.</p>
+                <p>MoziStock es un sistema web de gestión comercial (inventario, ventas, cobros, caja, reportes, facturación en línea con el SIAT y agente de inteligencia artificial) que MoziStudios ofrece como servicio por suscripción. Al crear una cuenta o usar el sistema aceptas estos términos en nombre de tu empresa.</p>
 
                 <h2>2. Cuenta y usuarios</h2>
                 <ul>
@@ -35,8 +35,8 @@
                 <h2>5. Facturación SIAT</h2>
                 <p>La facturación en línea está disponible en el plan que la incluye y requiere que tu empresa esté habilitada ante el Servicio de Impuestos Nacionales (SIN) y que sus datos fiscales sean correctos. Tu empresa es responsable del contenido de cada factura que emite y del cumplimiento de sus obligaciones tributarias. MoziStock transmite las facturas al SIAT según la normativa vigente, pero no reemplaza el asesoramiento de un contador.</p>
 
-                <h2>6. Asistente de inteligencia artificial</h2>
-                <p>El asistente Mozi responde a partir de los datos de tu empresa y de los permisos de tu usuario. Sus análisis, pronósticos y sugerencias son de apoyo: las decisiones comerciales son tuyas. Mozi no ejecuta operaciones sin tu confirmación ni realiza acciones fiscales ante el SIN. El uso puede tener límites diarios por empresa.</p>
+                <h2>6. Agente de inteligencia artificial</h2>
+                <p>El agente Mozi responde a partir de los datos de tu empresa y de los permisos de tu usuario. Sus análisis, pronósticos y sugerencias son de apoyo: las decisiones comerciales son tuyas. Mozi no ejecuta operaciones sin tu confirmación ni realiza acciones fiscales ante el SIN. El uso puede tener límites diarios por empresa.</p>
 
                 <h2>7. Tus datos</h2>
                 <p>Los datos que registras son de tu empresa. MoziStudios los trata según la <a href="{{ route('sitio.privacidad') }}">política de privacidad</a>, solo para prestar el servicio, y nunca los comparte con otras empresas usuarias. Puedes descargar tu información en CSV desde el sistema.</p>
@@ -51,7 +51,7 @@
                 <p>Trabajamos para que MoziStock esté disponible de forma continua, pero puede haber interrupciones por mantenimiento, fallas de internet o de servicios externos, incluido el SIAT. Brindamos soporte por WhatsApp y correo electrónico.</p>
 
                 <h2>10. Responsabilidad</h2>
-                <p>MoziStudios no responde por pérdidas derivadas de información incorrecta registrada por los usuarios, del mal uso de las credenciales ni de decisiones comerciales tomadas a partir de los reportes o del asistente de IA.</p>
+                <p>MoziStudios no responde por pérdidas derivadas de información incorrecta registrada por los usuarios, del mal uso de las credenciales ni de decisiones comerciales tomadas a partir de los reportes o del agente de IA.</p>
 
                 <h2>11. Cambios a estos términos</h2>
                 <p>Podemos actualizar estos términos. Publicaremos la nueva versión en esta página con su fecha de actualización y, si el cambio es importante, te avisaremos dentro del sistema.</p>

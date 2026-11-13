@@ -2,20 +2,21 @@
 
 namespace App\Domain\Reportes\Consultas;
 
+use App\Models\Producto;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Stock actual de cada producto activo en cada sucursal activa, con su mínimo efectivo.
- * Un producto sin movimientos en una sucursal figura con 0.
+ * Un producto sin movimientos en una sucursal figura con 0. Los productos sin control de
+ * stock no figuran: no tienen stock que informar (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 3).
  */
 final class InventarioSucursales
 {
     public static function consulta(int $empresaId, ?int $sucursalId = null, string $buscar = '', bool $soloAlertas = false): Builder
     {
         $termino = trim($buscar);
-        $patron = '%'.addcslashes($termino, '\\%_').'%';
 
         return DB::table('productos as p')
             ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.empresa_id', '=', 'p.empresa_id')->where('s.activa', true))
@@ -25,12 +26,9 @@ final class InventarioSucursales
                 ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
             ->where('p.empresa_id', $empresaId)
             ->where('p.activo', true)
+            ->where('p.controla_stock', true)
             ->when($sucursalId !== null, fn (Builder $q) => $q->where('s.id', $sucursalId))
-            ->when($termino !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
-                ->where('p.nombre', 'like', $patron)
-                ->orWhere('p.sku', 'like', $patron)
-                ->orWhere('p.contenido', 'like', $patron)
-                ->orWhereRaw("CONCAT_WS(' ', p.nombre, p.contenido, u.abreviatura) LIKE ?", [$patron])))
+            ->when($termino !== '', fn (Builder $q) => Producto::filtrarPorTexto($q, $termino, 'p', 'u'))
             ->when($soloAlertas, fn (Builder $q) => $q
                 ->whereRaw('COALESCE(sn.stock_minimo, p.stock_minimo) > 0')
                 ->whereRaw('COALESCE(sn.cantidad, 0) <= COALESCE(sn.stock_minimo, p.stock_minimo)'))

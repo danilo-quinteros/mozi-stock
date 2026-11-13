@@ -29,6 +29,15 @@
 /* Barra superior: la píldora de caja no parte su texto; «+N» avisa de otras cajas abiertas del administrador. */
 .top-caja-pill{white-space:nowrap}
 .top-caja-mas{color:var(--brand-bright)}
+/* En pantallas angostas la píldora cede el espacio que falta: el nombre de la caja se recorta con «…» (completo en el
+   title) para que la barra quepa sin desplazamiento horizontal. Bajo 420 px se oculta «Cerrada»: el estado ya lo
+   indican el punto de color y el botón «Abrir caja» / «Cerrar caja». */
+.top-caja{min-width:0;flex:0 1 auto}
+.top-caja-container,.top-caja-pill{min-width:0;max-width:100%}
+.top-caja-pill>*{flex-shrink:0}
+.top-caja-pill>.top-caja-nombre{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:760px){.top-caja{margin:0 6px}}
+@media(max-width:420px){.top-caja-estado{display:none}}
 .caja-nombre{font-weight:760;color:var(--text-strong);font-size:14px;margin-bottom:3px}
 .caja-etiqueta{font-size:11px;color:var(--muted);font-weight:640}
 .caja-monto{font-size:24px;font-weight:830;letter-spacing:-.04em;color:var(--text-strong);font-variant-numeric:tabular-nums;margin-top:3px}

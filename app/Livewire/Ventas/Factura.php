@@ -73,12 +73,18 @@ class Factura extends Component
     {
         $venta = $this->venta();
         Gate::forUser($this->actor())->authorize('facturacion-siat', $this->empresa($venta));
+
+        $this->abrirFormulario('emitir', null, DatosFactura::sugeridos($venta->cliente, $this->metodoDeLaVenta($venta)));
+    }
+
+    /** Método de pago fiscal según el pago inicial de la venta (o pago posterior si quedó saldo). */
+    private function metodoDeLaVenta(Venta $venta): ?int
+    {
         $configuracion = DeEmpresa::consulta(SiatConfiguracion::class, $venta->empresa_id)->first();
         $inicial = DeEmpresa::consulta(PagoVenta::class, $venta->empresa_id)->where('venta_id', $venta->id)->where('tipo', 'inicial')->first();
-        $metodo = DatosFactura::metodoSugerido($venta->empresa_id, $inicial?->metodo,
-            Decimal::comparar((string) $venta->saldo_pendiente, '0', 2) > 0, $configuracion?->metodo_pago_electronico);
 
-        $this->abrirFormulario('emitir', null, DatosFactura::sugeridos($venta->cliente, $metodo));
+        return DatosFactura::metodoSugerido($venta->empresa_id, $inicial?->metodo,
+            Decimal::comparar((string) $venta->saldo_pendiente, '0', 2) > 0, $configuracion?->metodo_pago_electronico);
     }
 
     public function abrirCorreccion(int $id): void
@@ -91,7 +97,8 @@ class Factura extends Component
             'numero_documento' => $factura->numero_documento,
             'complemento' => (string) $factura->complemento,
             'razon_social' => $factura->razon_social,
-            'metodo_pago' => (string) $factura->metodo_pago,
+            // Si la factura quedó sin método fiscal (venta hecha sin catálogos), se propone el de la venta.
+            'metodo_pago' => (string) ($factura->metodo_pago ?? $this->metodoDeLaVenta($this->venta())),
             'tarjeta_inicio' => $factura->numero_tarjeta === null ? '' : substr($factura->numero_tarjeta, 0, 4),
             'tarjeta_fin' => $factura->numero_tarjeta === null ? '' : substr($factura->numero_tarjeta, -4),
             'nit_sin_validar' => $factura->codigo_excepcion === 1 && $factura->numero_documento !== DatosFactura::SIN_DATOS_DOCUMENTO,

@@ -74,6 +74,46 @@ test('T01 two companies may use the same SKU but one company may not repeat it',
     expect(Producto::withoutGlobalScopes()->where('sku', 'BEB-001')->count())->toBe(2);
 });
 
+test('con «Auto» el SKU se genera al guardar (POLERA → POL-001), salta códigos usados y cada empresa numera aparte', function () {
+    $base = ['unidad_medida_id' => (string) $this->unidad->id, 'precio_consumidor' => '50'];
+    $sku = fn (string $nombre): ?string => Producto::query()->where('nombre', $nombre)->value('sku');
+
+    // Nuevo producto: «Auto» encendido, campo deshabilitado con «Automático».
+    Livewire::test(ProductoFormulario::class)
+        ->assertSet('sku_auto', true)
+        ->assertSeeHtml('placeholder="Automático"');
+
+    crearProductoDesdePantalla(['nombre' => 'POLERA'] + $base)->assertHasNoErrors();
+    productoDe($this->empresa, ['nombre' => 'Polera cargada a mano', 'sku' => 'POL-002']);
+    crearProductoDesdePantalla(['nombre' => 'Polera manga larga'] + $base)->assertHasNoErrors();
+    crearProductoDesdePantalla(['nombre' => 'Té verde'] + $base)->assertHasNoErrors();
+    crearProductoDesdePantalla(['nombre' => 'Gaseosa', 'sku_auto' => false, 'sku' => 'gas-9'] + $base)->assertHasNoErrors();
+
+    expect($sku('POLERA'))->toBe('POL-001')
+        ->and($sku('Polera manga larga'))->toBe('POL-003')
+        ->and($sku('Té verde'))->toBe('TEV-001')
+        ->and($sku('Gaseosa'))->toBe('GAS-9');
+
+    // Al editar un producto con código, «Auto» viene apagado y el código se conserva.
+    Livewire::test(ProductoFormulario::class, ['producto' => Producto::query()->where('nombre', 'Gaseosa')->sole()])
+        ->assertSet('sku_auto', false)
+        ->assertSet('sku', 'GAS-9')
+        // Encender «Auto» vacía el campo; apagarlo devuelve el código que tenía.
+        ->set('sku_auto', true)
+        ->assertSet('sku', '')
+        ->set('sku_auto', false)
+        ->assertSet('sku', 'GAS-9');
+
+    [$empresaB, $adminB] = empresaConAdministrador();
+    $this->actingAs($adminB);
+    $unidadB = new UnidadMedida(UnidadMedida::BASE[0]);
+    $unidadB->empresa_id = $empresaB->id;
+    $unidadB->save();
+    crearProductoDesdePantalla(['nombre' => 'Polera', 'unidad_medida_id' => (string) $unidadB->id, 'precio_consumidor' => '50'])->assertHasNoErrors();
+
+    expect(Producto::withoutGlobalScopes()->where('empresa_id', $empresaB->id)->value('sku'))->toBe('POL-001');
+});
+
 test('prices must be non-negative with at most two decimals', function (string $precio) {
     crearProductoDesdePantalla(['nombre' => 'X', 'sku' => 'X-1', 'unidad_medida_id' => (string) $this->unidad->id, 'precio_consumidor' => $precio])
         ->assertHasErrors('precio_consumidor');
@@ -185,7 +225,75 @@ test('new companies start with the base units of measure', function () {
 
     $empresa = Empresa::query()->where('nombre', 'Nueva')->sole();
     expect(UnidadMedida::withoutGlobalScopes()->where('empresa_id', $empresa->id)->pluck('nombre')->sort()->values()->all())
-        ->toBe(['Caja', 'Gramo', 'Kilogramo', 'Litro', 'Mililitro', 'Unidad']);
+        ->toBe(['Caja', 'Gramo', 'Kilogramo', 'Litro', 'Miligramo', 'Mililitro', 'Unidad'])
+        ->and(Categoria::withoutGlobalScopes()->where('empresa_id', $empresa->id)->pluck('nombre')->all())
+        ->toBe([]);
+});
+
+test('new companies start with the suggested categories according to their rubro', function () {
+    $superadmin = User::factory()->superadmin()->create();
+    $this->actingAs($superadmin);
+
+    $accion = app(CrearEmpresa::class);
+
+    $empresaRopa = $accion->ejecutar($superadmin, ['nombre' => 'Ropa Test', 'rubro' => Rubro::Ropa], [
+        'name' => 'Admin Ropa', 'email' => 'ropa@example.test', 'password' => 'ClaveSegura12345',
+    ]);
+    expect(Categoria::withoutGlobalScopes()->where('empresa_id', $empresaRopa->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe([
+            'Ropa de hombre',
+            'Ropa de mujer',
+            'Ropa infantil',
+            'Calzado',
+            'Accesorios',
+            'Ropa deportiva',
+            'Ropa interior',
+            'Bolsos y carteras',
+        ]);
+
+    $empresaFarmacia = $accion->ejecutar($superadmin, ['nombre' => 'Farmacia Test', 'rubro' => Rubro::Farmacia], [
+        'name' => 'Admin Farma', 'email' => 'farma@example.test', 'password' => 'ClaveSegura12345',
+    ]);
+    expect(Categoria::withoutGlobalScopes()->where('empresa_id', $empresaFarmacia->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe([
+            'Medicamentos',
+            'Vitaminas y suplementos',
+            'Cuidado personal',
+            'Higiene y cuidado infantil',
+            'Primeros auxilios',
+            'Material médico',
+            'Productos dermatológicos',
+            'Productos veterinarios',
+        ]);
+
+    $empresaDistribuidora = $accion->ejecutar($superadmin, ['nombre' => 'Distribuidora Test', 'rubro' => Rubro::Distribuidora], [
+        'name' => 'Admin Dist', 'email' => 'dist@example.test', 'password' => 'ClaveSegura12345',
+    ]);
+    expect(Categoria::withoutGlobalScopes()->where('empresa_id', $empresaDistribuidora->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe([
+            'Bebidas',
+            'Abarrotes',
+            'Lácteos',
+            'Snacks y golosinas',
+            'Limpieza',
+            'Higiene personal',
+            'Alimentos envasados',
+            'Productos para el hogar',
+        ]);
+
+    $empresaRestaurante = $accion->ejecutar($superadmin, ['nombre' => 'Restaurante Test', 'rubro' => Rubro::Restaurante], [
+        'name' => 'Admin Rest', 'email' => 'rest@example.test', 'password' => 'ClaveSegura12345',
+    ]);
+    expect(Categoria::withoutGlobalScopes()->where('empresa_id', $empresaRestaurante->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe([
+            'Platos',
+            'Entradas',
+            'Bebidas',
+            'Postres',
+            'Ensaladas',
+            'Sopas y caldos',
+            'Combos y promociones',
+        ]);
 });
 
 test('categories and units are managed by administrators only', function () {
@@ -228,6 +336,7 @@ test('un producto guarda nombre y contenido por separado y los muestra unidos en
         ->where('abreviatura', 'g')
         ->sole();
 
+    // Con contenido es un envase: se vende por unidades aunque la unidad (g) admita decimales.
     crearProductoDesdePantalla([
         'nombre' => 'Desengrasante',
         'contenido' => '350',
@@ -243,7 +352,8 @@ test('un producto guarda nombre y contenido por separado y los muestra unidos en
         ->and(DB::table('productos')->where('id', $producto->id)->value('contenido'))->toBe('350.000')
         ->and($producto->nombre_base)->toBe('Desengrasante')
         ->and($producto->nombre)->toBe('Desengrasante 350 g')
-        ->and($producto->nombre_completo)->toBe('Desengrasante 350 g');
+        ->and($producto->nombre_completo)->toBe('Desengrasante 350 g')
+        ->and($producto->tipo_venta)->toBe('unidad');
 
     // En el catálogo y listado se muestra unido automáticamente:
     Livewire::test(Productos::class)
@@ -272,76 +382,76 @@ test('el campo contenido es opcional y muestra solo el nombre si no se especific
         ->and($producto->nombre_base)->toBe('Detergente Simple');
 });
 
-test('formulario muestra selector de como se vende campo contenido y vista previa dinamica', function () {
-    $mililitro = UnidadMedida::withoutGlobalScopes()
-        ->where('empresa_id', $this->empresa->id)
-        ->where('abreviatura', 'ml')
-        ->sole();
+test('el formulario no pregunta cómo se vende: muestra unidad y contenido opcional y explica cómo se venderá', function () {
+    $mililitro = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('abreviatura', 'ml')->sole();
+    $kilogramo = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('abreviatura', 'kg')->sole();
+    $unidad = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('admite_decimales', false)->orderBy('id')->firstOrFail();
 
     $form = Livewire::test(ProductoFormulario::class)
-        ->assertSeeHtml('Contenido / Presentación')
-        ->assertSeeHtml('placeholder="350"')
-        ->assertSee('¿Cómo se vende este producto?')
-        ->assertSee('Por unidad')
-        ->assertSee('Por peso o medida')
-        ->assertSee('se vende por unidades.')
+        ->assertDontSee('¿Cómo se vende este producto?')
+        ->assertDontSee('Por peso o medida')
+        ->assertDontSeeHtml('name="tipo_venta"')
+        ->assertSee('Unidad de medida y contenido')
+        ->assertSeeHtml('placeholder="Contenido (opcional)"')
         ->assertSeeHtml('Vista previa del nombre completo');
 
-    // Inicialmente con el campo nombre vacío, no se muestra nada en la vista previa
     expect($form->get('vistaPreviaNombreBase'))->toBe('')
         ->and($form->get('vistaPreviaContenido'))->toBe('')
-        ->and($form->get('vistaPreviaNombreCompleto'))->toBe('')
-        ->and($form->get('tipo_venta'))->toBe('unidad');
+        ->and($form->get('vistaPreviaNombreCompleto'))->toBe('');
 
-    // Cambiar a por peso o medida actualiza el texto de ejemplo
-    $form->set('tipo_venta', 'medida')
-        ->assertSee('se vende por peso o medida.');
+    // Con contenido, se vende por unidades y la vista previa une nombre y contenido.
+    $form->set('nombre', 'Desengrasante')->set('contenido', '350')->set('unidad_medida_id', (string) $mililitro->id)
+        ->assertSee('Desengrasante')->assertSee('350 ml')
+        ->assertSee('Se vende por unidades: Desengrasante 350 ml.');
 
-    // En tipo de venta por unidad, contenido y unidad actualizan la vista previa calculada (en dos colores)
-    $form->set('tipo_venta', 'unidad')
-        ->set('nombre', 'Desengrasante')
-        ->set('contenido', '350')
-        ->set('unidad_medida_id', (string) $mililitro->id)
-        ->assertSee('Desengrasante')
-        ->assertSee('350 ml');
-
-    // Al cambiar a por peso o medida, el contenido se oculta
-    $form->set('tipo_venta', 'medida')
+    // Sin contenido y con una unidad con decimales, por peso o medida; con una unidad entera, por unidades enteras.
+    $form->set('contenido', '')->set('unidad_medida_id', (string) $kilogramo->id)
         ->assertSet('vistaPreviaContenido', '')
-        ->assertSee('se vende por peso o medida.');
+        ->assertSee('Se vende por peso o medida: admite cantidades como 1,5 kg.');
+    $form->set('unidad_medida_id', (string) $unidad->id)->assertSee('Se vende por unidades enteras.');
 
-    // Si el nombre se vacía, la vista previa vuelve a quedar completamente vacía
+    // Si el nombre se vacía, la vista previa vuelve a quedar completamente vacía.
     $form->set('nombre', '')
         ->assertSet('vistaPreviaNombreBase', '')
         ->assertSet('vistaPreviaContenido', '')
         ->assertSet('vistaPreviaNombreCompleto', '');
-
-    // Al restaurar nombre y borrar contenido, la vista previa vuelve a mostrar solo el nombre
-    $form->set('nombre', 'Desengrasante')
-        ->set('contenido', '')
-        ->assertSee('Desengrasante')
-        ->assertSet('vistaPreviaContenido', '');
 });
 
-test('permite crear producto con tipo de venta por unidad o por peso o medida', function () {
-    $kilogramo = UnidadMedida::withoutGlobalScopes()
-        ->where('empresa_id', $this->empresa->id)
-        ->where('abreviatura', 'kg')
-        ->sole();
+test('cómo se vende se deduce al guardar: sin contenido y en kg por peso; con contenido o en unidades, por unidad', function () {
+    $kilogramo = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('abreviatura', 'kg')->sole();
+    $unidad = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('admite_decimales', false)->orderBy('id')->firstOrFail();
 
-    Livewire::test(ProductoFormulario::class)
-        ->set('nombre', 'Queso Criollo')
-        ->set('tipo_venta', 'medida')
-        ->set('unidad_medida_id', (string) $kilogramo->id)
-        ->set('precio_consumidor', '45.00')
-        ->call('guardar')
-        ->assertHasNoErrors()
-        ->assertRedirect(route('productos.index'));
+    crearProductoDesdePantalla(['nombre' => 'Queso Criollo', 'unidad_medida_id' => (string) $kilogramo->id, 'precio_consumidor' => '45.00'])
+        ->assertHasNoErrors()->assertRedirect(route('productos.index'));
+    crearProductoDesdePantalla(['nombre' => 'Arroz', 'contenido' => '5', 'unidad_medida_id' => (string) $kilogramo->id, 'precio_consumidor' => '60.00'])
+        ->assertHasNoErrors();
+    crearProductoDesdePantalla(['nombre' => 'Escoba', 'unidad_medida_id' => (string) $unidad->id, 'precio_consumidor' => '20.00'])
+        ->assertHasNoErrors();
 
-    $producto = Producto::query()->where('nombre', 'Queso Criollo')->sole();
-    expect($producto->tipo_venta)->toBe('medida')
-        ->and($producto->esPorMedida())->toBeTrue()
-        ->and($producto->esPorUnidad())->toBeFalse();
+    $queso = Producto::query()->where('nombre', 'Queso Criollo')->sole();
+    expect($queso->tipo_venta)->toBe('medida')
+        ->and($queso->esPorMedida())->toBeTrue()
+        ->and(Producto::query()->where('nombre', 'Arroz')->sole()->tipo_venta)->toBe('unidad')
+        ->and(Producto::query()->where('nombre', 'Escoba')->sole()->tipo_venta)->toBe('unidad')
+        ->and(Producto::tipoVentaPara(null, true))->toBe('medida')
+        ->and(Producto::tipoVentaPara(' ', true))->toBe('medida')
+        ->and(Producto::tipoVentaPara('350', true))->toBe('unidad')
+        ->and(Producto::tipoVentaPara(null, false))->toBe('unidad');
+});
+
+test('al editar se conserva cómo se vende si no cambian contenido ni unidad, y se vuelve a deducir si cambian', function () {
+    $kilogramo = UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('abreviatura', 'kg')->sole();
+    // Producto antiguo: elegido «Por unidad» en kg y sin contenido (con la regla nueva sería «por peso»).
+    $saco = productoDe($this->empresa, ['nombre' => 'Saco de harina', 'unidad_medida_id' => $kilogramo->id, 'tipo_venta' => 'unidad', 'contenido' => null]);
+
+    Livewire::test(ProductoFormulario::class, ['producto' => $saco])->set('precio_consumidor', '150')->call('guardar')->assertHasNoErrors();
+    expect($saco->fresh()->tipo_venta)->toBe('unidad');
+
+    Livewire::test(ProductoFormulario::class, ['producto' => $saco])->set('contenido', '50')->call('guardar')->assertHasNoErrors();
+    expect($saco->fresh()->only(['tipo_venta', 'contenido']))->toBe(['tipo_venta' => 'unidad', 'contenido' => '50.000']);
+
+    Livewire::test(ProductoFormulario::class, ['producto' => $saco])->set('contenido', '')->call('guardar')->assertHasNoErrors();
+    expect($saco->fresh()->tipo_venta)->toBe('medida');
 });
 
 test('permite crear producto sin sku de forma opcional', function () {
@@ -352,6 +462,7 @@ test('permite crear producto sin sku de forma opcional', function () {
 
     Livewire::test(ProductoFormulario::class)
         ->set('nombre', 'Agua Pura')
+        ->set('sku_auto', false) // con «Auto» apagado el código sigue siendo opcional
         ->set('sku', '')
         ->set('codigo_barras', '7759998881110')
         ->set('unidad_medida_id', (string) $litro->id)
@@ -385,6 +496,7 @@ test('permite editar un producto que tiene sku nulo sin error de tipo', function
     Livewire::test(ProductoFormulario::class, ['producto' => $producto])
         ->assertSet('nombre', 'Jugo Natural')
         ->assertSet('sku', '')
+        ->assertSet('sku_auto', true) // sin código, «Auto» viene encendido y lo genera al guardar
         ->assertSet('codigo_barras', '7758887776660')
         ->set('nombre', 'Jugo Natural Modificado')
         ->call('guardar')
@@ -392,7 +504,7 @@ test('permite editar un producto que tiene sku nulo sin error de tipo', function
         ->assertRedirect(route('productos.index'));
 
     expect($producto->fresh()->nombre_base)->toBe('Jugo Natural Modificado')
-        ->and($producto->fresh()->sku)->toBeNull();
+        ->and($producto->fresh()->sku)->toBe('JUG-001');
 });
 
 test('filtro con stock y sin stock filtra adecuadamente en el listado y en exportacion csv', function () {

@@ -25,7 +25,7 @@
             </header>
             <x-sitio.funciones :items="[
                 ['truck', 'Registro de compras', 'Carga la compra con buscador o escáner, indica la sucursal que recibe y el stock sube al confirmar.'],
-                ['tag', 'Costo por producto', 'Cada compra registra el costo unitario, para que tus reportes y el asistente Mozi calculen tu margen real.'],
+                ['tag', 'Costo por producto', 'Cada compra registra el costo unitario, para que tus reportes y el agente Mozi calculen tu margen real.'],
                 ['users', 'Ficha de proveedor', 'Datos de contacto, compras realizadas y saldo pendiente de cada proveedor en un solo lugar.'],
                 ['calendar', 'Cuentas por pagar', 'Registra compras al crédito y otras obligaciones con su fecha de vencimiento. Ve qué vence esta semana.'],
                 ['cash', 'Pagos parciales', 'Registra cada pago a un proveedor, total o parcial, en efectivo o electrónico, con su comprobante.'],
@@ -40,8 +40,8 @@
                 <div class="split-copy reveal">
                     <p class="eyebrow">Con ayuda de Mozi</p>
                     <h2 id="c-ia">Sabe qué comprar antes de que se acabe</h2>
-                    <p>El asistente de IA Mozi analiza tus ventas y tu stock por sucursal y te sugiere qué reponer y en qué cantidad. También te muestra qué proveedores subieron sus costos y qué pagos vencen pronto.</p>
-                    <a class="module-link" href="{{ route('sitio.asistente-ia') }}">Conocer el asistente de IA<x-sitio.i n="arrow" /></a>
+                    <p>El agente de IA Mozi analiza tus ventas y tu stock por sucursal y te sugiere qué reponer y en qué cantidad. También te muestra qué proveedores subieron sus costos y qué pagos vencen pronto.</p>
+                    <a class="module-link" href="{{ route('sitio.agente-ia') }}">Conocer el agente de IA<x-sitio.i n="arrow" /></a>
                 </div>
                 <div class="visual-card reveal" aria-hidden="true">
                     <div class="visual-title">Pagos a proveedores<small>Próximos 7 días</small></div>
@@ -70,6 +70,6 @@
         </div>
     </section>
 
-    <x-sitio.relacionados actual="compras" :claves="['inventario', 'caja', 'asistente-ia']" />
+    <x-sitio.relacionados actual="compras" :claves="['inventario', 'caja', 'agente-ia']" />
     <x-sitio.cta titulo="Ordena tus compras y tus pagos" :mensaje="$seo->mensajeWhatsapp" />
 </x-sitio.layout>

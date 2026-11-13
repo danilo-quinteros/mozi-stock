@@ -13,7 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Alerta de stock mínimo propia de cada sucursal. Vacío = usa la alerta general del
- * producto. Solo cambia stock_minimo; la cantidad no se toca.
+ * producto. Solo cambia stock_minimo; la cantidad no se toca. Un producto sin control
+ * de stock no tiene alertas, así que no admite mínimos (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 6).
  */
 final class ConfigurarMinimosSucursal
 {
@@ -27,6 +28,11 @@ final class ConfigurarMinimosSucursal
         Gate::forUser($actor)->authorize('update', $producto);
 
         $empresaId = (int) $actor->empresa_id;
+
+        if (! (bool) DB::table('productos')->where('empresa_id', $empresaId)->where('id', $producto->id)->value('controla_stock')) {
+            throw ValidationException::withMessages(['minimos' => __(':producto no controla stock: no tiene mínimos por sucursal.', ['producto' => $producto->nombre])]);
+        }
+
         $validas = DB::table('sucursales')->where('empresa_id', $empresaId)
             ->whereIn('id', array_map('intval', array_keys($minimos)))->pluck('id')->all();
         $valores = [];

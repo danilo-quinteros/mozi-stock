@@ -1,8 +1,8 @@
 /* Guía de configuración inicial en el Inicio (onboarding.html). Usa las variables del design system compartido. */
 .guia{padding:27px;margin-bottom:18px}
 .guia-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:22px}
-.guia h2,.guia-siat h2{font-size:21px;line-height:1.25;letter-spacing:-.036em;margin:0 0 7px;color:var(--text-strong)}
-.guia-head p,.siat-name p{color:var(--muted);font-size:13px;margin:0;max-width:600px}
+.guia h2{font-size:21px;line-height:1.25;letter-spacing:-.036em;margin:0 0 7px;color:var(--text-strong)}
+.guia-head p{color:var(--muted);font-size:13px;margin:0;max-width:600px}
 .guia-progreso{display:flex;flex-direction:column;align-items:flex-end;gap:9px;min-width:154px;flex:none}
 .guia-progreso>span{color:var(--brand-bright);font-size:13px;font-weight:750;font-variant-numeric:tabular-nums}
 .guia-progreso .progress{width:154px}
@@ -22,35 +22,6 @@
 .guia-pie{display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid var(--border-soft);padding-top:20px;margin-top:22px}
 .guia-pie p{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11.5px;margin:0;max-width:610px;line-height:1.6}
 
-.guia-siat{overflow:hidden;margin-bottom:18px;scroll-margin-top:20px}
-.siat-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:1px solid var(--border-soft);padding:26px 27px 22px}
-.siat-name{display:flex;align-items:flex-start;gap:14px}
-.siat-layout{display:grid;grid-template-columns:250px minmax(0,1fr)}
-.siat-sidebar{padding:22px 14px;border-right:1px solid var(--border-soft);background:var(--panel-soft)}
-.siat-label{color:var(--faint);font-weight:750;text-transform:uppercase;letter-spacing:.1em;font-size:10px;margin:0 10px 14px}
-.siat-step{width:100%;text-align:left;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--muted);padding:11px 10px;display:flex;align-items:center;gap:11px;line-height:1.35;transition:background .2s,border-color .2s}
-.siat-step:hover{background:var(--panel-elevated)}
-.siat-step.active{background:var(--accent-soft);border-color:var(--accent-border);color:var(--text)}
-.siat-step b{display:block;font-size:12px}
-.siat-step small{display:block;color:var(--faint);font-size:11px;margin-top:2px}
-.siat-num{flex:none;display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--border);border-radius:9px;font-size:12px;font-weight:750}
-.siat-step.active .siat-num{color:var(--brand-bright);border-color:var(--brand)}
-.siat-num.done{color:var(--green);border-color:rgba(107,202,146,.4)}
-.siat-info{margin:24px 6px 0;padding:13px;border:1px solid var(--border-soft);background:var(--panel);border-radius:11px}
-.siat-info .ico{color:var(--blue)}
-.siat-info p{font-size:11px;color:var(--muted);line-height:1.65;margin:7px 0 0}
-.siat-main{padding:25px 28px 22px;min-width:0}
-.siat-main h3{margin:0 0 6px;font-size:17px;letter-spacing:-.03em}
-.siat-lead{font-size:12.5px;color:var(--muted);margin:0 0 20px;max-width:620px;line-height:1.6}
-.siat-facts{display:grid;gap:9px}
-.siat-fact{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 15px;border-radius:11px;background:var(--panel-soft);border:1px solid var(--border-soft)}
-.siat-fact b{display:block;font-size:12.5px}
-.siat-fact small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
-.siat-verify{display:flex;gap:14px;align-items:center;padding:17px;margin-bottom:12px;background:var(--panel-soft);border:1px solid var(--border);border-radius:13px}
-.siat-verify b{display:block;font-size:15px;margin-bottom:3px}
-.siat-verify p{font-size:11.5px;color:var(--muted);margin:0}
-.siat-verify.ok .heading-icon{color:var(--green);background:rgba(107,202,146,.1)}
-.siat-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--border-soft);margin-top:24px;padding-top:18px}
+.guia-siat-asistente{margin-bottom:18px;scroll-margin-top:20px}
 
-@media(max-width:780px){.siat-layout{grid-template-columns:1fr}.siat-sidebar{border-right:0;border-bottom:1px solid var(--border-soft);padding:13px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.siat-label,.siat-info{grid-column:1/-1}.siat-label{margin:0 6px 4px}.siat-info{margin:6px 0 0}.siat-main{padding:20px}}
-@media(max-width:540px){.guia{padding:18px}.guia-head{flex-direction:column;gap:12px}.guia-progreso{flex-direction:row;align-items:center;width:100%;justify-content:space-between}.guia-progreso .progress{width:43vw;max-width:210px}.guia-paso{padding:12px 10px;gap:11px}.guia-icono{width:37px;height:37px;border-radius:10px}.guia-accion{padding:8px}.guia-accion span{display:none}.guia-pie{flex-direction:column;align-items:stretch}.siat-top{flex-direction:column;gap:12px;padding:20px 18px}.siat-step small{display:none}.siat-main{padding:18px 15px}.siat-fact{padding:12px 10px}.siat-actions{flex-wrap:wrap}.siat-actions .row{width:100%}.siat-actions .btn{flex:1}}
+@media(max-width:540px){.guia{padding:18px}.guia-head{flex-direction:column;gap:12px}.guia-progreso{flex-direction:row;align-items:center;width:100%;justify-content:space-between}.guia-progreso .progress{width:43vw;max-width:210px}.guia-paso{padding:12px 10px;gap:11px}.guia-icono{width:37px;height:37px;border-radius:10px}.guia-accion{padding:8px}.guia-accion span{display:none}.guia-pie{flex-direction:column;align-items:stretch}}

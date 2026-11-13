@@ -3,23 +3,25 @@
 namespace App\Livewire\Inicio;
 
 use App\Domain\Tenancy\GuiaConfiguracion;
+use App\Livewire\Facturacion\Asistente;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
  * Guía de configuración inicial del Inicio (onboarding.html). Los popups muestran los mismos
- * componentes de Mi empresa, Sucursales y Facturación en modo embebido: guardan con sus propias
+ * componentes de Mi empresa y Facturación en modo embebido: guardan con sus propias
  * validaciones y permisos. Al cerrar un popup la guía se vuelve a calcular con los datos guardados.
  */
 class Guia extends Component
 {
-    private const POPUPS = ['empresa', 'sucursal'];
+    private const POPUPS = ['empresa'];
 
-    /** Solo existen si la empresa tiene la facturación SIAT habilitada. */
-    private const POPUPS_SIAT = ['token', 'datos-fiscales', 'sucursal-siat'];
+    /** Solo existe si la empresa tiene la facturación SIAT habilitada. Lo demás de SIAT es el asistente embebido. */
+    private const POPUPS_SIAT = ['sucursal-siat'];
 
     #[Locked]
     public ?string $popup = null;
@@ -37,7 +39,12 @@ class Guia extends Component
     public function cerrar(): void
     {
         $this->popup = null;
+        $this->dispatch('siat-refrescar')->to(Asistente::class);
     }
+
+    /** El asistente SIAT embebido guardó algo: la guía se vuelve a calcular. */
+    #[On('siat-actualizado')]
+    public function actualizar(): void {}
 
     public function render(): View
     {

@@ -17,8 +17,11 @@ class PedidoImprimirController extends Controller
     {
         Gate::forUser($request->user())->authorize('view', $pedido);
 
-        $pedido->load(['items.producto.unidad', 'cliente', 'sucursal', 'vendedor', 'empresa', 'venta:id,pedido_id,numero']);
+        $pedido->load(['items.producto.unidad', 'cliente', 'sucursal', 'vendedor', 'empresa', 'venta:id,pedido_id,numero,nombre_mesa']);
 
-        return view('pedidos.imprimir', ['pedido' => $pedido]);
+        return view('pedidos.imprimir', [
+            'pedido' => $pedido,
+            'rollo' => $request->query('formato') === 'rollo',
+        ]);
     }
 }

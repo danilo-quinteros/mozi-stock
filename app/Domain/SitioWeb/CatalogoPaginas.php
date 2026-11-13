@@ -85,7 +85,7 @@ final class CatalogoPaginas
                 padre: null, prioridad: '1.0', frecuencia: 'weekly'),
             new Pagina('funcionalidades', 'funcionalidades', 'Funcionalidades', 'principal',
                 'Funcionalidades: ventas, inventario y SIAT en Bolivia | MoziStock',
-                'Conoce todos los módulos de MoziStock: punto de venta, inventario, sucursales, compras, créditos, caja, reportes, facturación SIAT y asistente de IA.',
+                'Conoce todos los módulos de MoziStock: punto de venta, inventario, sucursales, compras, créditos, caja, reportes, facturación SIAT y agente de IA.',
                 'Hola, quiero conocer las funcionalidades de MoziStock.',
                 prioridad: '0.9', tipo: 'CollectionPage'),
 
@@ -130,10 +130,10 @@ final class CatalogoPaginas
                 'Reportes de ventas, cobros reales por fecha, inventario por sucursal y salidas. Lo vendido y lo cobrado por separado, con descarga en CSV.',
                 'Hola, quiero información sobre los reportes de MoziStock.',
                 padre: 'funcionalidades'),
-            new Pagina('asistente-ia', 'asistente-ia', 'Asistente de IA Mozi', 'modulo',
-                'Mozi, asistente de IA para negocios en Bolivia | MoziStock',
-                'Pregúntale a Mozi qué se está por acabar, qué conviene comprar o quién te debe. Responde con los datos reales de tu negocio, en tablas y gráficos.',
-                'Hola, quiero información sobre Mozi, el asistente de IA de MoziStock.',
+            new Pagina('agente-ia', 'agente-ia', 'Agente de IA Mozi', 'modulo',
+                'Mozi, agente de IA para negocios en Bolivia | MoziStock',
+                'Mozi, el agente de IA de MoziStock, te dice qué se está por acabar, qué conviene comprar y quién te debe, con los datos reales de tu negocio.',
+                'Hola, quiero información sobre Mozi, el agente de IA de MoziStock.',
                 padre: 'funcionalidades', prioridad: '0.9'),
 
             // Rubros
@@ -171,7 +171,7 @@ final class CatalogoPaginas
             // Comercial y confianza
             new Pagina('precios', 'precios', 'Precios', 'comercial',
                 'Precios y planes de MoziStock en Bolivia | Prueba gratis 15 días',
-                'Planes mensuales en bolivianos, con o sin facturación SIAT. Todos los módulos incluidos y 15 días de prueba gratis. Pagas con QR.',
+                'Planes mensuales en bolivianos: inventario, facturación SIAT y agente de IA. Prueba gratis 15 días, sin tarjeta, y paga tu mensualidad con QR.',
                 'Hola, quiero información sobre los planes y precios de MoziStock.',
                 prioridad: '0.9', frecuencia: 'weekly'),
             new Pagina('preguntas-frecuentes', 'preguntas-frecuentes', 'Preguntas frecuentes', 'comercial',

@@ -4,7 +4,7 @@
         <div>
             <div class="eyebrow">{{ __('Venta confirmada') }}</div>
             <h1>{{ __('Venta :codigo', ['codigo' => $venta->codigo()]) }}<span class="accent-text">.</span></h1>
-            <p class="lead">{{ __('Del pedido :codigo', ['codigo' => $venta->pedido->codigo()]) }} · {{ $venta->fecha->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }} · {{ $venta->sucursal->nombre }}</p>
+            <p class="lead">{{ __('Del pedido :codigo', ['codigo' => $venta->pedido->codigo()]) }} · {{ $venta->fecha->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }} · {{ $venta->sucursal->nombre }}@if ($venta->nombre_mesa) · <b data-nombre-mesa>{{ $venta->nombre_mesa }}</b>@endif</p>
         </div>
         <div class="page-actions">
             <a class="btn ghost" href="{{ route('pedidos.index', ['pestana' => 'ventas']) }}"><x-icon name="arrow-left" /> {{ __('Pedidos y ventas') }}</a>
@@ -76,6 +76,10 @@
             @endif
         </section>
     </div>
+
+    @if ($conEntrega)
+        <livewire:ventas.entrega :venta-id="$venta->id" wire:key="entrega-{{ $venta->id }}" />
+    @endif
 
     <livewire:ventas.factura :venta-id="$venta->id" />
 

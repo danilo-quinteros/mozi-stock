@@ -24,7 +24,7 @@ final class EsquemaJsonLd
         'Ventas a crédito, abonos y cuentas por cobrar',
         'Caja por turno, arqueo y egresos',
         'Reportes de ventas, cobros e inventario',
-        'Asistente de inteligencia artificial Mozi',
+        'Agente de inteligencia artificial Mozi',
     ];
 
     /**

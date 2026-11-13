@@ -51,6 +51,10 @@
                                     </button>
                                 @endforeach
                             </div>
+                        @elseif (mb_strlen(trim($buscarCliente)) >= 2)
+                            <div class="search-results open" role="status" data-test="sin-clientes">
+                                <div class="search-result search-result-vacio"><span><b>{{ __('Cliente no encontrado') }}</b><small>{{ __('Revisa el nombre o el CI/NIT, o regístralo con +.') }}</small></span></div>
+                            </div>
                         @endif
                     @endif
                     @error('cliente_id')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
@@ -86,6 +90,7 @@
                     @unless ($soloLectura)
                         @include('livewire.inventario.partials.buscador', ['sugerencias' => $sugerencias, 'placeholder' => 'Buscar producto por nombre, código o escanear...'])
                         @if ($mensajeCaptura)<p class="subtle" style="margin:-4px 0 12px" role="status">{{ $mensajeCaptura }}</p>@endif
+                        @include('livewire.catalogo.partials.selector-variante')
                     @endunless
                     <div class="table-scroll">
                         <table class="order-table">
@@ -96,12 +101,16 @@
                                         $i = $fila['indice'];
                                         $producto = $fila['producto'];
                                         $neto = $calculo['por_indice'][$i]['total'] ?? null;
-                                        $falta = $fila['cantidad'] !== null && Decimal::comparar($fila['stock'], $fila['cantidad']) < 0;
+                                        $falta = $fila['cantidad'] !== null && $fila['stock'] !== null && Decimal::comparar($fila['stock'], $fila['cantidad']) < 0;
                                     @endphp
                                     <tr wire:key="pedido-linea-{{ $i }}-{{ $producto->id }}">
                                         <td>
                                             <b style="font-size:12px">{{ $producto->nombre }}</b>
-                                            <span class="stock-hint @if ($falta) falta @endif">{{ $producto->sku }} · {{ __('Stock') }} {{ Decimal::formatear($fila['stock']) }} {{ $producto->unidad->abreviatura }}@if ($falta) · {{ __('insuficiente') }} @endif</span>
+                                            @if ($fila['stock'] === null)
+                                                <span class="stock-hint">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->sku }} · {{ __('Sin control') }}</span>
+                                            @else
+                                                <span class="stock-hint @if ($falta) falta @endif">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->sku }} · {{ __('Stock') }} {{ Decimal::formatear($fila['stock']) }} {{ $producto->unidad->abreviatura }}@if ($falta) · {{ __('insuficiente') }} @endif</span>
+                                            @endif
                                         </td>
                                         <td><input class="input table-input" type="text" inputmode="decimal" aria-label="{{ __('Cantidad de :producto', ['producto' => $producto->nombre]) }}" wire:model.live.debounce.400ms="lineas.{{ $i }}.cantidad"></td>
                                         <td>
@@ -286,8 +295,20 @@
                     @endif
                 @endif
             @endif
+            @if ($flujoEntrega !== null)
+                <div class="divider"></div>
+                @if ($flujoEntrega === \App\Enums\Capacidad::Cocina)
+                    <x-campo etiqueta="Nombre o mesa" campo="nombreMesa" style="margin-bottom:12px">
+                        <input id="nombreMesa" class="input" type="text" maxlength="40" autocomplete="off" placeholder="{{ __('Ej.: Juan, Mesa 4') }}" wire:model="nombreMesa" data-nombre-mesa>
+                    </x-campo>
+                @endif
+                @include('livewire.despachos.casilla-entregado')
+            @endif
             <p class="modal-info" style="margin-top:17px">{!! __('Al confirmar se descontará el stock de la sucursal y se registrarán <strong>únicamente los pagos recibidos</strong>.') !!}</p>
             <div class="modal-actions">
+                @if ($flujoEntrega !== null)
+                    @include('livewire.despachos.estado-resultante')
+                @endif
                 <button type="button" class="btn ghost" wire:click="$set('confirmando', false)">{{ __('Volver') }}</button>
                 <button type="button" class="btn primary" wire:click="confirmar" wire:loading.attr="disabled" wire:target="confirmar"><x-icon name="check" /> {{ __('Confirmar venta') }}</button>
             </div>

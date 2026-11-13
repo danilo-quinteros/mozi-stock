@@ -1,4 +1,6 @@
 @use('App\Support\Decimal')
+@use('App\Domain\Inventario\DatosLote')
+@use('App\Models\Producto')
 <div>
     <div class="page-head">
         <div>
@@ -107,8 +109,8 @@
                     <thead><tr><th>{{ __('Producto') }}</th><th>{{ __('Cantidad') }}</th><th>{{ __('Costo') }}</th><th>{{ __('Subtotal') }}</th></tr></thead>
                     <tbody>
                         @foreach ($filas as $fila)
-                            <tr wire:key="confirmar-{{ $fila['producto']->id }}">
-                                <td>{{ $fila['producto']->nombre }}</td>
+                            <tr wire:key="confirmar-{{ $fila['clave'] }}">
+                                <td>{{ Producto::descripcionConMarca($fila['producto']->nombre, $fila['producto']->marca) }}@if ($fila['lote'])<small class="lote-resumen">{{ __('Lote :lote · vence :fecha', ['lote' => $fila['numeroLote'] === '' ? '—' : $fila['numeroLote'], 'fecha' => DatosLote::formatear($fila['vence'])]) }}</small>@endif</td>
                                 <td>{{ $fila['cantidad'] === null ? '—' : Decimal::formatear($fila['cantidad']) }}</td>
                                 <td>{{ $fila['costo'] === null ? '—' : Decimal::bs($fila['costo']) }}</td>
                                 <td>{{ $fila['subtotal'] === null ? '—' : Decimal::bs($fila['subtotal']) }}</td>
@@ -117,6 +119,9 @@
                     </tbody>
                 </table>
             </div>
+            @if ($vencidos !== [])
+                <div class="notice" role="alert" data-test="lotes-vencidos"><x-icon name="info" /><div><b>{{ __('Lotes ya vencidos') }}</b><p>{{ __('Se ingresarán al stock, pero quedarán bloqueados para la venta desde el primer momento:') }} {{ implode('; ', $vencidos) }}.</p></div></div>
+            @endif
             @unless ($valido)
                 <div class="notice" role="alert"><x-icon name="info" /><div><b>{{ __('Revisa la tabla') }}</b><p>{{ __('Hay productos con cantidad o costo inválido; el servidor rechazará la compra.') }}</p></div></div>
             @endunless

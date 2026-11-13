@@ -2,18 +2,20 @@
 
 namespace App\Models;
 
+use App\Enums\EstadoEntrega;
 use App\Models\Concerns\BelongsToEmpresa;
 use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
  * Venta confirmada: snapshot inmutable del pedido. Solo cambian saldo_pendiente (por cobros
- * registrados con su fecha real) y los acumulados devuelto y reembolsado (por devoluciones).
- * Nunca se elimina.
+ * registrados con su fecha real), los acumulados devuelto y reembolsado (por devoluciones) y el
+ * estado de entrega con sus datos (Domain/Despachos, también para cocina). Nunca se elimina.
  *
  * @property int $id
  * @property int $empresa_id
@@ -36,6 +38,14 @@ use LogicException;
  * @property Carbon|null $vencimiento
  * @property string $devuelto
  * @property string $reembolsado
+ * @property EstadoEntrega $estado_entrega
+ * @property int|null $despachado_por
+ * @property Carbon|null $despachado_en
+ * @property string|null $despacho_retira
+ * @property int|null $entregado_por
+ * @property Carbon|null $entregado_en
+ * @property string|null $entrega_recibio
+ * @property string|null $nombre_mesa
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Pedido $pedido
@@ -50,9 +60,16 @@ class Venta extends Model
     use BelongsToEmpresa;
 
     private const INMUTABLES = ['pedido_id', 'numero', 'sucursal_id', 'caja_id', 'turno_caja_id', 'cliente_id', 'vendedor_id', 'confirmado_por',
-        'operacion_inventario_id', 'fecha', 'subtotal', 'descuento_lineas', 'descuento_global', 'total', 'cobrado_inicial'];
+        'operacion_inventario_id', 'fecha', 'subtotal', 'descuento_lineas', 'descuento_global', 'total', 'cobrado_inicial', 'nombre_mesa'];
 
     protected $table = 'ventas';
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'estado_entrega' => 'entregado',
+    ];
 
     protected function casts(): array
     {
@@ -67,6 +84,9 @@ class Venta extends Model
             'vencimiento' => 'date',
             'devuelto' => 'decimal:2',
             'reembolsado' => 'decimal:2',
+            'estado_entrega' => EstadoEntrega::class,
+            'despachado_en' => 'datetime',
+            'entregado_en' => 'datetime',
         ];
     }
 
@@ -151,6 +171,26 @@ class Venta extends Model
     }
 
     /**
+     * Historial de entrega, del más antiguo al más reciente.
+     *
+     * @return HasMany<EventoEntrega, $this>
+     */
+    public function eventosEntrega(): HasMany
+    {
+        return $this->hasMany(EventoEntrega::class)->orderBy('id');
+    }
+
+    /**
+     * Factura electrónica SIAT si la empresa emitió una para esta venta.
+     *
+     * @return HasOne<SiatFactura, $this>
+     */
+    public function factura(): HasOne
+    {
+        return $this->hasOne(SiatFactura::class);
+    }
+
+    /**
      * @return BelongsTo<Pedido, $this>
      */
     public function pedido(): BelongsTo
@@ -180,6 +220,22 @@ class Venta extends Model
     public function vendedor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'vendedor_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function despachador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'despachado_por');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function entregador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'entregado_por');
     }
 
     /**

@@ -41,6 +41,8 @@
             'sugerencias' => $this->sugerencias,
             'etiquetaStock' => 'Disponible en origen',
             'etiquetaDespues' => 'Origen después',
+            'vencidas' => $vencidas,
+            'notaVencidas' => ':cantidad vencidas no se traspasan.',
         ])
         <aside class="rapid-aside">
             <section class="card card-pad summary-sticky">

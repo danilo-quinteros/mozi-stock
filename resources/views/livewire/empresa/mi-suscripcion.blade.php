@@ -146,9 +146,9 @@
                             </div>
                             <x-campo etiqueta="Meses que pagas" campo="meses">
                                 <select id="meses" class="select" wire:model.live="meses">
-                                    @for ($m = 1; $m <= CalendarioSuscripcion::MAX_MESES; $m++)
+                                    @foreach (CalendarioSuscripcion::MESES_PAGABLES as $m)
                                         <option value="{{ $m }}">{{ $m }} {{ $m === 1 ? 'mes' : 'meses' }} · {{ Decimal::bs(Decimal::multiplicar($precioRenovacion, (string) $m, 2)) }}</option>
-                                    @endfor
+                                    @endforeach
                                 </select>
                             </x-campo>
                             <p class="subtle" style="margin:8px 0 14px">{{ __('Si se aprueba, el vencimiento pasa del :format al', ['format' => $suscripcion->vencimiento->format('d/m/Y')]) }} <b>{{ $vencimientoTras->format('d/m/Y') }}</b>@if ($vencimientoTras->lessThan($hoy)) {{ __('(seguirá vencida: hay meses anteriores sin pagar)') }}@endif.</p>

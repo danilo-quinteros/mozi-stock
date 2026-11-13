@@ -2,16 +2,21 @@
 
 use App\Domain\Catalogo\Actions\ConfirmarImportacionProductos;
 use App\Domain\Catalogo\Actions\PrepararImportacionProductos;
+use App\Domain\Tenancy\Actions\CambiarFuncionesEmpresa;
+use App\Enums\Capacidad;
+use App\Enums\Rubro;
 use App\Livewire\Catalogo\ImportarProductos;
 use App\Models\Auditoria;
 use App\Models\Categoria;
 use App\Models\ImportacionProducto;
 use App\Models\ImportacionProductoFila;
+use App\Models\Lote;
 use App\Models\OperacionInventario;
 use App\Models\Producto;
 use App\Models\Sucursal;
 use App\Models\UnidadMedida;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -407,4 +412,80 @@ test('validating hundreds of rows uses a bounded number of queries', function ()
     expect(Producto::query()->count())->toBe(600)
         ->and(Categoria::query()->count())->toBe(7)
         ->and($consultas)->toBeLessThan(60);
+});
+
+test('L3 with «Lotes y vencimientos» the import reads lot and expiry, leaves rows without lot in regularization and rejects bad dates', function () {
+    app(CambiarFuncionesEmpresa::class)->ejecutar($this->admin, $this->empresa, Rubro::Farmacia, [Capacidad::LotesVencimientos]);
+    $this->travelTo(CarbonImmutable::parse('2027-01-15 10:00', 'America/La_Paz'));
+    $archivo = csvDePrueba("Nombre;Precio;Stock;Lote;Vencimiento\nAmoxicilina;10;5;A-1;03/2028\nIbuprofeno;8;4;;\nParacetamol;5;2;P-1;31/02/2028\nSuero;7;3;S-0;12/2026\n");
+    $preparar = app(PrepararImportacionProductos::class);
+    $importacion = $preparar->crear($this->admin, $archivo);
+
+    expect($importacion->mapeo)->toMatchArray(['lote' => 3, 'vencimiento' => 4]);
+
+    $preparar->asignarColumnas($this->admin, $importacion, [
+        'fila_encabezados' => 1, 'mapeo' => [0 => 'nombre', 1 => 'precio_consumidor', 2 => 'stock', 3 => 'lote', 4 => 'vencimiento'],
+        'unidad_defecto_id' => (int) UnidadMedida::query()->where('nombre', 'Unidad')->value('id'),
+        'usar_stock' => true, 'sucursal_stock_id' => $this->sucursal->id,
+    ]);
+    $importacion->refresh();
+
+    expect($importacion->resumen)->toMatchArray(['validas' => 3, 'errores' => 1])
+        ->and(ImportacionProductoFila::query()->where('fila', 3)->value('advertencias'))
+        ->toContain('Sin lote: el stock queda como «Sin lote (regularización)» hasta regularizarlo.')
+        ->and(implode(' ', ImportacionProductoFila::query()->where('fila', 4)->value('errores')))
+        ->toContain('Paracetamol: escribe el vencimiento del lote como dd/mm/aaaa o mm/aaaa.')
+        ->and(ImportacionProductoFila::query()->where('fila', 5)->value('advertencias'))
+        ->toContain('El lote S-0 ya venció (31/12/2026): quedará bloqueado para la venta.');
+
+    app(ConfirmarImportacionProductos::class)->ejecutar($this->admin, $importacion, true, $importacion->resumen['firma']);
+    $saldo = fn (string $producto) => DB::table('stock_lotes')->join('productos', 'productos.id', '=', 'stock_lotes.producto_id')
+        ->join('lotes', 'lotes.id', '=', 'stock_lotes.lote_id')->where('productos.nombre', $producto)
+        ->get(['lotes.numero', 'lotes.vencimiento', 'lotes.es_regularizacion', 'stock_lotes.cantidad'])
+        ->map(fn ($f) => [$f->numero, $f->vencimiento, (bool) $f->es_regularizacion, (string) $f->cantidad])->all();
+
+    expect(Producto::query()->where('controla_vencimiento', true)->orderBy('nombre')->pluck('nombre')->all())->toBe(['Amoxicilina', 'Ibuprofeno', 'Suero'])
+        ->and(Producto::query()->where('nombre', 'Paracetamol')->exists())->toBeFalse()
+        ->and($saldo('Amoxicilina'))->toBe([['A-1', '2028-03-31', false, '5.000']])
+        ->and($saldo('Ibuprofeno'))->toBe([[null, null, true, '4.000']])
+        ->and($saldo('Suero'))->toBe([['S-0', '2026-12-31', false, '3.000']])
+        ->and(Lote::query()->count())->toBe(3);
+});
+
+test('L3 without «Lotes y vencimientos» the import does not offer lot columns and creates no lots', function () {
+    $archivo = csvDePrueba("Nombre;Precio;Stock;Lote;Vencimiento\nAmoxicilina;10;5;A-1;03/2028\n");
+    $importacion = app(PrepararImportacionProductos::class)->crear($this->admin, $archivo);
+
+    expect($importacion->mapeo)->not->toHaveKey('lote')->not->toHaveKey('vencimiento');
+
+    Livewire::test(ImportarProductos::class, ['importacionId' => $importacion->id])
+        ->assertDontSee('Vencimiento del lote')
+        ->assertDontSee('Controla lote y vencimiento');
+
+    expect(fn () => app(PrepararImportacionProductos::class)->asignarColumnas($this->admin, $importacion, [
+        'fila_encabezados' => 1, 'mapeo' => [0 => 'nombre', 1 => 'precio_consumidor', 2 => 'stock', 3 => 'lote'],
+        'unidad_defecto_id' => (int) UnidadMedida::query()->where('nombre', 'Unidad')->value('id'),
+        'usar_stock' => true, 'sucursal_stock_id' => $this->sucursal->id,
+    ]))->toThrow(ValidationException::class);
+});
+
+test('the brand (or laboratory) column is recognised and two brands of the same product are not duplicates', function () {
+    productoDe($this->empresa, ['nombre' => 'Paracetamol 500 mg', 'marca' => 'Bayer', 'sku' => 'PAR-001']);
+
+    $archivo = csvDePrueba(implode("\n", [
+        'Código;Nombre;Laboratorio;Precio',
+        'PAR-002;Paracetamol 500 mg;Genérico;1',
+        'PAR-003;Paracetamol 500 mg;  Inti  ;2',
+        'IBU-001;Ibuprofeno 400 mg;;3',
+    ]));
+
+    $importacion = importacionEnRevision($this->admin, $archivo);
+
+    expect($importacion->mapeo)->toMatchArray(['marca' => 2])
+        ->and($importacion->resumen)->toMatchArray(['validas' => 3, 'errores' => 0, 'advertencias' => 0]);
+
+    app(ConfirmarImportacionProductos::class)->ejecutar($this->admin, $importacion, false, $importacion->resumen['firma']);
+
+    expect(Producto::query()->orderBy('sku')->pluck('marca', 'sku')->all())
+        ->toBe(['IBU-001' => null, 'PAR-001' => 'Bayer', 'PAR-002' => 'Genérico', 'PAR-003' => 'Inti']);
 });

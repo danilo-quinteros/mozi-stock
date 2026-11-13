@@ -1,4 +1,4 @@
-<div>
+<div class="top-caja">
     @if ($visible)
         @php
             $hora = fn ($fecha) => $fecha->copy()->timezone(config('mozistock.business_timezone'));
@@ -9,7 +9,7 @@
                 @if ($turno)
                     <div class="top-caja-pill" style="display:inline-flex;align-items:center;gap:8px;padding:4px 6px 4px 12px;background:var(--input);border:1px solid rgba(34,197,94,0.3);border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
                         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,0.6)"></span>
-                        <span style="font-size:12px;font-weight:600">{{ $caja->nombre }}</span>
+                        <span class="top-caja-nombre" style="font-size:12px;font-weight:600" title="{{ $caja->nombre }}">{{ $caja->nombre }}</span>
                         <span class="badge soft sm" style="font-size:11px;padding:2px 7px">#{{ $turno->id }} · {{ $hora($turno->fecha_apertura)->format('H:i') }}</span>
                         @include('livewire.caja.partials.otros-turnos-topbar')
                         <button type="button" class="btn soft sm" wire:click="abrirModalCierre" style="padding:3px 9px;font-size:11.5px;border-radius:999px">
@@ -19,8 +19,8 @@
                 @else
                     <div class="top-caja-pill" style="display:inline-flex;align-items:center;gap:8px;padding:4px 6px 4px 12px;background:var(--input);border:1px solid rgba(234,179,8,0.3);border-radius:999px">
                         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#eab308"></span>
-                        <span class="subtle" style="font-size:12px;font-weight:600">{{ $caja->nombre }}</span>
-                        <span class="badge warning sm" style="font-size:11px;padding:2px 7px">{{ __('Cerrada') }}</span>
+                        <span class="subtle top-caja-nombre" style="font-size:12px;font-weight:600" title="{{ $caja->nombre }}">{{ $caja->nombre }}</span>
+                        <span class="badge warning sm top-caja-estado" style="font-size:11px;padding:2px 7px">{{ __('Cerrada') }}</span>
                         @include('livewire.caja.partials.otros-turnos-topbar')
                         <button type="button" class="btn primary sm" wire:click="abrirModalApertura" style="padding:3px 10px;font-size:11.5px;border-radius:999px">
                             <x-icon name="plus" size="sm" /> {{ __('Abrir caja') }}

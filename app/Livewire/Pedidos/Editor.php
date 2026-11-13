@@ -3,6 +3,7 @@
 namespace App\Livewire\Pedidos;
 
 use App\Domain\Facturacion\DatosFactura;
+use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Domain\Ventas\Actions\CancelarPedido;
 use App\Domain\Ventas\Actions\ConfirmarVenta;
 use App\Domain\Ventas\Actions\GuardarPedido;
@@ -40,6 +41,11 @@ class Editor extends Component
 {
     use CapturaFactura, CapturaProductos, EligeCaja, EligeCliente, MuestraAvisos;
 
+    protected function admiteSinControlDeStock(): bool
+    {
+        return true;
+    }
+
     #[Locked]
     public ?int $pedidoId = null;
 
@@ -72,6 +78,12 @@ class Editor extends Component
     public string $pago_electronico = '';
 
     public bool $confirmando = false;
+
+    /** Casilla «Entregado» de la confirmación (Despachos y cocina): desmarcada por defecto, la venta queda Por despachar o En cocina. */
+    public bool $entregado = false;
+
+    /** «Nombre o mesa» opcional (cocina § 4.1); el servidor lo ignora sin la capacidad. */
+    public string $nombreMesa = '';
 
     public bool $confirmandoCancelacion = false;
 
@@ -194,13 +206,16 @@ class Editor extends Component
             $this->resetValidation();
         }
 
+        $this->entregado = false;
+        $this->nombreMesa = '';
         $this->confirmando = true;
     }
 
     public function confirmar(ConfirmarVenta $accion): void
     {
-        // Los datos fiscales se validan con el modal abierto, para que el vendedor vea el error en su campo.
+        // Los datos fiscales y «Nombre o mesa» se validan con el modal abierto, para que el vendedor vea el error en su campo.
         $datosFactura = $this->datosFactura();
+        $this->validate(['nombreMesa' => ['nullable', 'string', 'max:40']], [], ['nombreMesa' => __('«Nombre o mesa»')]);
         $this->confirmando = false;
         $venta = $accion->ejecutar($this->actor(), Pedido::query()->findOrFail($this->pedidoId), $this->datosCaja() + [
             'metodo' => $this->pago_metodo,
@@ -210,7 +225,7 @@ class Editor extends Component
             'electronico' => $this->pago_electronico,
             'clave' => $this->claveConfirmacion,
             'vencimiento' => $this->pago_en_cuotas ? $this->pago_vencimiento : null,
-        ], $datosFactura);
+        ], $datosFactura, entregado: $this->entregado, nombreMesa: $this->nombreMesa);
 
         session()->flash('aviso', __('Venta :codigo confirmada.', ['codigo' => $venta->codigo()]));
         $this->redirectRoute('ventas.ver', $venta, navigate: false);
@@ -228,7 +243,7 @@ class Editor extends Component
         $actor = $this->actor();
         $pedido = $this->pedidoId === null ? null : Pedido::query()->with('cliente')->find($this->pedidoId);
         $sucursalId = $this->sucursal_id === null ? null : (int) $this->sucursal_id;
-        $datos = $this->datosDeLineas($sucursalId);
+        $datos = $this->datosDeLineas($sucursalId, vendible: true);
         $filas = [];
         $lineasCalculo = [];
         $errores = [];
@@ -257,7 +272,8 @@ class Editor extends Component
                     'descuento_tipo' => (string) ($linea['descuento_tipo'] ?? 'bs'), 'descuento_valor' => $descuento];
             }
 
-            $stock = $datos['stock'][$producto->id] ?? '0';
+            // null: el producto no controla stock (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 3).
+            $stock = $producto->controla_stock ? ($datos['stock'][$producto->id] ?? '0') : null;
             $filas[] = compact('indice', 'producto', 'precio', 'stock', 'cantidad') + ['tipo' => $tipo];
         }
 
@@ -297,6 +313,8 @@ class Editor extends Component
             'clientesEncontrados' => $this->clientesEncontrados(),
             'sugerencias' => $this->sugerencias(),
             'fiscal' => $this->confirmando && $calculo !== null ? $this->contextoFiscal($calculo['total']) : null,
+            // Despachos o cocina: la casilla «Entregado» y, en cocina, «Nombre o mesa».
+            'flujoEntrega' => app(CapacidadesEmpresa::class)->flujoEntrega((int) $actor->empresa_id),
         ])->title($pedido === null ? __('Nuevo pedido') : $pedido->codigo());
     }
 

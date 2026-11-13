@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToEmpresa;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use LogicException;
 
@@ -14,6 +15,7 @@ use LogicException;
  * @property int $empresa_id
  * @property int $compra_id
  * @property int $producto_id
+ * @property int|null $lote_id Solo en productos con vencimiento (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 6.5).
  * @property int $orden
  * @property string $descripcion
  * @property string $sku
@@ -22,6 +24,7 @@ use LogicException;
  * @property string $costo_unitario
  * @property string $subtotal
  * @property Carbon $created_at
+ * @property-read Lote|null $lote
  */
 class CompraItem extends Model
 {
@@ -44,5 +47,13 @@ class CompraItem extends Model
     {
         static::updating(fn () => throw new LogicException('El detalle de una compra no se modifica.'));
         static::deleting(fn () => throw new LogicException('El detalle de una compra no se elimina.'));
+    }
+
+    /**
+     * @return BelongsTo<Lote, $this>
+     */
+    public function lote(): BelongsTo
+    {
+        return $this->belongsTo(Lote::class);
     }
 }

@@ -51,7 +51,7 @@
             <div class="tool-row">
                 <div class="search">
                     <x-icon name="search" />
-                    <input class="input" type="search" wire:model.live.debounce.350ms="buscar" placeholder="{{ __('Buscar por nombre, código o código de barras...') }}" aria-label="{{ __('Buscar productos') }}">
+                    <input class="input" type="search" wire:model.live.debounce.350ms="buscar" placeholder="{{ __('Buscar por nombre, marca, código o código de barras...') }}" aria-label="{{ __('Buscar productos') }}">
                 </div>
                 <select class="select" wire:model.live="categoria" aria-label="{{ __('Filtrar por categoría') }}">
                     <option value="">{{ __('Todas las categorías') }}</option>
@@ -59,6 +59,15 @@
                         <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
                     @endforeach
                 </select>
+                {{-- Filtro por marca: solo si la empresa ya usa marcas. --}}
+                @if ($marcas->isNotEmpty())
+                    <select class="select" wire:model.live="marca" aria-label="{{ __('Filtrar por marca') }}" data-test="filtro-marca">
+                        <option value="">{{ __('Todas las marcas') }}</option>
+                        @foreach ($marcas as $opcion)
+                            <option value="{{ $opcion }}">{{ $opcion }}</option>
+                        @endforeach
+                    </select>
+                @endif
                 @if ($administra && $sucursales->count() > 1)
                     <select class="select" wire:model.live="sucursal" @disabled($sucursalFija) aria-label="{{ __('Ver stock de la sucursal') }}">
                         @foreach ($sucursales as $opcion)
@@ -71,101 +80,59 @@
                     <option value="con_stock">{{ __('Con Stock') }}</option>
                     <option value="sin_stock">{{ __('Sin Stock') }}</option>
                 </select>
-                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id, 'stock' => $filtroStock])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
+                @if ($agrupado)
+                    {{-- Tallas y colores § 5: modelos (con sus combinaciones), productos sueltos o todos. --}}
+                    <select class="select" wire:model.live="tipo" aria-label="{{ __('Modelos o productos sueltos') }}" data-test="filtro-tipo">
+                        <option value="">{{ __('Todos') }}</option>
+                        <option value="modelos">{{ __('Modelos') }}</option>
+                        <option value="sueltos">{{ __('Sueltos') }}</option>
+                    </select>
+                @endif
+                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id, 'stock' => $filtroStock, 'tipo' => $agrupado ? $tipo : '', 'marca' => $marca])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
             </div>
+            @if ($sinLote > 0)
+                {{-- Lotes § 9.2: acción masiva del administrador. --}}
+                <div class="notice mini-note" style="margin-bottom:14px" data-test="marcar-lotes">
+                    <x-icon name="info" />
+                    <div>{{ $categoriaFiltro === null
+                        ? trans_choice(':count producto con control de stock todavía no controla lote y vencimiento.|:count productos con control de stock todavía no controlan lote y vencimiento.', $sinLote)
+                        : trans_choice(':count producto de :categoria todavía no controla lote y vencimiento.|:count productos de :categoria todavía no controlan lote y vencimiento.', $sinLote, ['categoria' => $categoriaFiltro]) }}
+                        <button class="link" type="button" wire:click="$set('confirmandoLotes', true)">{{ __('Marcarlos con lote y vencimiento') }}</button></div>
+                </div>
+            @endif
+            @if ($confirmandoLotes && $sinLote > 0)
+                <x-modal titulo="Marcar con lote y vencimiento" descripcion="El stock actual de cada sucursal pasa a «Sin lote (regularización)». El total no cambia y se puede vender; después regulariza cada lote desde Vencimientos → Sin fecha." cerrar="$set('confirmandoLotes', false)">
+                    <p>{{ $categoriaFiltro === null
+                        ? trans_choice('Se marcará :count producto.|Se marcarán :count productos.', $sinLote)
+                        : trans_choice('Se marcará :count producto de :categoria.|Se marcarán :count productos de :categoria.', $sinLote, ['categoria' => $categoriaFiltro]) }}</p>
+                    <div class="modal-actions">
+                        <button type="button" class="btn ghost" wire:click="$set('confirmandoLotes', false)">{{ __('Cancelar') }}</button>
+                        <button type="button" class="btn primary" wire:click="marcarConLote" wire:loading.attr="disabled" wire:target="marcarConLote"><x-icon name="check" /> {{ __('Marcar') }}</button>
+                    </div>
+                </x-modal>
+            @endif
+            <div x-data="{ agrupar: [] }">
+            @if ($conVariantes)
+                {{-- Tallas y colores § 9: los productos sueltos marcados se agrupan en un modelo (página completa). --}}
+                <div class="agrupar-barra" data-test="barra-agrupar">
+                    <span class="subtle" x-show="agrupar.length === 0">{{ __('Marca productos sueltos para agruparlos en un modelo con tallas y colores.') }}</span>
+                    <b x-show="agrupar.length > 0" x-cloak x-text="agrupar.length === 1 ? @js(__('1 producto marcado')) : @js(__(':count productos marcados')).replace(':count', agrupar.length)"></b>
+                    <a class="btn primary sm" x-show="agrupar.length > 0" x-cloak :href="@js(route('productos.modelos.agrupar')) + '?productos=' + agrupar.join(',')" data-test="agrupar-en-modelo"><x-icon name="tag" size="sm" /> {{ __('Agrupar en modelo') }}</a>
+                    <button class="btn ghost sm" type="button" x-show="agrupar.length > 0" x-cloak @click="agrupar = []">{{ __('Desmarcar') }}</button>
+                </div>
+            @endif
             <div class="table-wrap">
-                <table>
+                <table class="catalogo-tabla" x-data="{ abiertos: {} }">
                     <thead><tr><th>{{ __('Producto / código') }}</th><th>{{ __('Categoría') }}</th><th>{{ __('Consumidor') }}</th><th>{{ __('Minorista') }}</th><th>{{ __('Mayorista') }}</th><th>{{ __('Stock · :nombre', ['nombre' => $sucursalVista->nombre ?? '—']) }}</th><th>{{ __('Alerta') }}</th>@if ($administra)<th>{{ __('Acción') }}</th>@endif</tr></thead>
                     <tbody>
                         @forelse ($productos as $producto)
-                            @php $alerta = ListadoProductos::alerta((string) $producto->stock, (string) $producto->minimo); @endphp
-                            <tr wire:key="producto-{{ $producto->id }}">
-                                <td>
-                                    <div class="item-name">
-                                        <span class="token" style="overflow:hidden">
-                                            @if ($producto->imagen_path)
-                                                <img src="{{ route('productos.imagen', $producto) }}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover">
-                                            @else
-                                                <x-icon name="store" size="sm" />
-                                            @endif
-                                        </span>
-                                        <span>
-                                            <b>{{ $producto->nombre }}</b>
-                                            @if ($producto->vinculoExterno)
-                                                <span class="badge info" style="font-size:10px;padding:2px 6px;margin-left:4px">Cyclone</span>
-                                            @endif
-                                            <small>{{ $producto->sku }}@unless ($producto->activo) {{ __('· Inactivo') }} @endunless</small>
-                                        </span>
-                                    </div>
-                                </td>
-                                <td>{{ $producto->categoria->nombre ?? '—' }}</td>
-                                <td>
-                                    @if ($administra && $editandoProductoId === $producto->id)
-                                        <div style="display:inline-flex;flex-direction:column;gap:4px">
-                                            <div style="display:inline-flex;align-items:center;gap:4px">
-                                                <span style="font-size:11px;font-weight:700;color:var(--faint)">Bs</span>
-                                                <input type="text"
-                                                       inputmode="decimal"
-                                                       class="input"
-                                                       style="min-height:28px;height:28px;padding:0 6px;font-size:12px;font-weight:700;width:75px"
-                                                       wire:model="editandoPrecio"
-                                                       wire:keydown.enter.prevent="guardarPrecio"
-                                                       wire:keydown.escape="cancelarEdicionPrecio"
-                                                       autofocus
-                                                       x-init="$el.focus(); $el.select()">
-                                                <button type="button"
-                                                        class="icon-action"
-                                                        style="height:28px;width:28px;border-radius:7px;color:var(--brand-bright);background:var(--accent-soft)"
-                                                        wire:click="guardarPrecio"
-                                                        wire:loading.attr="disabled"
-                                                        title="{{ __('Guardar') }}">
-                                                    <x-icon name="check" size="sm" />
-                                                </button>
-                                                <button type="button"
-                                                        class="icon-action"
-                                                        style="height:28px;width:28px;border-radius:7px"
-                                                        wire:click="cancelarEdicionPrecio"
-                                                        title="{{ __('Cancelar') }}">
-                                                    <x-icon name="x" size="sm" />
-                                                </button>
-                                            </div>
-                                            @error('editandoPrecio')
-                                                <small class="danger-text" style="font-size:10px;margin-top:2px">{{ $message }}</small>
-                                            @enderror
-                                        </div>
-                                    @else
-                                        <div style="display:inline-flex;align-items:center;gap:6px">
-                                            @if ($administra)
-                                                <button type="button"
-                                                        wire:click="iniciarEdicionPrecio({{ $producto->id }})"
-                                                        style="all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px"
-                                                        title="{{ __('Clic para editar precio') }}">
-                                                    <b>{{ Decimal::bs($producto->precio_consumidor) }}</b>
-                                                    <span class="icon-action" style="height:22px;width:22px;border-radius:6px;border:1px solid var(--border-soft);opacity:0.7">
-                                                        <x-icon name="edit" size="sm" />
-                                                    </span>
-                                                </button>
-                                            @else
-                                                <b>{{ Decimal::bs($producto->precio_consumidor) }}</b>
-                                            @endif
-                                        </div>
-                                    @endif
-                                    @if (Decimal::comparar($producto->precio_consumidor, '0') === 0 && $producto->vinculoExterno)
-                                        <small style="display:block;color:var(--brand);font-weight:600">{{ __('Precio pendiente') }}</small>
-                                    @endif
-                                </td>
-                                <td>{{ $producto->precio_minorista === null ? '—' : Decimal::bs($producto->precio_minorista) }}</td>
-                                <td>{{ $producto->precio_mayorista === null ? '—' : Decimal::bs($producto->precio_mayorista) }}</td>
-                                <td><b>{{ Decimal::formatear((string) $producto->stock) }}</b> {{ $producto->unidad->abreviatura }}</td>
-                                <td>
-                                    @if ($alerta === 'sin_stock')<span class="badge danger">{{ __('Sin stock') }}</span>
-                                    @elseif ($alerta === 'bajo')<span class="badge danger">{{ __('Stock bajo') }}</span>
-                                    @else<span class="badge info">{{ __('Normal') }}</span>@endif
-                                </td>
-                                @if ($administra)
-                                    <td><a class="btn sm ghost" href="{{ route('productos.editar', $producto) }}"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</a></td>
-                                @endif
-                            </tr>
+                            @if ($agrupado && $producto->tipo === 'modelo')
+                                @continue(! isset($modelos[$producto->entrada_id]))
+                                @include('livewire.catalogo.partials.fila-modelo', ['modelo' => $modelos[$producto->entrada_id], 'variantes' => $variantes[$producto->entrada_id] ?? collect(), 'resumen' => $resumenModelos[$producto->entrada_id] ?? null])
+                            @else
+                                @continue($agrupado && ! isset($sueltos[$producto->entrada_id]))
+                                @include('livewire.catalogo.partials.fila-producto', ['producto' => $agrupado ? $sueltos[$producto->entrada_id] : $producto])
+                            @endif
                         @empty
                             <tr>
                                 <td colspan="8">
@@ -188,13 +155,14 @@
                                             </div>
                                         </div>
                                     @else
-                                        <div class="empty">{{ $buscar !== '' || $categoria !== '' || $filtroStock !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div>
+                                        <div class="empty">{{ $buscar !== '' || $categoria !== '' || $filtroStock !== '' || $tipo !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div>
                                     @endif
                                 </td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
+            </div>
             </div>
             <div class="table-footer">
                 <span>{{ __('Los precios se guardan por producto. El stock y el mínimo pertenecen a cada sucursal.') }}</span>

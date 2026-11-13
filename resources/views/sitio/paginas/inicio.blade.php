@@ -16,7 +16,7 @@
                     <li><x-sitio.i n="check" />Facturación SIAT incluida</li>
                     <li><x-sitio.i n="check" />Varias sucursales</li>
                     <li><x-sitio.i n="check" />Efectivo, QR o mixto</li>
-                    <li><x-sitio.i n="check" />Asistente de IA</li>
+                    <li><x-sitio.i n="check" />Agente de IA</li>
                 </ul>
             </div>
 
@@ -104,7 +104,7 @@
             <header class="section-head">
                 <p class="eyebrow">Funcionalidades</p>
                 <h2 id="modulos-title">Todo tu negocio en un solo sistema</h2>
-                <p class="lead">Inventario, ventas, cobros, caja, reportes, facturación SIAT y un asistente de inteligencia artificial que conoce tu negocio.</p>
+                <p class="lead">Inventario, ventas, cobros, caja, reportes, facturación SIAT y un agente de inteligencia artificial que conoce tu negocio.</p>
             </header>
 
             <div class="modules">
@@ -196,13 +196,14 @@
                 </article>
 
                 <article class="module module-ai reveal" style="--d:80ms">
-                    <div class="module-top"><span class="module-icon"><x-sitio.i n="sparkles" /></span><h3>Asistente de IA Mozi</h3></div>
+                    <div class="module-top"><span class="module-icon"><x-sitio.i n="sparkles" /></span><h3>Agente de IA Mozi</h3></div>
+                    <p class="flags"><span class="flag">Plan SIAT + Agente IA</span></p>
                     <p>Pregúntale «¿qué productos se están por acabar?» o «¿quién me debe más?» y te responde con los datos reales de tu negocio, en tablas y gráficos.</p>
                     <div class="chat" aria-hidden="true">
                         <span class="bubble me">¿Qué se está por acabar?</span>
                         <span class="bubble bot"><i></i><i></i><i></i></span>
                     </div>
-                    <a class="module-link" href="{{ route('sitio.asistente-ia') }}">Conocer a Mozi<x-sitio.i n="arrow" /></a>
+                    <a class="module-link" href="{{ route('sitio.agente-ia') }}">Conocer a Mozi<x-sitio.i n="arrow" /></a>
                 </article>
             </div>
         </div>
@@ -233,7 +234,7 @@
             <header class="section-head">
                 <p class="eyebrow">Precios</p>
                 <h2 id="planes-title">Elige tu plan</h2>
-                <p class="lead">Los dos planes incluyen todos los módulos. La única diferencia es la facturación SIAT. Prueba gratis {{ $dias }} días.</p>
+                <p class="lead">Empieza con inventario y ventas, suma la facturación SIAT y, si quieres, a Mozi, tu agente de IA. Prueba gratis {{ $dias }} días.</p>
             </header>
             <x-sitio.planes :planes="$planes" />
         </div>

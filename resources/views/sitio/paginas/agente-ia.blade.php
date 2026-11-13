@@ -1,12 +1,12 @@
 <x-sitio.layout :pagina="$pagina" :seo="$seo" :esquema="$esquema">
     <x-sitio.hero :pagina="$pagina"
         etiqueta="Inteligencia artificial para tu negocio"
-        titulo="Mozi, el asistente de IA para negocios en <span class='hl'>Bolivia</span>"
+        titulo="Mozi, el agente de IA para negocios en <span class='hl'>Bolivia</span>"
         lead="Pregúntale a Mozi como le preguntarías a tu mejor empleado: qué se está por acabar, qué conviene comprar, quién te debe más o qué sucursal vende mejor. Responde con los datos reales de tu negocio, con tablas y gráficos."
         :puntos="['Usa tus datos reales', 'Respuestas con gráficos', 'Tú confirmas cada acción']">
         <x-slot:visual>
             <div class="visual-card">
-                <div class="visual-title"><span style="display:inline-flex;align-items:center;gap:8px"><x-sitio.i n="sparkles" style="color:var(--info)" />Mozi</span><small>Asistente de IA</small></div>
+                <div class="visual-title"><span style="display:inline-flex;align-items:center;gap:8px"><x-sitio.i n="sparkles" style="color:var(--info)" />Mozi</span><small>Agente de IA</small></div>
                 <div class="chat">
                     <span class="bubble me">¿Qué se está por acabar en Sucursal Norte?</span>
                     <span class="bubble bot" style="display:block;font-weight:600">Hay 5 productos que se agotarían esta semana al ritmo de venta actual. Aceite 1 L es el más urgente: quedan 3 y vendes unos 4 por día.</span>
@@ -70,18 +70,18 @@
         <div class="wrap">
             <header class="section-head">
                 <p class="eyebrow">Preguntas</p>
-                <h2 id="ia-faq">Preguntas sobre el asistente de IA</h2>
+                <h2 id="ia-faq">Preguntas sobre el agente de IA</h2>
             </header>
             <x-sitio.faq :preguntas="[
-                ['¿Qué es Mozi?', 'Mozi es el asistente con inteligencia artificial de MoziStock. Responde preguntas sobre tu inventario, ventas, compras, clientes, proveedores, sucursales y cobros usando los datos reales de tu empresa.'],
+                ['¿Qué es Mozi?', 'Mozi es el agente de IA de MoziStock: un asistente inteligente que analiza tu negocio y responde preguntas sobre tu inventario, ventas, compras, clientes, proveedores, sucursales y cobros usando los datos reales de tu empresa.'],
                 ['¿Mozi puede ver los datos de otras empresas?', 'No. Mozi consulta solo la información de tu empresa y respeta los permisos de tu usuario: un vendedor no ve lo mismo que un administrador.'],
                 ['¿Mozi puede hacer cambios en mi sistema?', 'Puede preparar acciones como una compra o un traspaso, pero nada se ejecuta sin tu confirmación explícita. Tampoco emite ni anula facturas del SIAT.'],
                 ['¿Tengo que saber de tecnología para usarlo?', 'No. Le escribes tu pregunta en español, como si hablaras con una persona, y te responde con texto, tablas y gráficos.'],
-                ['¿Está incluido en mi plan?', 'Sí. El asistente Mozi está incluido en los planes de MoziStock, con un límite de consultas diarias por empresa.'],
+                ['¿En qué plan está Mozi?', 'Mozi viene en el plan SIAT + Agente IA, con un límite de consultas diarias por empresa. Puedes probarlo gratis '.config('mozistock.prueba_gratis_dias').' días eligiendo ese plan al registrarte.'],
             ]" />
         </div>
     </section>
 
-    <x-sitio.relacionados actual="asistente-ia" :claves="['reportes', 'inventario', 'creditos']" />
+    <x-sitio.relacionados actual="agente-ia" :claves="['reportes', 'inventario', 'creditos']" />
     <x-sitio.cta titulo="Pregúntale a Mozi por tu negocio" :mensaje="$seo->mensajeWhatsapp" />
 </x-sitio.layout>

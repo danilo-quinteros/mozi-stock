@@ -26,6 +26,7 @@ final class GuardarPlan
      *     descripcion: string,
      *     precio_mensual: string,
      *     siat_habilitado?: bool,
+     *     agente_ia?: bool,
      *     codigo?: string|null
      * }  $datos
      */
@@ -49,8 +50,9 @@ final class GuardarPlan
         }
 
         $siatHabilitado = (bool) ($datos['siat_habilitado'] ?? false);
+        $agenteIa = (bool) ($datos['agente_ia'] ?? false);
 
-        return DB::transaction(function () use ($actor, $planId, $titulo, $descripcion, $precio, $siatHabilitado, $datos): Plan {
+        return DB::transaction(function () use ($actor, $planId, $titulo, $descripcion, $precio, $siatHabilitado, $agenteIa, $datos): Plan {
             if ($planId !== null) {
                 $plan = Plan::query()->whereKey($planId)->lockForUpdate()->firstOrFail();
                 $antes = [
@@ -58,12 +60,14 @@ final class GuardarPlan
                     'descripcion' => $plan->descripcion,
                     'precio_mensual' => (string) $plan->precio_mensual,
                     'siat_habilitado' => $plan->siat_habilitado,
+                    'agente_ia' => $plan->agente_ia,
                 ];
 
                 $plan->titulo = $titulo;
                 $plan->descripcion = $descripcion;
                 $plan->precio_mensual = $precio;
                 $plan->siat_habilitado = $siatHabilitado;
+                $plan->agente_ia = $agenteIa;
 
                 if ($plan->isDirty()) {
                     $plan->save();
@@ -72,6 +76,7 @@ final class GuardarPlan
                         'descripcion' => $plan->descripcion,
                         'precio_mensual' => (string) $plan->precio_mensual,
                         'siat_habilitado' => $plan->siat_habilitado,
+                        'agente_ia' => $plan->agente_ia,
                     ]);
                 }
 
@@ -99,6 +104,7 @@ final class GuardarPlan
             $plan->descripcion = $descripcion;
             $plan->precio_mensual = $precio;
             $plan->siat_habilitado = $siatHabilitado;
+            $plan->agente_ia = $agenteIa;
             $plan->activo = true;
             $plan->orden = $maxOrden + 1;
             $plan->save();
@@ -108,6 +114,7 @@ final class GuardarPlan
                 'titulo' => $plan->titulo,
                 'precio_mensual' => (string) $plan->precio_mensual,
                 'siat_habilitado' => $plan->siat_habilitado,
+                'agente_ia' => $plan->agente_ia,
             ]);
 
             return $plan;

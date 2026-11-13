@@ -5,6 +5,7 @@ namespace App\Livewire\Catalogo;
 use App\Domain\Catalogo\Actions\ConfirmarImportacionProductos;
 use App\Domain\Catalogo\Actions\PrepararImportacionProductos;
 use App\Domain\Catalogo\Importacion\CamposImportacion;
+use App\Enums\Capacidad;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Categoria;
 use App\Models\ImportacionProducto;
@@ -16,6 +17,7 @@ use App\Models\User;
 use App\Support\Csv;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -260,7 +262,7 @@ class ImportarProductos extends Component
             default => 'archivo',
         };
 
-        $datos = ['importacion' => $importacion, 'paso' => $paso, 'campos' => CamposImportacion::etiquetas()];
+        $datos = ['importacion' => $importacion, 'paso' => $paso, 'campos' => CamposImportacion::etiquetas(Gate::allows('capacidad', Capacidad::LotesVencimientos))];
 
         if ($paso === 'archivo') {
             $datos['recientes'] = ImportacionProducto::query()->with('usuario:id,name')

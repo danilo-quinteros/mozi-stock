@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property bool $activa
  * @property bool $siat_habilitado
  * @property Rubro $rubro
+ * @property int $minutos_alerta_cocina pedidos En cocina con más minutos se resaltan (cocina § 4.4)
  * @property Carbon|null $guia_completada_en
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -45,6 +46,7 @@ class Empresa extends Model
         'siat_habilitado' => false,
         // Igual que el valor por defecto de la columna: sin rubro elegido, la empresa es General.
         'rubro' => 'general',
+        'minutos_alerta_cocina' => 15,
     ];
 
     protected function casts(): array
@@ -53,6 +55,7 @@ class Empresa extends Model
             'activa' => 'boolean',
             'siat_habilitado' => 'boolean',
             'rubro' => Rubro::class,
+            'minutos_alerta_cocina' => 'integer',
             'guia_completada_en' => 'datetime',
         ];
     }

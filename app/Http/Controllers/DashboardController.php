@@ -4,18 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Domain\Catalogo\Consultas\ListadoProductos;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
+use App\Domain\Inventario\Consultas\ReporteVencimientos;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Consultas\PanelInicio;
 use App\Domain\Reportes\Consultas\VentasPeriodo;
 use App\Domain\Reportes\Periodo;
 use App\Domain\Tenancy\GuiaConfiguracion;
+use App\Enums\Capacidad;
 use App\Enums\EstadoPagoSaas;
+use App\Models\OperacionInventario;
 use App\Models\PagoSaas;
 use App\Models\Sucursal;
 use App\Models\Suscripcion;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 /**
@@ -74,6 +78,9 @@ class DashboardController extends Controller
             'ultimas' => PanelInicio::ultimasVentas($empresaId, $sucursalId),
             'stockBajo' => PanelInicio::stockBajo($empresaId, $sucursalId),
             'masVendidos' => PanelInicio::masVendidos($empresaId, $sucursalId),
+            // Lotes y vencimientos § 4: una consulta, solo con la capacidad (y la Policy del reporte).
+            'lotes' => Gate::forUser($user)->allows('capacidad', Capacidad::LotesVencimientos) && Gate::forUser($user)->allows('viewAny', OperacionInventario::class)
+                ? ReporteVencimientos::resumen($empresaId, $sucursalId) : null,
         ];
     }
 

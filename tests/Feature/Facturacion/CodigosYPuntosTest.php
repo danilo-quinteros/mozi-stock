@@ -7,8 +7,8 @@ use App\Jobs\Siat\RenovarCufdEmpresa;
 use App\Jobs\Siat\SincronizarCatalogosEmpresa;
 use App\Livewire\Admin\CatalogosSiat;
 use App\Livewire\Admin\Empresas;
+use App\Livewire\Facturacion\Asistente;
 use App\Livewire\Facturacion\Catalogos;
-use App\Livewire\Facturacion\Datos;
 use App\Livewire\Facturacion\Puntos;
 use App\Models\Auditoria;
 use App\Models\Empresa;
@@ -423,7 +423,8 @@ test('el superadmin habilita la facturación con confirmación y queda auditado'
 
 test('guardar token delegado ejecuta la sincronizacion de catalogos en ese mismo momento', function () {
     $datos = SiatPruebas::empresaFiscal();
-    $this->transporte->responder(SiatPruebas::cuis());
+    // Primero la verificación del asistente (CUIS de casa matriz) y después el CUIS de la sincronización.
+    $this->transporte->responder(SiatPruebas::cuis())->responder(SiatPruebas::cuis());
 
     foreach (Catalogo::cases() as $catalogo) {
         $this->transporte->responder(SiatPruebas::catalogo($catalogo, [['10', 'VALOR '.$catalogo->name]]));
@@ -431,11 +432,11 @@ test('guardar token delegado ejecuta la sincronizacion de catalogos en ese mismo
 
     $tokenValido = SiatPruebas::token(1023456029);
 
-    Livewire::actingAs($datos['admin'])->test(Datos::class, ['empresaId' => $datos['empresa']->id])
+    Livewire::actingAs($datos['admin'])->test(Asistente::class, ['empresaId' => $datos['empresa']->id])
         ->set('token', $tokenValido)
-        ->call('guardarToken')
-        ->assertSet('token', '')
-        ->assertSee('Token delegado guardado y catálogos sincronizados');
+        ->call('guardarConexion')
+        ->assertHasNoErrors()
+        ->assertSet('token', '');
 
     expect(sinScope(SiatSincronizacion::class)->where('empresa_id', $datos['empresa']->id)->whereNotNull('sincronizado_en')->count())
         ->toBe(17);

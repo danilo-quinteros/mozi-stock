@@ -2,14 +2,17 @@
 
 namespace App\Domain\Facturacion;
 
+use App\Enums\ModalidadFacturacion;
 use App\Models\Empresa;
 use App\Models\SiatCatalogo;
+use App\Models\SiatConfiguracion;
 use App\Models\SiatPuntoVenta;
 use App\Models\SiatSincronizacion;
 use App\Models\SiatSucursal;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use MoziStudios\Siat\ClienteSiat;
+use MoziStudios\Siat\Configuracion\Contribuyente;
 use MoziStudios\Siat\Configuracion\PuntoEmision;
 use MoziStudios\Siat\Excepciones\SiatException;
 use MoziStudios\Siat\Respuestas\ItemCatalogo;
@@ -17,8 +20,10 @@ use MoziStudios\Siat\Sincronizacion\Catalogo;
 
 /**
  * Descarga los catálogos del SIN para una empresa con el CUIS de su sucursal principal y reemplaza
- * cada catálogo completo en una transacción (las llamadas al SIN van antes, fuera de ella). Si un
- * catálogo falla se conserva su versión anterior y se registra el error; los demás continúan.
+ * cada catálogo completo en una transacción (las llamadas al SIN van antes, fuera de ella). Si la
+ * empresa todavía no registró ninguna sucursal en MoziStock, usa la casa matriz del SIN (sucursal 0,
+ * sin punto de venta) con un CUIS pedido en el momento: así el asistente sincroniza al validar el token.
+ * Si un catálogo falla se conserva su versión anterior y se registra el error; los demás continúan.
  */
 final class SincronizarCatalogos
 {
@@ -61,16 +66,24 @@ final class SincronizarCatalogos
     private function descargar(Empresa $empresa, ?array $catalogos): array
     {
         $contribuyente = $this->contribuyentes->para($empresa);
-        [$sucursal, $principal] = $this->puntoPrincipal($empresa);
-        $cuis = $this->codigos->cuis($principal);
+        $sucursal = DeEmpresa::consulta(SiatSucursal::class, $empresa->id)->orderBy('codigo')->first();
+
+        if ($sucursal === null) {
+            $emision = new PuntoEmision(0, 0);
+            $cuis = $this->cuisCasaMatriz($empresa, $contribuyente, $emision);
+        } else {
+            [$sucursal, $principal] = $this->puntoPrincipal($empresa);
+            $cuis = $this->codigos->cuis($principal)->codigo;
+            $emision = new PuntoEmision($sucursal->codigo, $principal->codigo);
+        }
+
         $servicio = $this->cliente->sincronizacion($contribuyente);
-        $emision = new PuntoEmision($sucursal->codigo, $principal->codigo);
         $correctos = 0;
         $fallidos = [];
 
         foreach ($catalogos ?? Catalogo::cases() as $catalogo) {
             try {
-                $respuesta = $servicio->catalogo($catalogo, $emision, $cuis->codigo);
+                $respuesta = $servicio->catalogo($catalogo, $emision, $cuis);
 
                 if (! $respuesta->transaccion && $respuesta->items === []) {
                     throw ErrorFacturacion::delSin(__('El SIN rechazó la sincronización.'), $respuesta->mensajes);
@@ -88,6 +101,19 @@ final class SincronizarCatalogos
         }
 
         return ['correctos' => $correctos, 'fallidos' => $fallidos];
+    }
+
+    /**
+     * CUIS de la casa matriz del SIN, sin guardarlo (con uno vigente el SIN devuelve el mismo).
+     *
+     * @throws ErrorFacturacion|SiatException
+     */
+    private function cuisCasaMatriz(Empresa $empresa, Contribuyente $contribuyente, PuntoEmision $emision): string
+    {
+        $modalidad = DeEmpresa::consulta(SiatConfiguracion::class, $empresa->id)->first()->modalidad ?? ModalidadFacturacion::Computarizada;
+        $respuesta = $this->cliente->conModalidad($modalidad->siat())->codigos($contribuyente)->cuis($emision);
+
+        return $respuesta->codigo ?? throw ErrorFacturacion::delSin(__('El SIN no entregó el CUIS para sincronizar los catálogos.'), $respuesta->mensajes);
     }
 
     /**

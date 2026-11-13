@@ -5,14 +5,17 @@ use App\Http\Controllers\CatalogoExternoFotoController;
 use App\Http\Controllers\ComprobanteCuentaController;
 use App\Http\Controllers\ComprobantePagoController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExportarDespachosController;
 use App\Http\Controllers\ExportarMovimientosController;
 use App\Http\Controllers\ExportarPedidosController;
 use App\Http\Controllers\ExportarProductosController;
 use App\Http\Controllers\ExportarUsuariosController;
+use App\Http\Controllers\ExportarVencimientosController;
 use App\Http\Controllers\FacturaSiatController;
 use App\Http\Controllers\IdiomaController;
 use App\Http\Controllers\ImpersonacionController;
 use App\Http\Controllers\ImprimirController;
+use App\Http\Controllers\ModeloImagenController;
 use App\Http\Controllers\OperacionesCsvController;
 use App\Http\Controllers\PedidoImprimirController;
 use App\Http\Controllers\ProductoImagenController;
@@ -31,9 +34,13 @@ use App\Livewire\Admin\SitioWeb as AdminSitioWeb;
 use App\Livewire\Admin\Suscripciones;
 use App\Livewire\AgenteMozi\Panel as AgenteMoziPanel;
 use App\Livewire\Caja\Arqueo;
+use App\Livewire\Catalogo\AgruparModelo;
 use App\Livewire\Catalogo\ImportarProductos;
+use App\Livewire\Catalogo\ModeloDetalle;
+use App\Livewire\Catalogo\ModeloFormulario;
 use App\Livewire\Catalogo\ProductoFormulario;
 use App\Livewire\Catalogo\Productos;
+use App\Livewire\Catalogo\TallasColores;
 use App\Livewire\Compras\Detalle as CompraDetalle;
 use App\Livewire\Compras\Lista as CompraLista;
 use App\Livewire\Compras\NuevaCompra;
@@ -57,6 +64,8 @@ use App\Livewire\Facturacion\Panel as FacturacionPanel;
 use App\Livewire\Inventario\Movimientos;
 use App\Livewire\Inventario\NuevoAjuste;
 use App\Livewire\Inventario\NuevoTraspaso;
+use App\Livewire\Inventario\TrazabilidadLote;
+use App\Livewire\Inventario\Vencimientos;
 use App\Livewire\Pedidos\Editor as PedidoEditor;
 use App\Livewire\Pedidos\Lista as PedidoLista;
 use App\Livewire\Reportes\Panel as ReportesPanel;
@@ -89,6 +98,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('usuarios', Usuarios::class)->name('usuarios.index');
         Route::get('usuarios/exportar', ExportarUsuariosController::class)->middleware('throttle:exportaciones')->name('usuarios.exportar');
         Route::livewire('configuracion', Configuracion::class)->name('configuracion');
+        // Tallas y colores (V1): sin la capacidad «variantes» responden 404, como si el módulo no existiera.
+        Route::livewire('configuracion/tallas-y-colores', TallasColores::class)->middleware('capacidad:variantes')->name('configuracion.tallas-colores');
         // Facturación SIAT: siempre la empresa del usuario; el Gate exige que MoziStudios la haya habilitado.
         Route::livewire('facturacion', FacturacionPanel::class)->name('facturacion');
         Route::post('sucursal-activa', SucursalActivaController::class)->name('sucursal-activa');
@@ -96,6 +107,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('productos', Productos::class)->name('productos.index');
         Route::get('productos/exportar', ExportarProductosController::class)->middleware('throttle:exportaciones')->name('productos.exportar');
         Route::livewire('productos/nuevo', ProductoFormulario::class)->name('productos.crear');
+        Route::middleware('capacidad:variantes')->group(function (): void {
+            Route::livewire('productos/modelos/nuevo', ModeloFormulario::class)->name('productos.modelos.crear');
+            // Tallas y colores V3 (§ 9): agrupar productos sueltos marcados en el catálogo (?productos=1,2,3).
+            Route::livewire('productos/modelos/agrupar', AgruparModelo::class)->name('productos.modelos.agrupar');
+            Route::livewire('productos/modelos/{modelo}', ModeloDetalle::class)->whereNumber('modelo')->name('productos.modelos.ver');
+            Route::livewire('productos/modelos/{modelo}/editar', ModeloFormulario::class)->whereNumber('modelo')->name('productos.modelos.editar');
+            Route::get('productos/modelos/{modelo}/imagen', ModeloImagenController::class)->whereNumber('modelo')->name('productos.modelos.imagen');
+        });
         Route::livewire('productos/importar', ImportarProductos::class)->name('productos.importar');
         Route::livewire('productos/{producto}/editar', ProductoFormulario::class)->name('productos.editar');
         Route::get('productos/{producto}/imagen', ProductoImagenController::class)->name('productos.imagen');
@@ -104,11 +123,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('inventario/exportar', ExportarMovimientosController::class)->middleware('throttle:exportaciones')->name('inventario.exportar');
         Route::livewire('inventario/ajuste', NuevoAjuste::class)->name('inventario.ajuste');
         Route::livewire('inventario/traspaso', NuevoTraspaso::class)->name('inventario.traspaso');
+        // Lotes y vencimientos (L4): sin la capacidad responden 404, como si el módulo no existiera.
+        Route::livewire('inventario/vencimientos', Vencimientos::class)->middleware('capacidad:lotes_vencimientos')->name('inventario.vencimientos');
+        Route::get('inventario/vencimientos/exportar', ExportarVencimientosController::class)->middleware(['capacidad:lotes_vencimientos', 'throttle:exportaciones'])->name('inventario.vencimientos.exportar');
+        Route::livewire('inventario/lotes/{lote}', TrazabilidadLote::class)->whereNumber('lote')->middleware('capacidad:lotes_vencimientos')->name('inventario.lote');
 
         // Punto de venta: guarda y confirma en un paso con las mismas acciones de Pedidos y ventas.
         Route::livewire('pos', Pos::class)->name('pos');
         Route::livewire('pedidos', PedidoLista::class)->name('pedidos.index');
         Route::get('pedidos/exportar', ExportarPedidosController::class)->middleware('throttle:exportaciones')->name('pedidos.exportar');
+        Route::get('pedidos/despachos/exportar', ExportarDespachosController::class)->middleware(['capacidad:despachos', 'throttle:exportaciones'])->name('pedidos.despachos.exportar');
         Route::livewire('pedidos/nuevo', PedidoEditor::class)->name('pedidos.crear');
         Route::livewire('pedidos/{pedido}', PedidoEditor::class)->whereNumber('pedido')->name('pedidos.editar');
         Route::get('pedidos/{pedido}/imprimir', PedidoImprimirController::class)->whereNumber('pedido')->name('pedidos.imprimir');

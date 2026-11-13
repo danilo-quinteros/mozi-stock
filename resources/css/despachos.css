@@ -1,0 +1,71 @@
+/* Despachos (rubro Distribuidora): casilla «Entregado», pestaña Despachos, diálogos y línea de tiempo. */
+.entrega-check {
+    display: flex; align-items: flex-start; gap: 11px; padding: 12px 14px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--panel); transition: border-color .2s, background .2s;
+}
+.entrega-check:hover { border-color: var(--accent-border); }
+.entrega-check:has(input:checked) { border-color: var(--green); background: rgba(107, 202, 146, .06); }
+.entrega-check:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.entrega-check input { flex: none; margin-top: 1px; width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+.entrega-check span { display: grid; gap: 4px; min-width: 0; }
+.entrega-check b { color: var(--text-strong); font-size: 12.5px; }
+.entrega-check small { color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.entrega-resultado { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; margin-right: auto; }
+.modal-actions:has(.entrega-resultado) { align-items: center; }
+.pos-entrega { margin-top: 13px; }
+.pos-entrega .entrega-check { padding: 10px 12px; }
+.pos-entrega .entrega-check b { font-size: 10.5px; }
+.pos-entrega .entrega-check small { font-size: 9.5px; color: var(--faint); }
+.pos-entrega-resultado { display: flex; justify-content: flex-end; margin-top: 12px; }
+.pos-entrega-resultado .entrega-resultado { margin-right: 0; }
+
+/* Pestaña Despachos: filtro por estado con conteos. */
+.entrega-filtro { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+.entrega-chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted); font-size: 11.5px; font-weight: 700;
+    transition: border-color .2s, background .2s, color .2s;
+}
+.entrega-chip:hover { border-color: var(--accent-border); color: var(--text); }
+.entrega-chip.active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-strong); }
+.entrega-chip b { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--panel-soft); color: var(--text-strong); font-size: 10.5px; text-align: center; }
+.entrega-punto { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.entrega-punto.warning { background: var(--brand-bright); }
+.entrega-punto.info { background: var(--blue); }
+.entrega-punto.success { background: var(--green); }
+.entrega-punto.danger { background: var(--red); }
+
+/* Diálogos de entrega. */
+.entrega-lineas { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-soft); border-radius: 12px; max-height: 220px; overflow: auto; }
+.entrega-lineas li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; font-size: 12px; border-bottom: 1px solid var(--border-soft); }
+.entrega-lineas li:last-child { border-bottom: 0; }
+.entrega-lineas b { color: var(--text-strong); white-space: nowrap; }
+.entrega-campos { display: grid; gap: 12px; margin-top: 16px; }
+.entrega-campos .notice { padding: 12px 14px; }
+.entrega-campos .notice .link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
+
+/* Detalle de venta: insignia, acciones y línea de tiempo de entrega. */
+.entrega-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.entrega-acciones { display: flex; gap: 7px; flex-wrap: wrap; }
+.entrega-linea-tiempo { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.entrega-linea-tiempo li { position: relative; padding: 0 0 15px 22px; font-size: 12px; line-height: 1.5; }
+.entrega-linea-tiempo li:before { content: ""; position: absolute; left: 0; top: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 3px var(--panel); }
+.entrega-linea-tiempo li:after { content: ""; position: absolute; left: 4px; top: 16px; bottom: 0; width: 1px; background: var(--border); }
+.entrega-linea-tiempo li:last-child { padding-bottom: 0; }
+.entrega-linea-tiempo li:last-child:after { display: none; }
+.entrega-linea-tiempo li.warning:before { background: var(--brand-bright); }
+.entrega-linea-tiempo li.info:before { background: var(--blue); }
+.entrega-linea-tiempo li.success:before { background: var(--green); }
+.entrega-linea-tiempo li.danger:before { background: var(--red); }
+.entrega-linea-tiempo b { color: var(--text-strong); }
+.entrega-linea-tiempo small { display: block; color: var(--faint); font-size: 10.5px; margin-top: 2px; }
+.entrega-linea-tiempo .nota { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.entrega-linea-tiempo .badge { padding: 2px 7px; margin-left: 4px; }
+
+@media (max-width: 640px) {
+    .entrega-acciones { width: 100%; }
+    .entrega-acciones .btn { flex: 1; justify-content: center; }
+}
+
+/* La insignia y las acciones de la fila no se parten en dos líneas. */
+.despachos-tabla .badge { white-space: nowrap; }

@@ -46,6 +46,16 @@
         @media (max-width: 640px) { .hoja { margin: 10px; padding: 16px; } .cabecera, .comprador, .pie { display: block; } }
         @media print { body { background: #fff; } .acciones { display: none; } .hoja { box-shadow: none; margin: 0; max-width: none; padding: 0; border-radius: 0; } }
     </style>
+    @if (request()->boolean('autoprint'))
+        <script>
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    window.focus();
+                    window.print();
+                }, 100);
+            });
+        </script>
+    @endif
 </head>
 <body @class(['rollo' => $rollo])>
     <div class="acciones">
@@ -86,17 +96,30 @@
         <table>
             <thead>
                 <tr>
-                    <th>CÓDIGO PRODUCTO / SERVICIO</th><th>CANTIDAD</th>@unless ($rollo)<th>UNIDAD DE MEDIDA</th>@endunless
-                    <th>DESCRIPCIÓN</th><th>PRECIO NETO UNITARIO</th><th>DESCUENTO</th><th>SUBTOTAL</th>
+                    @if ($rollo)
+                        <th class="der">{{ __('C.') }}</th>
+                        <th>{{ __('DESCRIPCIÓN') }}</th>
+                        <th class="der">{{ __('PRECIO') }}</th>
+                        <th class="der">{{ __('DESC.') }}</th>
+                        <th class="der">{{ __('SUBTOTAL') }}</th>
+                    @else
+                        <th class="der">{{ __('CANTIDAD') }}</th>
+                        <th>{{ __('DESCRIPCIÓN') }}</th>
+                        <th>{{ __('CÓDIGO') }}</th>
+                        <th class="der">{{ __('PRECIO') }}</th>
+                        <th class="der">{{ __('DESCUENTO') }}</th>
+                        <th class="der">{{ __('SUBTOTAL') }}</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
                 @foreach ($factura->lineas ?? [] as $linea)
                     <tr>
-                        <td>{{ $linea['codigo_producto'] }}</td>
                         <td class="der">{{ $bs($linea['cantidad']) }}</td>
-                        @unless ($rollo)<td>{{ $unidades[(string) $linea['unidad_medida']] ?? $linea['unidad_medida'] }}</td>@endunless
                         <td>{{ $linea['descripcion'] }}</td>
+                        @unless ($rollo)
+                            <td>{{ $linea['codigo_producto'] }}</td>
+                        @endunless
                         <td class="der">{{ $bs($linea['precio_neto_unitario']) }}</td>
                         <td class="der">{{ $bs($linea['monto_descuento']) }}</td>
                         <td class="der">{{ $bs($linea['sub_total']) }}</td>

@@ -224,3 +224,69 @@ test('the POS is accessible and the sidebar can be collapsed from next to the lo
         ->assertSee('data-sidebar-toggle', false)
         ->assertSee('Punto de venta');
 });
+
+test('the POS dispatches pos-producto-agregado event when adding or incrementing products', function () {
+    Livewire::test(Pos::class)
+        ->call('agregarProducto', $this->producto->id)
+        ->assertDispatched('pos-producto-agregado')
+        ->call('sumar', 0, 1)
+        ->assertDispatched('pos-producto-agregado');
+});
+
+test('the POS finishes sale with venta-finalizada and displays roll print button', function () {
+    $pantalla = Livewire::test(Pos::class)
+        ->call('agregarProducto', $this->producto->id)
+        ->set('pago_metodo', 'efectivo')
+        ->set('recibido', '20.00')
+        ->call('confirmar')
+        ->assertDispatched('venta-finalizada')
+        ->assertSee('Última venta')
+        ->assertSee('Imprimir')
+        ->assertSee('Ver venta');
+
+    $ultimaVenta = Venta::query()->latest('id')->first();
+    expect($ultimaVenta)->not->toBeNull();
+
+    // Comprobar que la vista normal de pedidos tiene el botón para rollo y columnas estándar
+    $this->get(route('pedidos.imprimir', $ultimaVenta->pedido_id))
+        ->assertOk()
+        ->assertSee('Rollo')
+        ->assertSee('CANTIDAD')
+        ->assertSee('DESCRIPCIÓN')
+        ->assertSee('CÓDIGO')
+        ->assertSee('PRECIO')
+        ->assertSee('DESCUENTO')
+        ->assertSee('SUBTOTAL');
+
+    // Comprobar que en formato rollo tiene las columnas abreviadas
+    $this->get(route('pedidos.imprimir', ['pedido' => $ultimaVenta->pedido_id, 'formato' => 'rollo']))
+        ->assertOk()
+        ->assertSee('Media página')
+        ->assertSee('C.')
+        ->assertSee('DESCRIPCIÓN')
+        ->assertSee('PRECIO')
+        ->assertSee('DESC.')
+        ->assertSee('SUBTOTAL')
+        ->assertDontSee('CÓDIGO');
+});
+
+test('the POS displays SIAT invoice checkbox above confirm button when SIAT is enabled in manual mode', function () {
+    $this->empresa->forceFill(['siat_habilitado' => true])->save();
+    $configuracion = new \App\Models\SiatConfiguracion([
+        'empresa_id' => $this->empresa->id,
+        'nit' => 1023456029,
+        'razon_social' => 'Empresa Test',
+        'modo' => \App\Enums\ModoFacturacion::Manual,
+    ]);
+    $configuracion->save();
+
+    Livewire::actingAs($this->admin)
+        ->test(Pos::class)
+        ->call('agregarProducto', $this->producto->id)
+        ->assertSee('Emitir factura SIAT')
+        ->assertDontSeeHtml('id="tipo_documento"')
+        ->assertSet('emitirFactura', false)
+        ->set('emitirFactura', true)
+        ->assertSet('emitirFactura', true)
+        ->assertDontSeeHtml('id="tipo_documento"'); // Solo muestra el check
+});

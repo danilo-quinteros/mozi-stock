@@ -52,6 +52,8 @@ class Suscripciones extends Component
 
     public bool $planSiat = false;
 
+    public bool $planIa = false;
+
     public function mount(): void
     {
         $this->authorize('configurar', Suscripcion::class);
@@ -81,6 +83,7 @@ class Suscripciones extends Component
         $this->planDescripcion = '';
         $this->planPrecio = '';
         $this->planSiat = false;
+        $this->planIa = false;
         $this->modalPlanAbierto = true;
     }
 
@@ -94,6 +97,7 @@ class Suscripciones extends Component
         $this->planDescripcion = $plan->descripcion;
         $this->planPrecio = Decimal::simple((string) $plan->precio_mensual);
         $this->planSiat = $plan->siat_habilitado;
+        $this->planIa = $plan->agente_ia;
         $this->modalPlanAbierto = true;
     }
 
@@ -101,7 +105,7 @@ class Suscripciones extends Component
     {
         $this->modalPlanAbierto = false;
         $this->resetValidation();
-        $this->reset('planEditandoId', 'planTitulo', 'planDescripcion', 'planPrecio', 'planSiat');
+        $this->reset('planEditandoId', 'planTitulo', 'planDescripcion', 'planPrecio', 'planSiat', 'planIa');
     }
 
     public function guardarPlan(GuardarPlan $accion): void
@@ -113,6 +117,7 @@ class Suscripciones extends Component
             'planDescripcion' => ['required', 'string', 'max:1000'],
             'planPrecio' => ['required', 'regex:/^\d{1,15}([.,]\d{1,2})?$/'],
             'planSiat' => ['boolean'],
+            'planIa' => ['boolean'],
         ], [
             'planTitulo.required' => __('Indica el título del plan.'),
             'planDescripcion.required' => __('Indica la descripción del plan.'),
@@ -129,6 +134,7 @@ class Suscripciones extends Component
             'descripcion' => $this->planDescripcion,
             'precio_mensual' => $this->planPrecio,
             'siat_habilitado' => $this->planSiat,
+            'agente_ia' => $this->planIa,
         ], $this->planEditandoId);
 
         $this->cerrarModalPlan();

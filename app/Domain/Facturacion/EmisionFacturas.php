@@ -271,6 +271,13 @@ final class EmisionFacturas
             throw new ErrorFacturacion(__('La factura no tiene montos calculados: reintenta para recalcularla.'));
         }
 
+        // Facturas registradas antes de exigir el SKU: se bloquean con el motivo en vez de fallar al armar el XML.
+        $sinCodigo = array_filter($factura->lineas, fn (array $l): bool => blank($l['codigo_producto'] ?? null));
+        if ($sinCodigo !== []) {
+            throw new ErrorFacturacion(__('Falta el código / SKU en: :productos. Cárgalo en el producto y reintenta.',
+                ['productos' => implode(', ', array_unique(array_column($sinCodigo, 'descripcion')))]));
+        }
+
         $detalles = array_map(fn (array $l): DetalleCompraVenta => new DetalleCompraVenta(
             $l['actividad'], $l['producto_sin'], $l['codigo_producto'], $l['descripcion'], $l['cantidad'],
             $l['unidad_medida'], $l['precio_neto_unitario'], $l['sub_total'], $l['monto_descuento'],

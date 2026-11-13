@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Facturacion;
 
+use App\Domain\Facturacion\PreparacionFacturacion;
 use App\Models\Empresa;
 use App\Models\SiatConfiguracion;
 use App\Models\SiatPuntoVenta;
@@ -9,6 +10,7 @@ use App\Models\SiatSucursal;
 use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use MoziStudios\Siat\Configuracion\ConfiguracionSistema;
 use MoziStudios\Siat\Sincronizacion\Catalogo;
 use MoziStudios\Siat\Soap\Transporte;
@@ -132,5 +134,37 @@ final class SiatPruebas
         ], $items);
 
         return [$catalogo->envoltorioRespuesta() => ['transaccion' => true, $catalogo->propiedadLista() => $filas]];
+    }
+
+    /**
+     * Respuestas para la sincronización que el asistente hace al validar un token: CUIS de casa matriz
+     * (la empresa aún no registró sucursales en el SIN) y un valor por catálogo.
+     */
+    public static function responderSincronizacion(TransporteFalso $transporte): void
+    {
+        $transporte->responder(self::cuis());
+
+        foreach (Catalogo::cases() as $catalogo) {
+            $transporte->responder(self::catalogo($catalogo, [['10', 'VALOR '.$catalogo->name]]));
+        }
+    }
+
+    /**
+     * Marca como sincronizados los catálogos sin los que no se factura (sin llamar al SIN) y deja la
+     * actividad y el producto SIN dados en esos catálogos.
+     */
+    public static function catalogosSincronizados(int $empresaId, string $actividad = '620100', string $producto = '83141'): void
+    {
+        foreach (PreparacionFacturacion::CATALOGOS_NECESARIOS as $catalogo) {
+            DB::table('siat_sincronizaciones')->insert([
+                'empresa_id' => $empresaId, 'catalogo' => $catalogo->name, 'cantidad' => 1,
+                'sincronizado_en' => now(), 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('siat_catalogos')->insert([
+            ['empresa_id' => $empresaId, 'catalogo' => Catalogo::Actividades->name, 'codigo' => $actividad, 'descripcion' => 'ACTIVIDAD '.$actividad, 'atributos' => null],
+            ['empresa_id' => $empresaId, 'catalogo' => Catalogo::ProductosServicios->name, 'codigo' => $producto, 'descripcion' => 'PRODUCTO '.$producto, 'atributos' => null],
+        ]);
     }
 }

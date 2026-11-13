@@ -33,6 +33,21 @@ final class CapacidadesEmpresa
         ));
     }
 
+    /**
+     * Capacidad que da a las ventas nuevas un estado de entrega pendiente: despachos (Por despachar) o
+     * cocina (En cocina). No pueden estar activas a la vez; null si toda venta nace Entregado.
+     */
+    public function flujoEntrega(int $empresaId): ?Capacidad
+    {
+        foreach ([Capacidad::Despachos, Capacidad::Cocina] as $capacidad) {
+            if ($this->tiene($empresaId, $capacidad)) {
+                return $capacidad;
+            }
+        }
+
+        return null;
+    }
+
     /** Descarta lo leído de una empresa (tras cambiar sus funciones). */
     public function olvidar(int $empresaId): void
     {

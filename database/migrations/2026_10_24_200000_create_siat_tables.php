@@ -19,8 +19,8 @@ return new class extends Migration
             // NIT fiscal (numérico); queda fijo cuando la empresa ya obtuvo códigos del SIN.
             $table->unsignedBigInteger('nit')->nullable();
             $table->string('razon_social', 200)->nullable();
-            // automatica: toda venta confirmada se factura; manual: el vendedor elige (decisión D1b).
-            $table->string('modo', 20)->default('automatica');
+            // manual: el vendedor elige con o sin factura al confirmar; automatica: toda venta se factura (decisión D1b).
+            $table->string('modo', 20)->default('manual');
             // Código SIN del catálogo de métodos de pago que equivale a «electrónico» (decisión D2a).
             $table->unsignedSmallInteger('metodo_pago_electronico')->nullable();
             // Token delegado cifrado con APP_KEY. Nunca se muestra completo ni se registra en logs o auditoría.

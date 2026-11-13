@@ -3,9 +3,11 @@
 namespace App\Livewire\Ventas;
 
 use App\Domain\Creditos\Consultas\HistorialPagos;
+use App\Enums\Capacidad;
 use App\Enums\EstadoFactura;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\DevolucionItem;
+use App\Models\EventoEntrega;
 use App\Models\SiatFactura;
 use App\Models\Venta;
 use App\Models\VentaItem;
@@ -49,6 +51,9 @@ class Detalle extends Component
         return view('livewire.ventas.detalle', [
             'pagos' => HistorialPagos::de($venta),
             'venta' => $venta,
+            // Entrega (despachos o cocina): con la capacidad activa, o si la venta tiene historial de cuando lo estuvo.
+            'conEntrega' => Gate::allows('capacidad', Capacidad::Despachos) || Gate::allows('capacidad', Capacidad::Cocina)
+                || EventoEntrega::query()->where('venta_id', $venta->id)->exists(),
             // Decisión D4: con factura que existe o puede existir en el SIN, primero se anula.
             'puedeDevolver' => Gate::allows('devolver', $venta) && Decimal::comparar($devueltas, $vendidas) < 0
                 && ! SiatFactura::query()->where('venta_vigente', $venta->id)

@@ -1,0 +1,4 @@
+/* Productos sin control de stock (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 3). Usa los tokens existentes. */
+
+/* POS: «Sin control» en lugar de las unidades disponibles. */
+.pos-stock.sin_control { color: var(--muted); }

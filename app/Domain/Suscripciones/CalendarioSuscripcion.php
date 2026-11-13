@@ -21,6 +21,9 @@ final class CalendarioSuscripcion
 {
     public const MAX_MESES = 12;
 
+    /** Períodos que la empresa puede pagar con un comprobante (Mi suscripción). */
+    public const MESES_PAGABLES = [1, 3, 6, 12];
+
     public static function hoy(): CarbonImmutable
     {
         return self::fecha(CarbonImmutable::now(Periodo::zona())->format('Y-m-d'));

@@ -141,11 +141,12 @@ final class CatalogoDatos
 
     private function productos(): Fuente
     {
-        $existencia = 'COALESCE(st.existencia, 0)';
+        // Sin control de stock (platos, servicios): stock vacío, no 0, y fuera de «sin stock».
+        $existencia = 'CASE WHEN p.controla_stock = 1 THEN COALESCE(st.existencia, 0) END';
 
         return new Fuente('productos', $this->administrador()
-            ? 'Catálogo con precios y stock actual (suma de las sucursales activas). Sin fecha principal.'
-            : 'Catálogo con precios y stock actual de tu sucursal. Sin fecha principal.',
+            ? 'Catálogo con precios y stock actual (suma de las sucursales activas). Los productos sin control de stock (platos, servicios) tienen el stock vacío. Sin fecha principal.'
+            : 'Catálogo con precios y stock actual de tu sucursal. Los productos sin control de stock (platos, servicios) tienen el stock vacío. Sin fecha principal.',
             false,
             fn () => DB::table('productos as p')
                 ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
@@ -169,6 +170,7 @@ final class CatalogoDatos
                 $this->campo('precio_minorista', __('Precio minorista'), 'money', 'p.precio_minorista'),
                 $this->campo('precio_mayorista', __('Precio mayorista'), 'money', 'p.precio_mayorista'),
                 $this->campo('stock', __('Stock'), 'number', $existencia),
+                $this->campo('control_stock', __('Control de stock'), 'string', "CASE WHEN p.controla_stock = 1 THEN 'controla stock' ELSE 'sin control de stock' END"),
                 $this->campo('stock_minimo', __('Stock mínimo'), 'number', 'p.stock_minimo'),
                 $this->campo('estado', __('Estado'), 'string', "CASE WHEN p.activo = 1 THEN 'activo' ELSE 'inactivo' END"),
                 $this->campo('fecha_alta', __('Fecha de alta'), 'date', "DATE({$this->local('p.created_at')})"),
@@ -192,7 +194,7 @@ final class CatalogoDatos
         $minimo = 'COALESCE(sn.stock_minimo, p.stock_minimo)';
         $bajo = "{$existencia} > 0 AND {$minimo} > 0 AND {$existencia} <= {$minimo}";
 
-        return new Fuente('stock', 'Existencia actual por producto y sucursal activa, con su mínimo y alerta (sin stock, bajo mínimo o normal). Sin fecha principal.',
+        return new Fuente('stock', 'Existencia actual por producto y sucursal activa, con su mínimo y alerta (sin stock, bajo mínimo o normal). Solo productos que controlan stock. Sin fecha principal.',
             false,
             fn () => $this->conSucursal(DB::table('productos as p')
                 ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.empresa_id', '=', 'p.empresa_id')->where('s.activa', true))
@@ -200,7 +202,8 @@ final class CatalogoDatos
                 ->leftJoin('categorias as cat', 'cat.id', '=', 'p.categoria_id')
                 ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'p.empresa_id')
                     ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
-                ->where('p.empresa_id', $this->empresaId), 's.id'),
+                ->where('p.empresa_id', $this->empresaId)
+                ->where('p.controla_stock', true), 's.id'),
             [
                 $this->campo('producto', __('Producto'), 'string', self::PRODUCTO),
                 $this->campo('sku', __('SKU'), 'string', 'p.sku'),

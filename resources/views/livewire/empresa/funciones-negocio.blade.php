@@ -26,13 +26,27 @@
                         @endif
                     </span>
                 </label>
+                @if ($funcion === \App\Enums\Capacidad::Cocina && in_array($funcion->value, $capacidades, true))
+                    {{-- Cocina § 4.4: límite para resaltar pedidos demorados en el panel En cocina. --}}
+                    <div class="funcion-extra" wire:key="funcion-cocina-minutos">
+                        <label for="minutos-alerta-cocina">{{ __('Avisar pedidos con demora a partir de') }}</label>
+                        <input id="minutos-alerta-cocina" type="number" inputmode="numeric" min="1" max="240" step="1" class="input funcion-minutos"
+                            wire:model="minutosAlertaCocina" data-test="funciones-minutos-cocina"
+                            @error('minutosAlertaCocina') aria-invalid="true" aria-describedby="minutos-alerta-cocina-error" @enderror>
+                        <span>{{ __('minutos') }}</span>
+                    </div>
+                    @error('minutosAlertaCocina')<p class="auth-error" id="minutos-alerta-cocina-error" role="alert">{{ $message }}</p>@enderror
+                @endif
             @endforeach
         </fieldset>
         @error('capacidades')<p class="auth-error" id="capacidades-error" role="alert">{{ $message }}</p>@enderror
         @error('capacidades.*')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+        @error('confirmacion_lotes')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
 
         <div class="funciones-pie">
-            <p class="subtle">{{ __('Las funciones marcadas como «Próximamente» quedan guardadas y se encienden solas cuando estén disponibles.') }}</p>
+            @if (collect($funciones)->contains(fn ($f) => ! $f->disponible()))
+                <p class="subtle">{{ __('Las funciones marcadas como «Próximamente» quedan guardadas y se encienden solas cuando estén disponibles.') }}</p>
+            @endif
             <button class="btn primary" type="button" wire:click="revisar" wire:loading.attr="disabled" wire:target="revisar" data-test="funciones-revisar">
                 <x-icon name="check" /> {{ __('Guardar funciones') }}
             </button>
@@ -51,10 +65,22 @@
                 @if ($desactivan !== [])
                     <div class="list-line"><span class="subtle">{{ __('Se desactiva') }}</span><b>{{ collect($desactivan)->map->etiqueta()->join(', ') }}</b></div>
                 @endif
-                @if ($activan === [] && $desactivan === [])
+                @php($cambiaDemora = in_array(\App\Enums\Capacidad::Cocina->value, $capacidades, true) && (int) $minutosAlertaCocina !== $minutosActuales)
+                @if ($cambiaDemora)
+                    <div class="list-line"><span class="subtle">{{ __('Aviso de demora en cocina') }}</span><b>{{ __(':antes → :despues min', ['antes' => $minutosActuales, 'despues' => (int) $minutosAlertaCocina]) }}</b></div>
+                @endif
+                @if ($activan === [] && $desactivan === [] && ! $cambiaDemora)
                     <div class="list-line"><span class="subtle">{{ __('Funciones') }}</span><b>{{ __('Sin cambios') }}</b></div>
                 @endif
             </div>
+            @if ($mensajeLotes)
+                {{-- Rubros § 5.2: apagar lotes pide escribir DESACTIVAR. --}}
+                <div class="notice caja-alerta" style="margin-top:14px" data-test="funciones-confirmar-lotes"><x-icon name="status-alert" /><div><b>{{ __('Lotes y vencimientos') }}</b><p>{{ $mensajeLotes }}</p>
+                    <input class="input" type="text" autocomplete="off" wire:model="confirmacionLotes" placeholder="{{ $palabraLotes }}" aria-label="{{ __('Escribe :palabra para continuar.', ['palabra' => $palabraLotes]) }}" data-test="funciones-palabra-lotes"
+                        @error('confirmacionLotes') aria-invalid="true" @enderror style="margin-top:8px">
+                    @error('confirmacionLotes')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                </div></div>
+            @endif
             @if (collect($activan)->contains(fn ($f) => ! $f->disponible()))
                 <div class="notice" style="margin-top:14px"><x-icon name="info" /><div><b>{{ __('Función en preparación') }}</b><p>{{ __('Guardamos tu elección. Hasta que la función esté disponible, el sistema sigue funcionando como hoy.') }}</p></div></div>
             @endif

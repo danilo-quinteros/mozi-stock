@@ -51,7 +51,8 @@ final class RegistrarTraspaso
 
         foreach ($this->libro->prepararLineas((int) $actor->empresa_id, $datos['lineas']) as $productoId => $linea) {
             $cambios[] = ['sucursal_id' => $origen->id, 'producto_id' => $productoId, 'cantidad' => '-'.$linea['cantidad'], 'nombre' => $linea['nombre']];
-            $cambios[] = ['sucursal_id' => $destino->id, 'producto_id' => $productoId, 'cantidad' => $linea['cantidad'], 'nombre' => $linea['nombre']];
+            // Lotes y vencimientos (§ 5.3): el destino recibe los mismos lotes que el reparto FEFO sacó del origen.
+            $cambios[] = ['sucursal_id' => $destino->id, 'producto_id' => $productoId, 'cantidad' => $linea['cantidad'], 'nombre' => $linea['nombre'], 'replica_de' => $origen->id];
         }
 
         return $this->libro->registrar($actor, [

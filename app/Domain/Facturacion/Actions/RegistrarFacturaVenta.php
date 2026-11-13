@@ -101,6 +101,8 @@ final class RegistrarFacturaVenta
         $factura->codigo_estado = null;
         $factura->mensajes = null;
         $factura->enviada_en = null;
+        // Si al vender aún no había catálogos, la factura quedó sin método fiscal: se toma del pago de la venta.
+        $factura->metodo_pago ??= $this->metodoDeVenta($venta, $configuracion);
         $this->calcular($factura, $venta, $configuracion);
     }
 
@@ -144,14 +146,22 @@ final class RegistrarFacturaVenta
             ->keyBy('id');
 
         $faltanUnidades = [];
+        $faltanCodigos = [];
         foreach ($items as $item) {
             $prod = $productos->get($item->producto_id);
+            if (blank($this->codigoProducto($item, $prod))) {
+                $faltanCodigos[] = $item->descripcion;
+            }
             $unidadSin = $prod?->unidad->unidad_medida_sin ?? $configuracion?->unidad_medida;
             if ($unidadSin === null) {
                 $faltanUnidades[] = $item->descripcion;
             } elseif (! CatalogoEmpresa::existe($empresaId, Catalogo::UnidadesMedida, $unidadSin)) {
                 $problemas[] = __('No se encontró la unidad de medida SIN (código :codigo) del producto «:nombre» en los catálogos.', ['codigo' => $unidadSin, 'nombre' => $item->descripcion]);
             }
+        }
+        if ($faltanCodigos !== []) {
+            // El SIN exige un código por línea: el SKU es opcional en el producto, pero para facturar hace falta.
+            $problemas[] = __('Falta el código / SKU en: :productos. Cárgalo en el producto y reintenta.', ['productos' => implode(', ', array_unique($faltanCodigos))]);
         }
         if ($faltanUnidades !== []) {
             $nombres = implode(', ', array_unique($faltanUnidades));
@@ -184,7 +194,7 @@ final class RegistrarFacturaVenta
 
             return [
                 'venta_item_id' => $item->id,
-                'codigo_producto' => $item->sku,
+                'codigo_producto' => (string) $this->codigoProducto($item, $prod),
                 'descripcion' => $item->descripcion,
                 'actividad' => (string) $configuracion->actividad_economica,
                 'producto_sin' => (int) $configuracion->producto_sin,
@@ -195,6 +205,14 @@ final class RegistrarFacturaVenta
                 'sub_total' => $linea->subTotal,
             ];
         }, $resultado->lineas) : null;
+    }
+
+    /** SKU guardado en la venta o, si se vendió sin SKU, el que el producto tiene hoy. */
+    private function codigoProducto(VentaItem $item, ?Producto $producto): ?string
+    {
+        $codigo = trim((string) $item->sku);
+
+        return $codigo !== '' ? $codigo : (blank($producto?->sku) ? null : trim((string) $producto->sku));
     }
 
     /**
@@ -241,13 +259,20 @@ final class RegistrarFacturaVenta
     private function datosPropuestos(Venta $venta, ?SiatConfiguracion $configuracion): DatosFactura
     {
         $cliente = $venta->cliente_id === null ? null : DeEmpresa::consulta(Cliente::class, $venta->empresa_id)->find($venta->cliente_id);
-        $inicial = DeEmpresa::consulta(PagoVenta::class, $venta->empresa_id)->where('venta_id', $venta->id)->where('tipo', 'inicial')->first();
-        $metodo = DatosFactura::metodoSugerido($venta->empresa_id, $inicial?->metodo,
-            Decimal::comparar((string) $venta->saldo_pendiente, '0', 2) > 0, $configuracion?->metodo_pago_electronico);
+        $metodo = $this->metodoDeVenta($venta, $configuracion);
         $sugeridos = DatosFactura::sugeridos($cliente, $metodo);
 
         return new DatosFactura((int) $sugeridos['tipo_documento'], $sugeridos['numero_documento'],
             $sugeridos['complemento'] === '' ? null : $sugeridos['complemento'], $sugeridos['razon_social'], $metodo,
             codigoExcepcion: $sugeridos['numero_documento'] === DatosFactura::SIN_DATOS_DOCUMENTO ? 1 : 0);
+    }
+
+    /** Método de pago fiscal según el pago inicial de la venta (o pago posterior si quedó saldo). */
+    private function metodoDeVenta(Venta $venta, ?SiatConfiguracion $configuracion): ?int
+    {
+        $inicial = DeEmpresa::consulta(PagoVenta::class, $venta->empresa_id)->where('venta_id', $venta->id)->where('tipo', 'inicial')->first();
+
+        return DatosFactura::metodoSugerido($venta->empresa_id, $inicial?->metodo,
+            Decimal::comparar((string) $venta->saldo_pendiente, '0', 2) > 0, $configuracion?->metodo_pago_electronico);
     }
 }

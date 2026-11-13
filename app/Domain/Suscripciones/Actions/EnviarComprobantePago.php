@@ -52,10 +52,10 @@ final class EnviarComprobantePago
             return $previo;
         }
 
-        $meses = filter_var($datos['meses'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => CalendarioSuscripcion::MAX_MESES]]);
+        $meses = filter_var($datos['meses'], FILTER_VALIDATE_INT);
 
-        if ($meses === false) {
-            throw ValidationException::withMessages(['meses' => __('Elige de 1 a 12 meses.')]);
+        if ($meses === false || ! in_array($meses, CalendarioSuscripcion::MESES_PAGABLES, true)) {
+            throw ValidationException::withMessages(['meses' => __('Elige 1, 3, 6 o 12 meses.')]);
         }
 
         $nota = trim((string) $datos['nota']);

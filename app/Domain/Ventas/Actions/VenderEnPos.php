@@ -41,8 +41,10 @@ final class VenderEnPos
     /**
      * @param  array{sucursal_id: int|null, cliente_id: int|null, lineas: list<array<string, mixed>>, descuento_global_tipo: string, descuento_global_valor: string|null, clave: string, caja_id?: int|null}  $datos
      * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string, vencimiento?: string|null}  $pago
+     * @param  bool  $entregado  casilla «Entregado» del POS; con «despachos» o «cocina», sin marcarla la venta queda Por despachar o En cocina
+     * @param  string|null  $nombreMesa  «Nombre o mesa» opcional; solo se guarda con la capacidad «cocina»
      */
-    public function ejecutar(User $actor, array $datos, array $pago, ?DatosFactura $factura = null): Venta
+    public function ejecutar(User $actor, array $datos, array $pago, ?DatosFactura $factura = null, bool $entregado = false, ?string $nombreMesa = null): Venta
     {
         Gate::forUser($actor)->authorize('create', Pedido::class);
         $empresaId = (int) $actor->empresa_id;
@@ -51,7 +53,7 @@ final class VenderEnPos
             return $venta;
         }
 
-        // Filas de saldo fuera de la transacción (LibroStock); solo productos de la empresa.
+        // Filas de saldo fuera de la transacción (LibroStock); solo productos de la empresa que controlan stock.
         $sucursal = $this->resolverSucursal->paraOperacion($actor, $datos['sucursal_id']);
         $caja = $this->resolverCaja($actor, $sucursal->id, isset($datos['caja_id']) ? (int) $datos['caja_id'] : null);
         $turno = $caja->turnoActivo;
@@ -64,12 +66,13 @@ final class VenderEnPos
 
         $productos = DB::table('productos')->where('empresa_id', $empresaId)
             ->whereIn('id', array_map(fn (array $l) => (int) ($l['producto_id'] ?? 0), $datos['lineas']))
+            ->where('controla_stock', true)
             ->pluck('id')->all();
         $this->libro->asegurarNiveles($empresaId, array_values(array_map(
             fn (int $productoId) => ['sucursal_id' => $sucursal->id, 'producto_id' => $productoId], $productos,
         )));
 
-        return DB::transaction(function () use ($actor, $datos, $pago, $factura, $caja, $turno): Venta {
+        return DB::transaction(function () use ($actor, $datos, $pago, $factura, $caja, $turno, $entregado, $nombreMesa): Venta {
             // Mismo bloqueo que LibroCaja: una venta a crédito sin pago tampoco entra en un turno ya cerrado.
             if (TurnoCaja::withoutGlobalScopes()->whereKey($turno->id)->lockForUpdate()->value('estado') !== 'abierto') {
                 throw ValidationException::withMessages(['caja' => __('La venta en POS requiere un turno de caja abierto.')]);
@@ -88,7 +91,7 @@ final class VenderEnPos
                 'pago_electronico' => $pago['electronico'],
             ]);
 
-            return $this->ventas->ejecutar($actor, $pedido, $pago, $factura, $caja->id, $turno->id);
+            return $this->ventas->ejecutar($actor, $pedido, $pago, $factura, $caja->id, $turno->id, $entregado, $nombreMesa);
         }, attempts: 3);
     }
 

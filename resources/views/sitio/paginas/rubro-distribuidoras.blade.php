@@ -17,7 +17,7 @@
         ['store', 'Varios almacenes', 'Stock por almacén y traspasos trazables.'],
         ['receipt', 'Factura SIAT', 'Factura en línea a tus clientes con NIT desde la venta.'],
     ]"
-    :modulos="['punto-de-venta', 'creditos', 'multisucursal', 'compras', 'asistente-ia', 'facturacion']"
+    :modulos="['punto-de-venta', 'creditos', 'multisucursal', 'compras', 'agente-ia', 'facturacion']"
     :preguntas="[
         ['¿Puedo registrar pedidos antes de entregar?', 'Sí. El pedido queda pendiente sin descontar stock ni contar como cobro. Al confirmarlo se convierte en venta.'],
         ['¿Puedo dar crédito con cuotas?', 'Sí. Defines la cuota inicial y el plan de cuotas, y registras cada abono el día que lo recibes.'],

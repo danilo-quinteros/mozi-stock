@@ -1,7 +1,7 @@
 @props(['titulo', 'descripcion' => null, 'cerrar'])
 {{-- Modal pequeño y contextual. La acción de cierre es un método Livewire del componente. --}}
 <div class="modal-backdrop open" wire:keydown.escape.window="{{ $cerrar }}">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo" {{ $attributes }}>
+    <div {{ $attributes->class('modal') }} role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
         <div class="modal-head">
             <div>
                 <h2 id="modal-titulo">{{ __($titulo) }}</h2>

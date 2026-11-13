@@ -154,3 +154,29 @@ button.pos-pill:hover{border-color:var(--accent-border);color:var(--text-strong)
 @container pos (max-width:900px){.pos-layout{grid-template-columns:minmax(0,1fr)}.pos-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.pos-checkout{position:static}.pos-items{max-height:none}}
 @container pos (max-width:680px){.pos-head{flex-direction:column;align-items:flex-start;margin-bottom:18px}.pos-grid{grid-template-columns:repeat(3,minmax(0,1fr));padding:12px;gap:9px}.pos-toolbar{padding:16px 15px 0}.pos-product{padding:10px;min-height:205px}}
 @container pos (max-width:470px){.pos-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pos-price{font-size:14px}.pos-tip{font-size:10px}.pos-check-head{padding:18px 16px 14px}.pos-client{margin:0 14px}.pos-items{padding:0 14px}.pos-below{padding:14px 16px 18px}.pos-cart-head{padding:18px 16px 10px}}
+
+/* Ventas abiertas (barra inferior tipo pestañas): sticky dentro del contenido, como la barra de acciones de pedidos. */
+.pos-tabs{position:sticky;bottom:0;z-index:30;margin-top:18px;display:flex;align-items:center;gap:6px;height:35px;padding:3px 4px;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;background:var(--panel);box-shadow:0 -10px 40px rgba(0,0,0,.12)}
+.pos-tabs-list{display:flex;gap:5px;flex:1;min-width:0;height:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.pos-tabs-list::-webkit-scrollbar{display:none}
+.pos-tab{display:flex;align-items:center;flex:none;height:100%;max-width:260px;border:1px solid var(--border-soft);border-radius:7px;background:var(--panel-soft);transition:border-color .2s,background .2s}
+.pos-tab:hover{border-color:var(--border)}
+.pos-tab.active{background:var(--accent-soft);border-color:var(--accent-border)}
+.pos-tab-main{display:flex;align-items:center;gap:7px;min-width:0;height:100%;padding:0 2px 0 9px;background:none;border:0;color:var(--text);text-align:left}
+.pos-tab-dot{width:6px;height:6px;flex:none;border-radius:50%;background:var(--border)}
+.pos-tab-dot.busy{background:var(--brand)}
+.pos-tab-text{display:flex;align-items:baseline;gap:6px;min-width:0}
+.pos-tab-text b{font-size:11px;font-weight:780;color:var(--text-strong);white-space:nowrap}
+.pos-tab.active .pos-tab-text b{color:var(--brand-bright)}
+.pos-tab-text small{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pos-tab-close{flex:none;width:20px;height:20px;margin-right:3px;display:grid;place-items:center;border:0;border-radius:5px;background:none;color:var(--faint)}
+.pos-tab-close .ico{width:13px;height:13px}
+.pos-tab-close:hover{background:rgba(240,141,129,.1);color:var(--red)}
+.pos-tab-new{flex:none;display:inline-flex;align-items:center;gap:6px;height:100%;padding:0 10px;border:1px dashed var(--accent-border);border-radius:7px;background:transparent;color:var(--brand-bright);font-size:11px;font-weight:780;transition:background .2s}
+.pos-tab-new .pos-kbd{padding:1px 5px;font-size:9px}
+.pos-tab-new:hover:not(:disabled){background:var(--accent-soft)}
+.pos-tab-new:disabled{opacity:.5;cursor:not-allowed}
+@container pos (max-width:680px){.pos-tab{max-width:190px}.pos-tab-new .pos-kbd{display:none}}
+@container pos (max-width:470px){.pos-tab{max-width:150px}.pos-tab-new{padding:0 8px;font-size:0;gap:0}.pos-tab-new .ico{width:16px;height:16px}}
+/* El aviso (toast) del POS sube por encima de la barra de ventas abiertas para no tapar «Nueva venta». */
+.pos .toast-host{bottom:52px}

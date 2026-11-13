@@ -47,6 +47,7 @@
                     <div class="heading">{{ __('Antes de subir') }}</div>
                     <ul class="product-guide" style="margin-top:12px">
                         <li>{{ __('Solo se necesitan el nombre y el precio de venta. Código, categoría, unidad, precios minorista y mayorista y stock son opcionales.') }}</li>
+                        <li>{{ __('Para platos o servicios que no se cuentan en inventario, agrega una columna «Controla stock» con «no». Vacía significa «sí».') }}</li>
                         <li>{{ __('La fila de títulos se reconoce sola. Si tu lista tiene un título arriba, en el siguiente paso puedes indicar la fila correcta.') }}</li>
                         <li>{{ __('Si tus códigos tienen ceros a la izquierda, da formato de Texto a esa columna en Excel antes de guardar.') }}</li>
                         <li>{{ __('Nada se guarda en tu catálogo hasta que confirmes en el último paso.') }}</li>
@@ -364,14 +365,14 @@
                                 </td>
                                 <td>
                                     <b>{{ \App\Models\Producto::formatoNombreCompleto((string) ($d['nombre'] ?? '—'), $d['contenido'] ?? null, $d['contenido'] ?? null ? ($d['unidad_texto'] ?? '') : '') }}</b>
-                                    <small>{{ implode(' · ', array_filter([$d['sku'] ?? null, $d['codigo_barras'] ?? null])) ?: __('Sin código') }}</small>
+                                    <small>@if (filled($d['marca'] ?? null)){{ $d['marca'] }} · @endif{{ implode(' · ', array_filter([$d['sku'] ?? null, $d['codigo_barras'] ?? null])) ?: __('Sin código') }}</small>
                                 </td>
                                 <td>{{ $d['categoria_texto'] ?? '—' }}</td>
-                                <td>{{ $d['unidad_texto'] ?? '—' }}@if (($d['tipo_venta'] ?? 'unidad') === 'medida')<small>{{ __('Por medida') }}</small>@endif</td>
+                                <td>{{ $d['unidad_texto'] ?? '—' }}@if (($d['tipo_venta'] ?? 'unidad') === 'medida')<small>{{ __('Por medida') }}</small>@endif@if (($d['controla_stock'] ?? true) === false)<small data-sin-control>{{ __('Sin control de stock') }}</small>@endif</td>
                                 <td>{{ isset($d['precio_consumidor']) ? Decimal::bs($d['precio_consumidor']) : '—' }}</td>
                                 <td>{{ isset($d['precio_minorista']) ? Decimal::bs($d['precio_minorista']) : '—' }}</td>
                                 <td>{{ isset($d['precio_mayorista']) ? Decimal::bs($d['precio_mayorista']) : '—' }}</td>
-                                @if ($usaStock)<td>{{ isset($d['stock']) ? Decimal::formatear($d['stock']) : '—' }}</td>@endif
+                                @if ($usaStock)<td>{{ ($d['controla_stock'] ?? true) === false ? __('Sin control') : (isset($d['stock']) ? Decimal::formatear($d['stock']) : '—') }}</td>@endif
                                 <td class="import-mensajes">
                                     @foreach ($fila->errores ?? [] as $mensaje)<span class="danger-text">{{ $mensaje }}</span>@endforeach
                                     @foreach ($fila->advertencias ?? [] as $mensaje)<span class="subtle">{{ $mensaje }}</span>@endforeach

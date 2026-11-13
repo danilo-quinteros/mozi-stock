@@ -106,11 +106,8 @@ final class GuardarDatosFiscales
                 $configuracion->certificado_vence_en = $datos['certificado_vence_en'];
             }
 
-            if ($configuracion->modalidad === ModalidadFacturacion::Electronica && ! $configuracion->tieneCertificado()) {
-                throw ValidationException::withMessages([
-                    'certificado' => __('Debes subir un archivo .p12 y digitar su contraseña para la modalidad electrónica.'),
-                ]);
-            }
+            // La modalidad electrónica se puede guardar antes de subir el certificado (asistente SIAT: la firma es el
+            // paso siguiente). Sin certificado vigente EmisionFacturas no emite y PreparacionFacturacion lo marca pendiente.
 
             if ($configuracion->isDirty()) {
                 $cambioModalidad = $configuracion->isDirty('modalidad');

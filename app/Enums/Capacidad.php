@@ -49,13 +49,14 @@ enum Capacidad: string
     }
 
     /**
-     * Si el módulo de la capacidad ya está construido. Mientras sea false, encenderla solo guarda la
-     * preferencia y la pantalla lo avisa con «Próximamente». Cada etapa (V1, L3, D1, K1) cambia su caso.
+     * Si el módulo de la capacidad ya se puede usar desde las pantallas. Mientras sea false, la pantalla lo
+     * avisa con «Próximamente». Cada etapa cambió su caso: V1 (tallas y colores), L3 (lotes), D2 (despachos) y K2
+     * (cocina, disponible desde el panel; decisión del propietario del 08/11/2026). Hoy todas están disponibles.
      */
     public function disponible(): bool
     {
         return match ($this) {
-            self::Variantes, self::LotesVencimientos, self::Despachos, self::Cocina => false,
+            self::Despachos, self::Cocina, self::LotesVencimientos, self::Variantes => true,
         };
     }
 

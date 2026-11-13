@@ -18,7 +18,7 @@
     ];
     $grupos = [
         'Ventas y finanzas' => [
-            $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*', 'cart', corto: 'Pedidos'),
+            $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*|pos', 'cart', corto: 'Pedidos'),
             
             $enlace('Mi caja', 'caja', 'caja', 'cash', $usuario->esVendedor(), 'Caja'),
             
@@ -29,7 +29,9 @@
         'Inventario' => [
             $enlace('Productos', 'productos.index', 'productos.*', 'box'),
             $enlace('Compras', 'compras.index', 'compras.*', 'truck', $administra),
-            $enlace('Ajustes y traspasos', 'inventario.movimientos', 'inventario.*', 'swap', $administra, 'Ajustes'),
+            $enlace('Ajustes y traspasos', 'inventario.movimientos', 'inventario.movimientos|inventario.ajuste|inventario.traspaso', 'swap', $administra, 'Ajustes'),
+            // Lotes y vencimientos § 4: dentro de Inventario, solo con la capacidad y para quien ve el historial.
+            $enlace('Vencimientos', 'inventario.vencimientos', 'inventario.vencimientos|inventario.lote', 'calendar', $administra && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::LotesVencimientos)),
         ],
         'Gestión' => [
             $enlace('Clientes', 'clientes.index', 'clientes.*', 'users'),
@@ -44,7 +46,7 @@
     ];
     $agenteActivo = request()->routeIs('agente-mozi');
     $cuentaActiva = request()->routeIs('*.edit');
-    $empresaActiva = request()->routeIs('configuracion', 'suscripcion', 'suscripcion.*', 'facturacion');
+    $empresaActiva = request()->routeIs('configuracion', 'configuracion.*', 'suscripcion', 'suscripcion.*', 'facturacion');
 @endphp
 <nav class="nav-scroll nav-groups" aria-label="{{ __('Navegación principal') }}">
     <div class="nav-label">{{ __('Inicio') }}</div>

@@ -4,6 +4,7 @@ namespace App\Domain\Catalogo\Actions;
 
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Catalogo\Importacion\ValidadorImportacion;
+use App\Domain\Inventario\LibroLotes;
 use App\Domain\Inventario\LibroStock;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Enums\TipoOperacionInventario;
@@ -27,6 +28,9 @@ use Ramsey\Uuid\Uuid;
  * LibroStock en la sucursal elegida. Vuelve a validar justo antes: si el resultado cambió
  * desde que el usuario lo revisó, no confirma. La fila de la importación se bloquea y solo
  * se confirma una vez: un doble clic o un reintento devuelve el resultado ya registrado.
+ *
+ * Lotes y vencimientos (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 7): con la capacidad activa, los productos marcados
+ * nacen con «Controla lote y vencimiento» y su stock inicial entra al lote de la fila o, sin él, al de regularización.
  */
 final class ConfirmarImportacionProductos
 {
@@ -39,6 +43,7 @@ final class ConfirmarImportacionProductos
         private readonly LibroStock $libro,
         private readonly ResolverSucursal $resolverSucursal,
         private readonly Auditor $auditor,
+        private readonly LibroLotes $lotes,
     ) {}
 
     /**
@@ -156,6 +161,8 @@ final class ConfirmarImportacionProductos
 
         $ahora = Carbon::now();
         $productos = [];
+        // La capacidad se lee de nuevo aquí: si se apagó entre la revisión y la confirmación, nadie queda marcado.
+        $conLotes = $this->lotes->activo($empresaId);
 
         foreach ($filas as $fila) {
             $datos = (array) $fila->normalizado;
@@ -167,12 +174,17 @@ final class ConfirmarImportacionProductos
                 'sku' => $datos['sku'],
                 'codigo_barras' => $datos['codigo_barras'],
                 'nombre' => $datos['nombre'],
+                // Filas revisadas antes de la marca no la traen.
+                'marca' => $datos['marca'] ?? null,
                 'contenido' => $datos['contenido'],
                 'descripcion' => $datos['descripcion'],
                 'precio_consumidor' => $datos['precio_consumidor'],
                 'precio_minorista' => $datos['precio_minorista'],
                 'precio_mayorista' => $datos['precio_mayorista'],
                 'stock_minimo' => $datos['stock_minimo'],
+                // Filas revisadas antes de K3 no traen la marca: controlan stock, como todo producto existente.
+                'controla_stock' => (bool) ($datos['controla_stock'] ?? true),
+                'controla_vencimiento' => $conLotes && (bool) ($datos['controla_stock'] ?? true) && (bool) ($datos['controla_vencimiento'] ?? false),
                 'activo' => true,
                 'importacion_id' => $importacion->id,
                 'importacion_fila' => $fila->fila,
@@ -236,12 +248,19 @@ final class ConfirmarImportacionProductos
             $datos = (array) $fila->normalizado;
 
             if ($datos['stock'] !== null) {
-                $cambios[] = [
+                $cambio = [
                     'sucursal_id' => $sucursal->id,
                     'producto_id' => $ids[$fila->fila],
                     'cantidad' => (string) $datos['stock'],
                     'nombre' => (string) $datos['nombre'],
                 ];
+
+                // Con lote, a ese lote; sin él, LibroLotes lo lleva al de regularización. Sin marca, se ignora.
+                if (is_array($datos['lote'] ?? null)) {
+                    $cambio['lote'] = ['numero' => (string) $datos['lote']['numero'], 'vencimiento' => (string) $datos['lote']['vencimiento']];
+                }
+
+                $cambios[] = $cambio;
             }
         }
 

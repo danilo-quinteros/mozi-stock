@@ -5,7 +5,7 @@
     <x-sitio.hero :pagina="$pagina"
         etiqueta="Precios en bolivianos"
         titulo="Precios de MoziStock en <span class='hl'>Bolivia</span>"
-        lead="Dos planes mensuales con todos los módulos. La única diferencia es la facturación SIAT. Pruébalo gratis {{ $dias }} días, sin tarjeta, y paga tu mensualidad con QR."
+        lead="Planes mensuales en bolivianos: empieza con inventario y ventas, suma la facturación SIAT y, si quieres, a Mozi, tu agente de IA. Pruébalo gratis {{ $dias }} días, sin tarjeta, y paga tu mensualidad con QR."
         :ctas="false" />
 
     <section class="section" style="padding-top:0" aria-labelledby="pr-planes">
@@ -23,32 +23,33 @@
                     <h2 id="pr-comparar">¿Qué incluye cada plan?</h2>
                 </header>
                 @php
+                    // Segundo valor: en qué planes está (todos, los que tienen SIAT o los que tienen el agente).
                     $filas = [
-                        ['Inventario por sucursal, ajustes y traspasos', true],
-                        ['Punto de venta, pedidos y cotizaciones', true],
-                        ['Devoluciones', true],
-                        ['Ventas a crédito, abonos y plan de cuotas', true],
-                        ['Compras y cuentas por pagar', true],
-                        ['Caja por turno, arqueo y egresos', true],
-                        ['Reportes y descarga en CSV', true],
-                        ['Asistente de IA Mozi', true],
-                        ['Sucursales, cajas y usuarios', true],
-                        ['Facturación en línea con el SIAT', false],
-                        ['Impresión con QR del SIN, XML y anulación', false],
+                        ['Inventario por sucursal, ajustes y traspasos', 'todos'],
+                        ['Punto de venta, pedidos y cotizaciones', 'todos'],
+                        ['Devoluciones', 'todos'],
+                        ['Ventas a crédito, abonos y plan de cuotas', 'todos'],
+                        ['Compras y cuentas por pagar', 'todos'],
+                        ['Caja por turno, arqueo y egresos', 'todos'],
+                        ['Reportes y descarga en CSV', 'todos'],
+                        ['Sucursales, cajas y usuarios', 'todos'],
+                        ['Facturación en línea con el SIAT', 'siat'],
+                        ['Impresión con QR del SIN, XML y anulación', 'siat'],
+                        ['Mozi, agente de IA: análisis, alertas y sugerencias', 'ia'],
                     ];
                 @endphp
-                <div class="table-wrap" style="max-width:900px;margin:0 auto">
+                <div class="table-wrap" style="max-width:1000px;margin:0 auto">
                     <table class="compare">
                         <thead>
                             <tr><th scope="col">Funcionalidad</th>@foreach ($planes as $plan)<th scope="col">{{ $plan['nombre'] }}</th>@endforeach</tr>
                         </thead>
                         <tbody>
-                            @foreach ($filas as [$funcion, $enTodos])
+                            @foreach ($filas as [$funcion, $donde])
                                 <tr>
                                     <th scope="row">{{ $funcion }}</th>
                                     @foreach ($planes as $plan)
                                         <td>
-                                            @if ($enTodos || $plan['siat'])
+                                            @if ($donde === 'todos' || ($donde === 'siat' && $plan['siat']) || ($donde === 'ia' && $plan['ia']))
                                                 <x-sitio.i n="check" /><span class="sr-only">Incluido</span>
                                             @else
                                                 <x-sitio.i n="minus" class="no" /><span class="sr-only">No incluido</span>
@@ -71,10 +72,10 @@
                 <h2 id="pr-faq">Preguntas sobre precios y pagos</h2>
             </header>
             <x-sitio.faq :preguntas="[
-                ['¿Cuánto dura la prueba gratis?', 'La prueba dura '.$dias.' días con todos los módulos. No pedimos tarjeta. Al terminar eliges tu plan y sigues con la misma información.'],
+                ['¿Cuánto dura la prueba gratis?', 'La prueba dura '.$dias.' días con el plan que elijas. No pedimos tarjeta. Al terminar decides si continúas y sigues con la misma información.'],
                 ['¿Cómo pago la mensualidad?', 'Con QR desde la sección Suscripción del sistema. Subes tu comprobante y lo revisamos.'],
-                ['¿Puedo cambiar de plan?', 'Sí, cuando quieras. Si pasas al plan con SIAT, pagas solo la diferencia por los días que faltan de tu mes.'],
-                ['¿Los precios incluyen la facturación SIAT?', 'El plan Inventario + SIAT incluye la emisión de facturas en línea. El plan Inventario incluye todos los demás módulos, sin facturación.'],
+                ['¿Puedo cambiar de plan?', 'Sí, cuando quieras. Si subes de plan, pagas solo la diferencia por los días que faltan de tu mes.'],
+                ['¿Qué diferencia hay entre los planes?', 'El plan Inventario tiene inventario, ventas, créditos, compras, caja y reportes. Inventario + SIAT suma la facturación en línea. SIAT + Agente IA suma además a Mozi, el agente de IA que analiza tu negocio.'],
                 ['¿Qué pasa si me atraso con el pago?', 'Te enviamos recordatorios antes y después del vencimiento. Tu cuenta no se bloquea de forma automática: siempre conversamos contigo primero.'],
             ]" />
         </div>

@@ -154,7 +154,10 @@ test('the adjustment screen captures by code, reviews and confirms once', functi
         ->set('nota', 'Bolsas rotas')
         ->call('agregarDesdeBuscador', '7790001112223')
         ->call('agregarDesdeBuscador', '7790001112223')
-        ->assertSet('lineas', [['id' => $this->producto->id, 'cantidad' => '2']])
+        // Una sola línea (cada línea lleva además su uid y los campos de lote, lotes § 5.4).
+        ->assertCount('lineas', 1)
+        ->assertSet('lineas.0.id', $this->producto->id)
+        ->assertSet('lineas.0.cantidad', '2')
         ->assertSee('Stock después')
         ->call('revisar')
         ->assertSet('confirmando', true)

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Domain\AgenteMozi\AccesoPorPlan;
 use App\Domain\AgenteMozi\Contratos\Respondedor;
 use App\Domain\AgenteMozi\Demo\RespondedorDemo;
 use App\Domain\AgenteMozi\Ia\GestorProveedores;
@@ -35,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Capacidades por empresa: una consulta por petición; la cola lo descarta entre jobs.
         $this->app->scoped(CapacidadesEmpresa::class);
+        $this->app->scoped(AccesoPorPlan::class);
     }
 
     /**
@@ -61,9 +63,12 @@ class AppServiceProvider extends ServiceProvider
                 && app(CapacidadesEmpresa::class)->tiene($user->empresa_id, $capacidad);
         });
 
-        // Agente Mozi: usuarios de empresa mientras la bandera del servidor esté activa. Cada herramienta
-        // vuelve a autorizar con su propio permiso (p. ej. ver-reportes para costos, márgenes y deudas).
-        Gate::define('usar-agente-mozi', fn (User $user): bool => $user->perteneceAEmpresa() && (bool) config('agente_mozi.habilitado'));
+        // Agente Mozi: usuarios de empresa mientras la bandera del servidor esté activa y, en SaaS, solo si
+        // el plan de su empresa lo incluye. Cada herramienta vuelve a autorizar con su propio permiso
+        // (p. ej. ver-reportes para costos, márgenes y deudas).
+        Gate::define('usar-agente-mozi', fn (User $user): bool => $user->perteneceAEmpresa() && $user->empresa_id !== null
+            && (bool) config('agente_mozi.habilitado')
+            && app(AccesoPorPlan::class)->permite($user->empresa_id));
 
         // Motor, modelo y cuotas de Agente Mozi: solo el superadministrador.
         Gate::define('configurar-agente-mozi', fn (User $user): bool => $user->esSuperadmin());

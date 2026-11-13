@@ -49,6 +49,19 @@
             </div></div>
         @endif
 
+        {{-- Lotes y vencimientos § 4 (L4): aviso solo con la capacidad y para quien ve el reporte. --}}
+        @if (($panel['lotes'] ?? null) && ($panel['lotes']['vencidos'] > 0 || $panel['lotes']['proximos'] > 0))
+            <div @class(['notice', 'caja-alerta' => $panel['lotes']['vencidos'] > 0]) style="margin-bottom:18px" data-test="aviso-vencimientos"><x-icon name="calendar" /><div>
+                <b>{{ $panel['lotes']['vencidos'] > 0
+                    ? trans_choice(':count lote vencido con stock|:count lotes vencidos con stock', $panel['lotes']['vencidos'])
+                    : trans_choice(':count lote vence en los próximos 30 días|:count lotes vencen en los próximos 30 días', $panel['lotes']['proximos']) }}</b>
+                <p>{{ $panel['lotes']['vencidos'] > 0
+                    ? __('No se venden: dalos de baja en Ajustes → Salida → Vencido.').($panel['lotes']['proximos'] > 0 ? ' '.trans_choice('Además, :count lote vence en los próximos 30 días.|Además, :count lotes vencen en los próximos 30 días.', $panel['lotes']['proximos']) : '')
+                    : __('Véndelos primero: las ventas ya descuentan del lote que vence antes.') }}</p>
+                <a class="btn soft sm" style="margin-top:10px" href="{{ route('inventario.vencimientos', ['estado' => $panel['lotes']['vencidos'] > 0 ? 'vencidos' : '30']) }}">{{ __('Ver vencimientos') }} <x-icon name="arrow" size="sm" /></a>
+            </div></div>
+        @endif
+
         <div class="grid four inicio-kpis">
             @if ($esVendedor)
                 <article class="card stat"><div class="row between"><span class="stat-label">{{ __('Tus ventas hoy') }}</span><x-icon name="cart" /></div><div class="stat-value">{{ Decimal::bs($panel['actividad']['vendido']) }}</div><div class="stat-foot">{{ trans_choice(':n venta · no es ingreso|:n ventas · no es ingreso', $panel['actividad']['ventas'], ['n' => $panel['actividad']['ventas']]) }}</div></article>

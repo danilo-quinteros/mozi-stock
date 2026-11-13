@@ -77,6 +77,6 @@
         </div>
     </section>
 
-    <x-sitio.relacionados actual="inventario" :claves="['multisucursal', 'compras', 'punto-de-venta', 'reportes', 'asistente-ia', 'facturacion']" />
+    <x-sitio.relacionados actual="inventario" :claves="['multisucursal', 'compras', 'punto-de-venta', 'reportes', 'agente-ia', 'facturacion']" />
     <x-sitio.cta titulo="Ten tu inventario bajo control" :mensaje="$seo->mensajeWhatsapp" />
 </x-sitio.layout>

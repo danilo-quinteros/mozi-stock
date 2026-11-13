@@ -169,6 +169,9 @@
                                     @else
                                         <span class="badge">{{ __('Solo inventarios') }}</span>
                                     @endif
+                                    @if ($p->agente_ia)
+                                        <span class="badge info">{{ __('Agente IA') }}</span>
+                                    @endif
                                 </div>
                             </div>
                             <div style="margin: 12px 0;">
@@ -221,6 +224,10 @@
                         <label class="row" style="cursor:pointer">
                             <input type="checkbox" class="checkbox" wire:model="planSiat">
                             <span><b>{{ __('Incluye facturación electrónica SIAT') }}</b><small style="display:block;color:var(--faint)">{{ __('Las empresas con este plan tendrán habilitado el módulo de facturación SIAT.') }}</small></span>
+                        </label>
+                        <label class="row" style="cursor:pointer;margin-top:10px">
+                            <input type="checkbox" class="checkbox" wire:model="planIa">
+                            <span><b>{{ __('Incluye el Agente Mozi (IA)') }}</b><small style="display:block;color:var(--faint)">{{ __('El sitio web muestra este plan con el agente de IA en su tarjeta de precios.') }}</small></span>
                         </label>
                     </div>
                     <div class="modal-actions">

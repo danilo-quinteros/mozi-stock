@@ -22,10 +22,13 @@
     <section class="card card-pad">
         <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Lista de pedidos') }}</div></div>
         <div class="tabs" role="tablist">
-            @foreach (['todos' => __('Todos'), 'cotizaciones' => __('Cotizaciones'), 'ventas' => __('Ventas'), 'credito' => __('A crédito')] as $clave => $etiqueta)
+            @foreach (['todos' => __('Todos'), 'cotizaciones' => __('Cotizaciones'), 'ventas' => __('Ventas'), 'credito' => __('A crédito')] + ($despachos ? ['despachos' => __('Despachos')] : []) as $clave => $etiqueta)
                 <button type="button" role="tab" class="tab {{ $pestana === $clave ? 'active' : '' }}" aria-selected="{{ $pestana === $clave ? 'true' : 'false' }}" wire:click="$set('pestana', '{{ $clave }}')">{{ $etiqueta }}</button>
             @endforeach
         </div>
+        @if ($pedidos === null)
+            <livewire:pedidos.despachos wire:key="pestana-despachos" />
+        @else
         <div class="tool-row">
             <div class="search">
                 <x-icon name="search" />
@@ -63,7 +66,7 @@
                                     <span class="subtle">{{ __('Sin cobro · cotización') }}</span>
                                 @endif
                             </td>
-                            <td><span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn ghost sm" href="{{ $venta ? route('ventas.ver', $venta) : route('pedidos.editar', $pedido) }}">{{ __('Abrir') }} <x-icon name="arrow" size="sm" /></a><a class="btn ghost sm" href="{{ route('pedidos.imprimir', $pedido) }}" target="_blank" title="{{ __('Imprimir') }}" aria-label="{{ __('Imprimir :codigo', ['codigo' => $venta?->codigo() ?? $pedido->codigo()]) }}"><x-icon name="print" size="sm" /></a></span></td>
+                            <td><span class="row" style="gap:6px;flex-wrap:nowrap"><a class="btn ghost sm" href="{{ $venta ? route('ventas.ver', $venta) : route('pedidos.editar', $pedido) }}">{{ __('Abrir') }} <x-icon name="arrow" size="sm" /></a><a class="btn ghost sm" href="{{ route('pedidos.imprimir', $pedido) }}" target="_blank" title="{{ __('Imprimir') }}" aria-label="{{ __('Imprimir :codigo', ['codigo' => $venta?->codigo() ?? $pedido->codigo()]) }}"><x-icon name="print" size="sm" /></a>@if ($venta && isset($facturas[$venta->id]))<a class="btn ghost sm" href="{{ route('facturas.imprimir', $facturas[$venta->id]) }}" target="_blank" title="{{ __('Imprimir factura') }}" aria-label="{{ __('Imprimir factura de :codigo', ['codigo' => $venta->codigo()]) }}" data-test="imprimir-factura"><x-icon name="receipt" size="sm" /></a>@endif</span></td>
                         </tr>
                     @empty
                         <tr><td colspan="8"><div class="empty">{{ __('No hay pedidos que coincidan con el filtro.') }}</div></td></tr>
@@ -82,6 +85,7 @@
         @endif
         <div class="divider"></div>
         <div class="notice"><x-icon name="info" /><div><b>{{ __('Una cotización no es una venta') }}</b><p>{{ __('Crear o guardar cotizaciones no descuenta inventario ni registra cobros. Solo «Confirmar venta» lo hace, y en ventas a crédito solo cuenta lo efectivamente pagado.') }}</p></div></div>
+        @endif
     </section>
 
     <x-aviso :mensaje="$aviso" :numero="$avisoNumero" />

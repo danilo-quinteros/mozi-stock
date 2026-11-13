@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\AgenteMozi\AccesoPorPlan;
 use App\Domain\Suscripciones\CalendarioSuscripcion;
 use App\Enums\EstadoSuscripcion;
 use App\Models\Concerns\BelongsToEmpresa;
@@ -31,6 +32,12 @@ class Suscripcion extends Model
     use BelongsToEmpresa;
 
     protected $table = 'suscripciones';
+
+    protected static function booted(): void
+    {
+        // Cambió el plan (o su programación): el acceso a Agente Mozi se vuelve a leer.
+        static::saved(fn (self $suscripcion) => app(AccesoPorPlan::class)->olvidar($suscripcion->empresa_id));
+    }
 
     protected function casts(): array
     {
@@ -123,6 +130,20 @@ class Suscripcion extends Model
         }
 
         return false;
+    }
+
+    /**
+     * El plan actual incluye Agente Mozi. Igual que el SIAT: con un cambio a un plan menor programado,
+     * el agente sigue hasta el vencimiento ya pagado y se pierde cuando esa fecha pasa.
+     */
+    public function incluyeAgenteIa(?CarbonImmutable $hoy = null): bool
+    {
+        if ($this->plan === null || ! $this->plan->agente_ia) {
+            return false;
+        }
+
+        return $this->plan_siguiente_id === null
+            || ! $this->vencimiento->lessThan($hoy ?? CalendarioSuscripcion::hoy());
     }
 
     /**

@@ -4,7 +4,9 @@ namespace App\Livewire\Ventas;
 
 use App\Domain\Ventas\Actions\RegistrarDevolucion;
 use App\Domain\Ventas\CalculadoraDevolucion;
+use App\Enums\EstadoEntrega;
 use App\Livewire\Concerns\EligeCaja;
+use App\Models\Producto;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaItem;
@@ -60,8 +62,12 @@ class NuevaDevolucion extends Component
         $this->sucursal_id = (string) $venta->sucursal_id;
         $this->elegirCajaPorDefecto();
 
-        foreach (VentaItem::query()->where('venta_id', $venta->id)->orderBy('orden')->pluck('id') as $id) {
-            $this->lineas[(int) $id] = ['cantidad' => '', 'reingresa' => true];
+        $items = VentaItem::query()->where('venta_id', $venta->id)->orderBy('orden')->get(['id', 'producto_id']);
+        $controlan = $this->controlanStock($items->pluck('producto_id')->all());
+
+        foreach ($items as $item) {
+            // Sin control de stock no hay saldo al que volver; RegistrarDevolucion lo fuerza igual (§ 4.3).
+            $this->lineas[$item->id] = ['cantidad' => '', 'reingresa' => $controlan[$item->producto_id] ?? true];
         }
     }
 
@@ -121,6 +127,10 @@ class NuevaDevolucion extends Component
             'reembolso' => Decimal::restar($importe, $deuda, Decimal::ESCALA_DINERO),
             'mixto' => $mixto,
             'hayLineas' => collect($filas)->contains(fn (array $f) => $f['cantidad'] !== null && Decimal::comparar($f['cantidad'], '0') > 0),
+            // Despachos § 5.5: antes del despacho la mercadería no salió del almacén; RegistrarDevolucion fuerza el reingreso.
+            'porDespachar' => $venta->estado_entrega === EstadoEntrega::PorDespachar,
+            // Cocina § 5.6: la devolución total la cancela; el reingreso lo decide el usuario.
+            'enCocina' => $venta->estado_entrega === EstadoEntrega::EnCocina,
         ])->title(__('Devolución · :codigo', ['codigo' => $venta->codigo()]));
     }
 
@@ -128,11 +138,12 @@ class NuevaDevolucion extends Component
      * Cada línea con lo vendido, lo ya devuelto, lo disponible y el importe de la cantidad
      * escrita (null si la cantidad no es válida).
      *
-     * @return list<array{item: VentaItem, devueltas: string, disponible: string, cantidad: string|null, importe: string|null}>
+     * @return list<array{item: VentaItem, devueltas: string, disponible: string, cantidad: string|null, importe: string|null, controla_stock: bool}>
      */
     private function filas(Venta $venta): array
     {
         $items = $venta->items->keyBy('id');
+        $controlan = $this->controlanStock($items->pluck('producto_id')->all());
         $previas = RegistrarDevolucion::devueltoPorLinea($venta->empresa_id, array_values(array_map('intval', $items->keys()->all())));
         $netos = CalculadoraDevolucion::netosPorLinea($items->map(fn (VentaItem $i) => $i->total)->all(), $venta->descuento_global);
         $filas = [];
@@ -149,10 +160,23 @@ class NuevaDevolucion extends Component
                 'disponible' => $disponible,
                 'cantidad' => $valida ? $cantidad : null,
                 'importe' => $valida ? CalculadoraDevolucion::importe($netos[$item->id], $item->cantidad, $devueltas, $cantidad) : null,
+                'controla_stock' => $controlan[$item->producto_id] ?? true,
             ];
         }
 
         return $filas;
+    }
+
+    /**
+     * Marca «Controla stock» de los productos de la venta, en una consulta.
+     *
+     * @param  array<int, int>  $productoIds
+     * @return array<int, bool> producto_id => controla stock
+     */
+    private function controlanStock(array $productoIds): array
+    {
+        return Producto::query()->whereIn('id', array_values(array_unique($productoIds)))->pluck('controla_stock', 'id')
+            ->mapWithKeys(fn ($controla, $id) => [(int) $id => (bool) $controla])->all();
     }
 
     private function venta(): Venta

@@ -32,6 +32,7 @@ class UnidadMedida extends Model
      * - Unidad (bienes): 57
      * - Kilogramo: 22
      * - Gramo: 17
+     * - Miligramo: 33
      * - Litro: 28
      * - Mililitro: 34
      * - Caja: 6
@@ -40,6 +41,7 @@ class UnidadMedida extends Model
         ['nombre' => 'Unidad', 'abreviatura' => 'und.', 'admite_decimales' => false, 'unidad_medida_sin' => 57],
         ['nombre' => 'Kilogramo', 'abreviatura' => 'kg', 'admite_decimales' => true, 'unidad_medida_sin' => 22],
         ['nombre' => 'Gramo', 'abreviatura' => 'g', 'admite_decimales' => false, 'unidad_medida_sin' => 17],
+        ['nombre' => 'Miligramo', 'abreviatura' => 'mg', 'admite_decimales' => false, 'unidad_medida_sin' => 33],
         ['nombre' => 'Litro', 'abreviatura' => 'L', 'admite_decimales' => true, 'unidad_medida_sin' => 28],
         ['nombre' => 'Mililitro', 'abreviatura' => 'ml', 'admite_decimales' => false, 'unidad_medida_sin' => 34],
         ['nombre' => 'Caja', 'abreviatura' => 'cj.', 'admite_decimales' => false, 'unidad_medida_sin' => 6],
@@ -62,6 +64,7 @@ class UnidadMedida extends Model
                 'litro', 'litros', 'l', 'lt', 'lts' => 28,
                 'kilogramo', 'kilogramos', 'kilo', 'kilos', 'kg', 'kgs', 'k' => 22,
                 'gramo', 'gramos', 'g', 'gr', 'grs' => 17,
+                'miligramo', 'miligramos', 'mg', 'mgs' => 33,
                 'mililitro', 'mililitros', 'ml', 'mls', 'cc' => 34,
                 'caja', 'cajas', 'cj', 'cj.' => 6,
                 'unidad', 'unidades', 'und', 'und.', 'pza', 'pza.', 'pieza', 'piezas', 'unidad (bienes)', 'unidad bienes' => 57,

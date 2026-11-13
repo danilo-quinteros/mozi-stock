@@ -2,8 +2,11 @@
 
 namespace App\Domain\Catalogo\Importacion;
 
+use App\Domain\Inventario\DatosLote;
+use App\Domain\Inventario\LibroLotes;
 use App\Models\ImportacionProducto;
 use App\Models\ImportacionProductoFila;
+use App\Models\Producto;
 use App\Support\Decimal;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,10 +19,16 @@ use stdClass;
  * códigos existentes se hacen con whereIn por lotes, nunca una consulta por fila.
  * Una fila cuyo código o código de barras ya existe en la empresa se marca «existente» y
  * no se importa: esta etapa solo crea productos nuevos.
+ *
+ * Con «Lotes y vencimientos» activa (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 7): los productos nuevos controlan lote
+ * por defecto (D3; la columna «Controla lote y vencimiento» puede decir que no) y el stock inicial puede traer
+ * «N.º de lote» y «Vencimiento del lote». Sin esas columnas, el stock va al lote de regularización (§ 9).
  */
 final class ValidadorImportacion
 {
     private const LOTE = 500;
+
+    public function __construct(private readonly LibroLotes $lotes) {}
 
     private const PATRON_SKU = '/^[A-Za-z0-9._\-\/]+$/';
 
@@ -34,6 +43,13 @@ final class ValidadorImportacion
         $mapeo = $importacion->mapeo ?? [];
         $valores = $importacion->valores ?? [];
         $usarStock = $importacion->usar_stock === true && isset($mapeo['stock']);
+        $conLotes = $this->lotes->activo($empresaId);
+
+        if (! $conLotes) {
+            // Sin la capacidad, una asignación vieja de columnas de lote no se lee.
+            $mapeo = array_diff_key($mapeo, array_flip(CamposImportacion::CAMPOS_LOTES));
+        }
+
         $unidades = DB::table('unidades_medida')->where('empresa_id', $empresaId)
             ->get(['id', 'nombre', 'abreviatura', 'admite_decimales'])->keyBy('id');
         $categorias = DB::table('categorias')->where('empresa_id', $empresaId)->get(['id', 'nombre'])->keyBy('id');
@@ -52,7 +68,7 @@ final class ValidadorImportacion
         $resultados = [];
 
         foreach ($filas as $fila) {
-            $resultados[] = $this->interpretar($fila, $mapeo, $valores, $usarStock, $importacion->unidad_defecto_id, $unidades, $categorias);
+            $resultados[] = $this->interpretar($fila, $mapeo, $valores, $usarStock, $importacion->unidad_defecto_id, $unidades, $categorias, $conLotes);
         }
 
         $existentesSku = $this->existentes($empresaId, 'sku', array_filter(array_column(array_column($resultados, 'datos'), 'sku')));
@@ -93,7 +109,7 @@ final class ValidadorImportacion
                 }
 
                 if ($datos['nombre'] !== null) {
-                    $claveNombre = CamposImportacion::clave($datos['nombre'].' '.($datos['contenido'] ?? ''));
+                    $claveNombre = CamposImportacion::clave($datos['nombre'].' '.($datos['contenido'] ?? '').' '.($datos['marca'] ?? ''));
 
                     if (isset($vistos['nombre'][$claveNombre])) {
                         $advertencias[] = __('El mismo nombre aparece en la fila :fila.', ['fila' => $vistos['nombre'][$claveNombre]]);
@@ -101,7 +117,7 @@ final class ValidadorImportacion
                         $vistos['nombre'][$claveNombre] = $resultado['fila'];
                     }
 
-                    if (isset($nombresCatalogo[CamposImportacion::clave($datos['nombre'])])) {
+                    if (isset($nombresCatalogo[CamposImportacion::clave($datos['nombre'].' '.($datos['marca'] ?? ''))])) {
                         $advertencias[] = __('Ya tienes un producto con este nombre; revisa que no sea el mismo.');
                     }
                 }
@@ -159,7 +175,7 @@ final class ValidadorImportacion
      * @param  Collection<int|string, stdClass>  $categorias
      * @return array{id: int, empresa_id: int, importacion_id: int, fila: int, celdas: string, numericas: string|null, datos: array<string, mixed>, errores: list<array<mixed>|string>, advertencias: list<array<mixed>|string>}
      */
-    private function interpretar(stdClass $fila, array $mapeo, array $valores, bool $usarStock, ?int $unidadDefecto, $unidades, $categorias): array
+    private function interpretar(stdClass $fila, array $mapeo, array $valores, bool $usarStock, ?int $unidadDefecto, $unidades, $categorias, bool $conLotes = false): array
     {
         $celdas = (array) json_decode((string) $fila->celdas, true);
         $numericas = $fila->numericas === null ? [] : (array) json_decode((string) $fila->numericas, true);
@@ -219,6 +235,12 @@ final class ValidadorImportacion
             $errores[] = __('El nombre supera los 150 caracteres.');
         }
 
+        $marca = Producto::normalizarMarca($texto('marca'));
+
+        if ($marca !== null && mb_strlen($marca) > Producto::MAX_MARCA) {
+            $errores[] = __('La marca admite hasta :max caracteres.', ['max' => Producto::MAX_MARCA]);
+        }
+
         $sku = $texto('sku');
 
         if ($sku !== '') {
@@ -259,9 +281,16 @@ final class ValidadorImportacion
             $contenido = null;
         }
 
+        $controlaStock = CamposImportacion::siNo($texto('controla_stock'));
+
+        if ($controlaStock === null) {
+            $errores[] = __('«:valor» en :campo no es válido: escribe sí o no.', ['valor' => $texto('controla_stock'), 'campo' => $etiqueta('controla_stock')]);
+            $controlaStock = true;
+        }
+
         // Igual que en la ficha: con contenido se vende por unidad («Aceite 1 L»); sin contenido,
         // una unidad con decimales (kg, L) se vende por peso o medida.
-        $tipoVenta = $contenido === null && $admiteDecimales ? 'medida' : 'unidad';
+        $tipoVenta = Producto::tipoVentaPara($contenido, $admiteDecimales);
         $stock = null;
 
         if ($usarStock) {
@@ -276,7 +305,15 @@ final class ValidadorImportacion
             if ($stock !== null && Decimal::comparar($stock, '0') === 0) {
                 $stock = null;
             }
+
+            // Sin control de stock no hay stock inicial que cargar: se ignora y se avisa en la revisión.
+            if ($stock !== null && ! $controlaStock) {
+                $advertencias[] = __('No controla stock: se ignora el stock :valor.', ['valor' => Decimal::formatear($stock)]);
+                $stock = null;
+            }
         }
+
+        [$controlaVencimiento, $lote] = $this->lote($conLotes, $controlaStock, $stock, $nombre, $texto, $etiqueta, $errores, $advertencias);
 
         return [
             'id' => (int) $fila->id,
@@ -287,6 +324,7 @@ final class ValidadorImportacion
             'numericas' => $fila->numericas === null ? null : (string) $fila->numericas,
             'datos' => [
                 'nombre' => $nombre === '' ? null : $nombre,
+                'marca' => $marca,
                 'sku' => $sku === '' ? null : Str::upper($sku),
                 'codigo_barras' => $barras === '' ? null : $barras,
                 'descripcion' => $descripcion === '' ? null : $descripcion,
@@ -301,10 +339,70 @@ final class ValidadorImportacion
                 'precio_mayorista' => $precioMayorista,
                 'stock_minimo' => $stockMinimo ?? '0.000',
                 'stock' => $stock,
+                'controla_stock' => $controlaStock,
+                'controla_vencimiento' => $controlaVencimiento,
+                'lote' => $lote,
             ],
             'errores' => $errores,
             'advertencias' => $advertencias,
         ];
+    }
+
+    /**
+     * Marca de lote y lote del stock inicial de una fila. Sin la capacidad, o sin control de stock, no hay lote. Con
+     * stock y sin número ni fecha, el stock va al lote de regularización (se avisa). Un lote ya vencido se acepta
+     * (queda bloqueado para la venta) y se avisa, como en compras (§ 5.1.4).
+     *
+     * @param  callable(string): string  $texto
+     * @param  callable(string): string  $etiqueta
+     * @param  list<array<mixed>|string>  $errores
+     * @param  list<array<mixed>|string>  $advertencias
+     *
+     * @param-out list<array<mixed>|string>  $errores
+     * @param-out list<array<mixed>|string>  $advertencias
+     *
+     * @return array{0: bool, 1: array{numero: string, vencimiento: string}|null}
+     */
+    private function lote(bool $conLotes, bool $controlaStock, ?string $stock, string $nombre, callable $texto, callable $etiqueta, array &$errores, array &$advertencias): array
+    {
+        if (! $conLotes) {
+            return [false, null];
+        }
+
+        $marca = CamposImportacion::siNo($texto('controla_vencimiento'));
+
+        if ($marca === null) {
+            $errores[] = __('«:valor» en :campo no es válido: escribe sí o no.', ['valor' => $texto('controla_vencimiento'), 'campo' => $etiqueta('controla_vencimiento')]);
+            $marca = true;
+        }
+
+        $marca = $marca && $controlaStock;
+        $numero = $texto('lote');
+        $vencimiento = $texto('vencimiento');
+
+        if (! $marca || $stock === null) {
+            if ($numero !== '' || $vencimiento !== '') {
+                $advertencias[] = $marca
+                    ? __('Sin stock inicial: se ignora el lote.')
+                    : __('No controla lote y vencimiento: se ignora el lote.');
+            }
+
+            return [$marca, null];
+        }
+
+        if ($numero === '' && $vencimiento === '') {
+            $advertencias[] = __('Sin lote: el stock queda como «Sin lote (regularización)» hasta regularizarlo.');
+
+            return [true, null];
+        }
+
+        $lote = DatosLote::leer($nombre === '' ? __('Lote') : $nombre, $numero, $vencimiento, $errores);
+
+        if ($lote !== null && DatosLote::vencido($lote['vencimiento'])) {
+            $advertencias[] = __('El lote :lote ya venció (:fecha): quedará bloqueado para la venta.', ['lote' => $lote['numero'], 'fecha' => DatosLote::formatear($lote['vencimiento'])]);
+        }
+
+        return [true, $lote];
     }
 
     /**
@@ -405,8 +503,8 @@ final class ValidadorImportacion
         $encontrados = [];
 
         foreach (array_chunk(array_values(array_unique($nombres)), 1000) as $lote) {
-            foreach (DB::table('productos')->where('empresa_id', $empresaId)->whereIn('nombre', $lote)->pluck('nombre') as $nombre) {
-                $encontrados[CamposImportacion::clave((string) $nombre)] = true;
+            foreach (DB::table('productos')->where('empresa_id', $empresaId)->whereIn('nombre', $lote)->get(['nombre', 'marca']) as $producto) {
+                $encontrados[CamposImportacion::clave($producto->nombre.' '.($producto->marca ?? ''))] = true;
             }
         }
 

@@ -6,6 +6,7 @@
 @import './pedidos.css';
 @import './suscripcion.css';
 @import './onboarding.css';
+@import './asistente-siat.css';
 @import './caja.css';
 @import './sucursales.css';
 @import './reportes.css';
@@ -14,6 +15,11 @@
 @import './sitio-admin.css';
 @import './acceso.css';
 @import './funciones.css';
+@import './despachos.css';
+@import './cocina.css';
+@import './sin-stock.css';
+@import './lotes.css';
+@import './variantes.css';
 @import './custom.css';
 
 @source '../views';

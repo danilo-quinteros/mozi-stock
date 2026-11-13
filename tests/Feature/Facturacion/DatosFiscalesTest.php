@@ -5,7 +5,7 @@ use App\Domain\Facturacion\Actions\GuardarTokenDelegado;
 use App\Domain\Facturacion\ContribuyenteEmpresa;
 use App\Domain\Facturacion\ErrorFacturacion;
 use App\Http\Controllers\ImpersonacionController;
-use App\Livewire\Facturacion\Datos;
+use App\Livewire\Facturacion\Asistente;
 use App\Livewire\Facturacion\Panel;
 use App\Models\Auditoria;
 use App\Models\Scopes\EmpresaScope;
@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Tests\Feature\Facturacion\SiatPruebas;
 
@@ -36,30 +37,33 @@ function configuracionDe(int $empresaId): ?SiatConfiguracion
 
 test('el administrador guarda los datos fiscales y quedan auditados', function () {
     [$empresa, $admin] = empresaConAdministrador(['siat_habilitado' => true]);
+    $this->transporte->responder(SiatPruebas::cuis());
+    SiatPruebas::responderSincronizacion($this->transporte);
 
-    Livewire::actingAs($admin)->test(Datos::class, ['empresaId' => $empresa->id])
+    Livewire::actingAs($admin)->test(Asistente::class, ['empresaId' => $empresa->id])
         ->set('nit', (string) NIT_FISCAL)
         ->set('razon_social', 'COMERCIAL MOZI SRL')
-        ->set('modo', 'manual')
-        ->call('guardarDatos')
+        ->set('token', SiatPruebas::token(NIT_FISCAL))
+        ->call('guardarConexion')
         ->assertHasNoErrors();
 
     $configuracion = configuracionDe($empresa->id);
     expect($configuracion->nit)->toBe(NIT_FISCAL)
         ->and($configuracion->razon_social)->toBe('COMERCIAL MOZI SRL')
         ->and($configuracion->modo->value)->toBe('manual')
-        ->and($configuracion->tieneToken())->toBeFalse()
+        ->and($configuracion->tieneToken())->toBeTrue()
         ->and(Auditoria::query()->where('accion', 'siat.datos_fiscales')->count())->toBe(1);
 });
 
-test('el modo por defecto es automático y el NIT solo admite dígitos', function () {
+test('el modo por defecto es manual y el NIT solo admite dígitos', function () {
     [$empresa, $admin] = empresaConAdministrador(['siat_habilitado' => true]);
 
-    Livewire::actingAs($admin)->test(Datos::class, ['empresaId' => $empresa->id])
-        ->assertSet('modo', 'automatica')
+    Livewire::actingAs($admin)->test(Asistente::class, ['empresaId' => $empresa->id])
+        ->assertSet('modo', 'manual')
         ->set('nit', '1023456-1A')
         ->set('razon_social', 'X')
-        ->call('guardarDatos')
+        ->set('token', SiatPruebas::token(NIT_FISCAL))
+        ->call('guardarConexion')
         ->assertHasErrors(['nit']);
 
     expect(configuracionDe($empresa->id))->toBeNull();
@@ -69,10 +73,13 @@ test('el token se guarda cifrado y solo se muestra su sufijo', function () {
     [$empresa, $admin] = empresaConAdministrador(['siat_habilitado' => true]);
     $token = SiatPruebas::token(NIT_FISCAL, firma: 'firmaSECRETA_q7Zx');
 
-    Livewire::actingAs($admin)->test(Datos::class, ['empresaId' => $empresa->id])
-        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')->call('guardarDatos')
+    $this->transporte->responder(SiatPruebas::cuis());
+    SiatPruebas::responderSincronizacion($this->transporte);
+
+    Livewire::actingAs($admin)->test(Asistente::class, ['empresaId' => $empresa->id])
+        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')
         ->set('token', "  {$token}\n")
-        ->call('guardarToken')
+        ->call('guardarConexion')
         ->assertHasNoErrors()
         ->assertSet('token', '')
         ->assertSee('…q7Zx')
@@ -97,15 +104,18 @@ test('el token se guarda cifrado y solo se muestra su sufijo', function () {
 test('rechaza tokens que no corresponden a la empresa o al sistema', function (Closure $token, string $mensaje) {
     [$empresa, $admin] = empresaConAdministrador(['siat_habilitado' => true]);
 
-    Livewire::actingAs($admin)->test(Datos::class, ['empresaId' => $empresa->id])
-        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')->call('guardarDatos')
+    Livewire::actingAs($admin)->test(Asistente::class, ['empresaId' => $empresa->id])
+        ->call('ir', 'token')
+        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')
         ->set('token', $token())
-        ->call('guardarToken')
+        ->call('guardarConexion')
         ->assertHasErrors(['token'])
         ->assertSee($mensaje)
         ->assertSet('token', '');
 
-    expect(configuracionDe($empresa->id)->tieneToken())->toBeFalse()
+    // Ningún token inválido llega al SIN.
+    expect(configuracionDe($empresa->id)?->tieneToken() ?? false)->toBeFalse()
+        ->and($this->transporte->llamadas)->toBe([])
         ->and(Auditoria::query()->where('accion', 'siat.token_actualizado')->exists())->toBeFalse();
 })->with([
     'de otro NIT' => [fn () => SiatPruebas::token(7777777011), 'no corresponde al NIT'],
@@ -118,20 +128,25 @@ test('rechaza tokens que no corresponden a la empresa o al sistema', function (C
 test('sin NIT registrado no se acepta el token', function () {
     [$empresa, $admin] = empresaConAdministrador(['siat_habilitado' => true]);
 
-    Livewire::actingAs($admin)->test(Datos::class, ['empresaId' => $empresa->id])
+    Livewire::actingAs($admin)->test(Asistente::class, ['empresaId' => $empresa->id])
+        ->set('nit', '')
         ->set('token', SiatPruebas::token(NIT_FISCAL))
-        ->call('guardarToken')
-        ->assertHasErrors(['token']);
+        ->call('guardarConexion')
+        ->assertHasErrors(['nit']);
 
-    expect(configuracionDe($empresa->id))->toBeNull();
+    // La acción también lo exige, aunque se la llame sin el asistente.
+    expect(fn () => app(GuardarTokenDelegado::class)->ejecutar($admin, $empresa, SiatPruebas::token(NIT_FISCAL)))
+        ->toThrow(ValidationException::class, 'Primero registra el NIT')
+        ->and(configuracionDe($empresa->id))->toBeNull();
 });
 
 test('el NIT queda fijo después de obtener códigos del SIN o si el token es de otro NIT', function () {
     $datos = SiatPruebas::empresaFiscal(NIT_FISCAL);
-    $componente = Livewire::actingAs($datos['admin'])->test(Datos::class, ['empresaId' => $datos['empresa']->id]);
+    SiatPruebas::catalogosSincronizados($datos['empresa']->id);
+    $componente = Livewire::actingAs($datos['admin'])->test(Asistente::class, ['empresaId' => $datos['empresa']->id]);
 
     // El token cargado es del NIT actual: cambiar a otro NIT lo dejaría inválido.
-    $componente->set('nit', '7777777011')->call('guardarDatos')->assertHasErrors(['nit']);
+    $componente->set('nit', '7777777011')->call('guardarConexion')->assertHasErrors(['nit']);
 
     $cuis = new SiatCuis;
     $cuis->empresa_id = $datos['empresa']->id;
@@ -142,8 +157,9 @@ test('el NIT queda fijo después de obtener códigos del SIN o si el token es de
     $cuis->vence_en = Carbon::now()->addYear();
     $cuis->save();
 
-    $componente->set('nit', '7777777011')->call('guardarDatos')->assertHasErrors(['nit']);
-    $componente->set('nit', (string) NIT_FISCAL)->set('razon_social', 'NUEVA RAZON')->call('guardarDatos')->assertHasNoErrors();
+    $componente->set('nit', '7777777011')->call('guardarConexion')->assertHasErrors(['nit']);
+    $this->transporte->responder(SiatPruebas::cuis());
+    $componente->set('nit', (string) NIT_FISCAL)->set('razon_social', 'NUEVA RAZON')->call('guardarConexion')->assertHasNoErrors();
 
     expect(configuracionDe($datos['empresa']->id)->nit)->toBe(NIT_FISCAL)
         ->and(configuracionDe($datos['empresa']->id)->razon_social)->toBe('NUEVA RAZON');
@@ -152,7 +168,7 @@ test('el NIT queda fijo después de obtener códigos del SIN o si el token es de
 test('el formulario de datos fiscales ya no incluye metodo de pago electronico ni unidad de medida', function () {
     $datos = SiatPruebas::empresaFiscal();
 
-    $componente = Livewire::actingAs($datos['admin'])->test(Datos::class, ['empresaId' => $datos['empresa']->id]);
+    $componente = Livewire::actingAs($datos['admin'])->test(Asistente::class, ['empresaId' => $datos['empresa']->id]);
     $componente->assertDontSeeHtml('id="metodo_pago_electronico"')
         ->assertDontSeeHtml('id="unidad_medida"');
 });
@@ -164,7 +180,7 @@ test('cada empresa tiene su propio token y nadie ve los datos fiscales de otra',
     $this->actingAs($a['admin'])->get(route('facturacion'))->assertOk()->assertSee('…aaaa')->assertDontSee('…bbbb')->assertDontSee('1029384756');
 
     // El ID de otra empresa no concede acceso, ni montando el componente ni en la ruta del panel global.
-    Livewire::actingAs($a['admin'])->test(Datos::class, ['empresaId' => $b['empresa']->id])->assertForbidden();
+    Livewire::actingAs($a['admin'])->test(Asistente::class, ['empresaId' => $b['empresa']->id])->assertForbidden();
     $this->actingAs($a['admin'])->get(route('admin.empresas.facturacion', $b['empresa']))->assertForbidden();
 
     $contribuyentes = app(ContribuyenteEmpresa::class);
@@ -190,9 +206,12 @@ test('el superadmin también carga los datos fiscales de una empresa', function 
     [$empresa] = empresaConAdministrador(['siat_habilitado' => true]);
     $superadmin = User::factory()->superadmin()->create();
 
-    Livewire::actingAs($superadmin)->test(Datos::class, ['empresaId' => $empresa->id])
-        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')->call('guardarDatos')
-        ->set('token', SiatPruebas::token(NIT_FISCAL))->call('guardarToken')
+    $this->transporte->responder(SiatPruebas::cuis());
+    SiatPruebas::responderSincronizacion($this->transporte);
+
+    Livewire::actingAs($superadmin)->test(Asistente::class, ['empresaId' => $empresa->id])
+        ->set('nit', (string) NIT_FISCAL)->set('razon_social', 'COMERCIAL MOZI SRL')
+        ->set('token', SiatPruebas::token(NIT_FISCAL))->call('guardarConexion')
         ->assertHasNoErrors();
 
     expect(configuracionDe($empresa->id)->token_actualizado_por)->toBe($superadmin->id)

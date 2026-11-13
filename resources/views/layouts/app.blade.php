@@ -114,6 +114,11 @@
         <main class="content" id="contenido" tabindex="-1">{{ $slot }}</main>
     </div>
 </div>
+@if ($empresaActual && app(\App\Domain\Tenancy\CapacidadesEmpresa::class)->tiene($empresaActual->id, \App\Enums\Capacidad::Cocina))
+    {{-- Pedidos en cocina (ESPECIFICACION_COCINA.md § 4.2): quién ve el botón lo deciden los componentes. --}}
+    <livewire:cocina.boton-flotante />
+    <livewire:cocina.panel />
+@endif
 <flux:toast />
 @fluxScripts
 </body>

@@ -21,6 +21,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
 /*
@@ -62,6 +63,21 @@ test('the administrator sees the plan and sends a receipt that stays under revie
     $pago = PagoSaas::query()->sole();
     expect($pago->meses)->toBe(3)->and($pago->importe)->toBe('447.00')->and($pago->nota)->toBe('Operación 123')
         ->and(Suscripcion::query()->sole()->vencimiento->format('Y-m-d'))->toBe('2026-10-28');
+});
+
+test('only 1, 3, 6 or 12 months can be paid, also when the request is manipulated', function () {
+    $pantalla = Livewire::actingAs($this->admin)->test(MiSuscripcion::class)->call('abrir')
+        ->assertSeeHtml('<option value="6">')->assertSeeHtml('<option value="12">')
+        ->assertDontSeeHtml('<option value="2">')->assertDontSeeHtml('<option value="11">')
+        ->set('meses', '2')->set('archivo', imagenPng('pago.png'))
+        ->call('enviar')->assertHasErrors('meses');
+
+    expect(fn () => app(EnviarComprobantePago::class)->ejecutar($this->admin, ['meses' => 5, 'nota' => null, 'clave' => (string) Str::uuid()], imagenPng('pago.png')))
+        ->toThrow(ValidationException::class);
+    expect(PagoSaas::query()->count())->toBe(0);
+
+    $pantalla->set('meses', '12')->call('enviar')->assertHasNoErrors();
+    expect(PagoSaas::query()->sole()->meses)->toBe(12);
 });
 
 test('submitting twice with the same key registers one receipt', function () {
@@ -106,21 +122,21 @@ test('T02: receipts are only downloadable by their company administrator and the
 
 test('the superadmin reviews receipts: approval needs the amount check, rejection needs a reason', function () {
     $this->actingAs($this->admin);
-    $pago = enviarDe($this->admin, 2);
+    $pago = enviarDe($this->admin, 3);
 
     $pantalla = Livewire::actingAs($this->superadmin)->test(Comprobantes::class)
-        ->assertSee('Comercial Santa Cruz')->assertSee('Bs 298,00')->assertSee('En revisión')
+        ->assertSee('Comercial Santa Cruz')->assertSee('Bs 447,00')->assertSee('En revisión')
         ->call('revisar', $pago->id)
-        ->assertSee('28/10/2026 → 28/12/2026')
+        ->assertSee('28/10/2026 → 28/01/2027')
         ->call('aprobar')->assertHasErrors('verificado')
         ->call('rechazar')->assertSet('rechazando', true)
         ->call('rechazar')->assertHasErrors('motivo');
     expect($pago->refresh()->estado)->toBe(EstadoPagoSaas::Pendiente);
 
     $pantalla->call('cerrar')->call('revisar', $pago->id)->set('verificado', true)->call('aprobar')->assertHasNoErrors()
-        ->assertSee($pago->codigo().' aprobado: el nuevo vencimiento es el 28/12/2026.');
+        ->assertSee($pago->codigo().' aprobado: el nuevo vencimiento es el 28/01/2027.');
     expect($pago->refresh()->estado)->toBe(EstadoPagoSaas::Aprobado)
-        ->and(Suscripcion::query()->withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $this->empresa->id)->sole()->vencimiento->format('Y-m-d'))->toBe('2026-12-28');
+        ->and(Suscripcion::query()->withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $this->empresa->id)->sole()->vencimiento->format('Y-m-d'))->toBe('2027-01-28');
 
     $this->actingAs($this->adminOtra);
     $otro = enviarDe($this->adminOtra);

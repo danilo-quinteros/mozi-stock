@@ -6,7 +6,6 @@ use App\Domain\Facturacion\PreparacionFacturacion;
 use App\Models\Empresa;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
-use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
 
@@ -25,7 +24,7 @@ final class GuiaConfiguracion
      * al guardarlo se sincronizan los catálogos, y sin ellos no se puede elegir la actividad.
      */
     private const PASOS_SIAT = [
-        ['titulo' => 'Asociación y token', 'detalle' => 'Conecta con el SIN', 'puntos' => ['token', 'catalogos']],
+        ['titulo' => 'Asociación y token', 'detalle' => 'Conecta con el SIN', 'puntos' => ['token', 'firma', 'catalogos']],
         ['titulo' => 'Datos fiscales', 'detalle' => 'Identifica a tu empresa', 'puntos' => ['datos', 'actividad']],
         ['titulo' => 'Sucursal y punto de venta', 'detalle' => 'Prepara la emisión', 'puntos' => ['puntos', 'cuis', 'cufd']],
         ['titulo' => 'Verificar conexión', 'detalle' => 'Comprueba la configuración', 'puntos' => ['habilitada', 'servidor']],
@@ -57,8 +56,7 @@ final class GuiaConfiguracion
         $pasos = [
             self::paso('empresa', __('Datos de tu empresa'), __('Nombre y teléfono del negocio'), 'building', __('Completar'),
                 null, filled($empresa->nombre) && filled($empresa->telefono)),
-            self::paso('sucursal', __('Configura tu sucursal'), __('Agrega la dirección de «Casa Matriz» o registra otra sucursal'), 'store', __('Configurar'),
-                null, Sucursal::query()->where('empresa_id', $id)->where('activa', true)->whereNotNull('direccion')->exists()),
+            // Sin paso de sucursal: al registrarse la empresa ya tiene «Casa Matriz» con su caja (decisión del propietario, 09/11/2026).
             self::paso('productos', __('Agrega tus primeros productos'), __('Registra artículos y precios'), 'box', __('Comenzar'),
                 route('productos.crear'), Producto::query()->where('empresa_id', $id)->exists()),
             self::paso('inventario', __('Carga tu inventario inicial'), __('Registra una compra o una entrada de stock por sucursal'), 'truck', __('Comenzar'),
@@ -66,7 +64,7 @@ final class GuiaConfiguracion
         ];
 
         if ($siat !== null) {
-            $pasos[] = self::paso('siat', __('Configura la facturación SIAT'), __('Token, datos fiscales, sucursal y punto de venta del SIN'), 'receipt', __('Configurar'),
+            $pasos[] = self::paso('siat', __('Configura la facturación SIAT'), __('Modalidad, token, firma, sucursal y punto de venta del SIN'), 'receipt', __('Configurar'),
                 null, $siat['listo']);
         }
 
@@ -96,7 +94,8 @@ final class GuiaConfiguracion
 
         $pasos = [];
         foreach (self::PASOS_SIAT as $paso) {
-            $puntos = array_map(fn (string $clave): array => $revision[$clave], $paso['puntos']);
+            // «firma» solo existe en modalidad electrónica.
+            $puntos = array_map(fn (string $clave): array => $revision[$clave], array_values(array_filter($paso['puntos'], fn (string $clave): bool => isset($revision[$clave]))));
             $pasos[] = [
                 'titulo' => __($paso['titulo']),
                 'detalle' => __($paso['detalle']),

@@ -70,6 +70,8 @@ final class Iconos
         'subscription' => '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/>',
         'swap' => '<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
         'truck' => '<path d="M2 5h12v11H2zM14 9h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        // Olla con vapor: botón y panel «En cocina» (ESPECIFICACION_COCINA.md § 4.2).
+        'cocina' => '<path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM2 11h2M20 11h2M9 7c0-1.2 1.2-1.2 1.2-2.4M14 7c0-1.2 1.2-1.2 1.2-2.4"/>',
         'user' => '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/>',
         'users' => '<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5"/>',
         'wallet' => '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15v14H5a2 2 0 0 1-2-2V5"/><path d="M16 14h.01"/>',

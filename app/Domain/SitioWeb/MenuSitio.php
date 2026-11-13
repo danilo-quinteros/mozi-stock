@@ -22,7 +22,7 @@ final class MenuSitio
             'creditos' => ['icono' => 'wallet', 'resumen' => 'Créditos, abonos y saldo por cliente.'],
             'caja' => ['icono' => 'cash', 'resumen' => 'Caja por turno, arqueo y gastos.'],
             'reportes' => ['icono' => 'chart', 'resumen' => 'Lo vendido y lo cobrado, por separado.'],
-            'asistente-ia' => ['icono' => 'sparkles', 'resumen' => 'Pregunta a Mozi y responde con tus datos.'],
+            'agente-ia' => ['icono' => 'sparkles', 'resumen' => 'Pregunta a Mozi y responde con tus datos.'],
         ];
     }
 

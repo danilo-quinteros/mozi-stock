@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\AgenteMozi\AccesoPorPlan;
 use Database\Factories\PlanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,12 +19,13 @@ use Illuminate\Support\Carbon;
  * @property string $descripcion
  * @property string $precio_mensual
  * @property bool $siat_habilitado
+ * @property bool $agente_ia
  * @property bool $activo
  * @property int $orden
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['codigo', 'titulo', 'descripcion', 'precio_mensual', 'siat_habilitado', 'activo', 'orden'])]
+#[Fillable(['codigo', 'titulo', 'descripcion', 'precio_mensual', 'siat_habilitado', 'agente_ia', 'activo', 'orden'])]
 class Plan extends Model
 {
     /** @use HasFactory<PlanFactory> */
@@ -31,11 +33,18 @@ class Plan extends Model
 
     protected $table = 'planes';
 
+    protected static function booted(): void
+    {
+        // Si el superadmin marca o desmarca el agente en un plan, se vuelve a leer para todas las empresas.
+        static::saved(fn () => app(AccesoPorPlan::class)->olvidar());
+    }
+
     protected function casts(): array
     {
         return [
             'precio_mensual' => 'decimal:2',
             'siat_habilitado' => 'boolean',
+            'agente_ia' => 'boolean',
             'activo' => 'boolean',
             'orden' => 'integer',
         ];

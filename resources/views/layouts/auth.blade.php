@@ -33,7 +33,7 @@
                         <li><x-icon name="box" /><span><b>{{ __('Stock al día en cada sucursal') }}</b>{{ __('Compras, ajustes y traspasos con historial.') }}</span></li>
                         <li><x-icon name="receipt" /><span><b>{{ __('Ventas y facturación SIAT') }}</b>{{ __('Del pedido a la factura sin salir del sistema.') }}</span></li>
                         <li><x-icon name="wallet" /><span><b>{{ __('Cobros y créditos claros') }}</b>{{ __('Cada abono cuenta el día en que lo recibes.') }}</span></li>
-                        <li><x-icon name="sparkles" /><span><b>{{ __('Mozi, tu asistente') }}</b>{{ __('Pregunta por tus ventas y tu stock en lenguaje natural.') }}</span></li>
+                        <li><x-icon name="sparkles" /><span><b>{{ __('Mozi, tu agente de IA') }}</b>{{ __('Pregunta por tus ventas y tu stock en lenguaje natural.') }}</span></li>
                     </ul>
                 @endif
             </div>

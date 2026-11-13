@@ -30,7 +30,7 @@
                 ['cash', 'Abonos en la misma pantalla', 'Registra el abono desde el historial de pagos de la venta: efectivo, electrónico o mixto.'],
                 ['users', 'Saldo por cliente', 'Mira cuánto te debe cada cliente, en cuántas ventas y desde cuándo, y cóbrale todo en un solo pago.'],
                 ['doc', 'Historial imprimible', 'Imprime o descarga el historial de pagos de una venta para entregárselo a tu cliente.'],
-                ['sparkles', 'Cobranza priorizada', 'El asistente Mozi te dice a quién conviene cobrar primero según el monto y la antigüedad de la deuda.'],
+                ['sparkles', 'Cobranza priorizada', 'El agente Mozi te dice a quién conviene cobrar primero según el monto y la antigüedad de la deuda.'],
             ]" />
         </div>
     </section>

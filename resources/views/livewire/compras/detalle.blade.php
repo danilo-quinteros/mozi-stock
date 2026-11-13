@@ -26,7 +26,7 @@
                 <tbody>
                     @foreach ($compra->items as $item)
                         <tr wire:key="item-{{ $item->id }}">
-                            <td><b>{{ $item->descripcion }}</b><small style="display:block;color:var(--faint);margin-top:4px">{{ $item->sku }}</small></td>
+                            <td><b>{{ $item->descripcion }}</b><small style="display:block;color:var(--faint);margin-top:4px">{{ $item->sku }}</small>@if ($item->lote)<small class="lote-resumen" data-test="compra-item-lote">{{ $item->lote->etiqueta() }}</small>@endif</td>
                             <td>{{ Decimal::formatear($item->cantidad) }} {{ $item->unidad }}</td>
                             <td>{{ Decimal::bs($item->costo_unitario) }}</td>
                             <td><b>{{ Decimal::bs($item->subtotal) }}</b></td>

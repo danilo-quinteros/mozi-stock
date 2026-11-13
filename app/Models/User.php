@@ -30,6 +30,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int|null $caja_id
  * @property Rol|null $rol
  * @property bool $activo
+ * @property bool $puede_despachar permiso de almacén: despacha ventas de su sucursal (ESPECIFICACION_DESPACHOS.md § 6.3)
  * @property string|null $idioma
  * @property string $name
  * @property string $email
@@ -57,6 +58,7 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
      */
     protected $attributes = [
         'activo' => true,
+        'puede_despachar' => false,
     ];
 
     /**
@@ -71,6 +73,7 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'password' => 'hashed',
             'rol' => Rol::class,
             'activo' => 'boolean',
+            'puede_despachar' => 'boolean',
         ];
     }
 

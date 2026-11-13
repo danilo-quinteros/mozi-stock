@@ -25,6 +25,9 @@ Route::middleware('saas')->group(function () {
     // Registro público con prueba gratis («Prueba gratis» en todo el sitio).
     Route::livewire('registro', Registro::class)->middleware('guest')->name('registro');
 
+    // URL anterior de la página del agente (antes «asistente de IA»): 301 para no perder enlaces.
+    Route::permanentRedirect('asistente-ia', 'agente-ia');
+
     Route::get('sitemap.xml', [SitioWebController::class, 'sitemap'])->name('sitio.sitemap');
     Route::get('sitio/imagenes/{archivo}', [SitioWebController::class, 'imagen'])
         ->where('archivo', '[A-Za-z0-9]{40}\.(jpg|png|webp)')

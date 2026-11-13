@@ -43,8 +43,8 @@
                 <div class="split-copy reveal">
                     <p class="eyebrow">Pregúntale a Mozi</p>
                     <h2 id="r-ia">Reportes a medida con inteligencia artificial</h2>
-                    <p>¿Necesitas algo que no está en un reporte? Pregúntale al asistente Mozi: «¿qué productos no se vendieron este mes?», «¿cuál es mi sucursal más rentable?». Te responde con tus datos reales, en tablas y gráficos.</p>
-                    <a class="module-link" href="{{ route('sitio.asistente-ia') }}">Conocer el asistente de IA<x-sitio.i n="arrow" /></a>
+                    <p>¿Necesitas algo que no está en un reporte? Pregúntale al agente Mozi: «¿qué productos no se vendieron este mes?», «¿cuál es mi sucursal más rentable?». Te responde con tus datos reales, en tablas y gráficos.</p>
+                    <a class="module-link" href="{{ route('sitio.agente-ia') }}">Conocer el agente de IA<x-sitio.i n="arrow" /></a>
                 </div>
                 <div class="visual-card reveal" aria-hidden="true">
                     <div class="chat">
@@ -71,6 +71,6 @@
         </div>
     </section>
 
-    <x-sitio.relacionados actual="reportes" :claves="['asistente-ia', 'caja', 'inventario']" />
+    <x-sitio.relacionados actual="reportes" :claves="['agente-ia', 'caja', 'inventario']" />
     <x-sitio.cta titulo="Conoce tus números de verdad" :mensaje="$seo->mensajeWhatsapp" />
 </x-sitio.layout>

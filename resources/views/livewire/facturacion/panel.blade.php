@@ -35,6 +35,6 @@
     @elseif ($seccion === 'catalogos')
         <livewire:facturacion.catalogos :empresa-id="$empresaId" :key="'catalogos-'.$empresaId" />
     @else
-        <livewire:facturacion.datos :empresa-id="$empresaId" :key="'datos-'.$empresaId" />
+        <livewire:facturacion.asistente :empresa-id="$empresaId" :key="'asistente-'.$empresaId" />
     @endif
 </div>

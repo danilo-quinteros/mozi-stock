@@ -13,8 +13,12 @@
     $articulos = array_reduce($filas, fn (string $suma, array $fila) => Decimal::sumar($suma, $fila['cantidad'] ?? '0'), '0');
     $mensajes = array_values(array_unique(array_merge($erroresVivos, $errors->all())));
     $listo = $filas !== [] && $erroresVivos === [] && $pago !== null;
+    $pestanaActiva = collect($pestanas)->firstWhere('id', $ventaActiva);
+    $etiquetaVenta = fn (array $p) => __('Venta :numero', ['numero' => $p['numero']]);
 @endphp
-<div class="pos" data-pos x-data="{ atajos: false }" @venta-finalizada.window="$nextTick(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); document.getElementById('contenido')?.scrollTo({ top: 0, behavior: 'smooth' }); })">
+<div class="pos" data-pos x-data="{ atajos: false }"
+    @pos-producto-agregado.window="window.sonarTrin?.()"
+    @venta-finalizada.window="window.sonarTrinTrin?.(); $nextTick(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); document.getElementById('contenido')?.scrollTo({ top: 0, behavior: 'smooth' }); })">
     <div class="pos-head">
         <div>
             <div class="eyebrow">{{ __('Vender es más fácil con MoziStock') }}</div>
@@ -70,10 +74,21 @@
     @error('sucursal_id')<div class="notice" style="margin-bottom:16px" role="alert"><x-icon name="status-alert" /><div><p>{{ $message }}</p></div></div>@enderror
 
     @if ($ultimaVenta)
+        @php
+            $facturaValida = $ultimaVenta->factura?->estado === \App\Enums\EstadoFactura::Validada;
+            $urlImprimirRollo = $facturaValida
+                ? route('facturas.imprimir', ['factura' => $ultimaVenta->factura, 'formato' => 'rollo', 'autoprint' => 1])
+                : route('pedidos.imprimir', ['pedido' => $ultimaVenta->pedido_id, 'formato' => 'rollo', 'autoprint' => 1]);
+        @endphp
         <div class="pos-last" role="status">
             <x-icon name="status-ok" />
             <span>{{ __('Última venta :codigo · :total', ['codigo' => $ultimaVenta->codigo(), 'total' => Decimal::bs($ultimaVenta->total)]) }}@if (Decimal::comparar($ultimaVenta->saldo_pendiente, '0', 2) > 0) · {{ __('saldo a crédito :saldo', ['saldo' => Decimal::bs($ultimaVenta->saldo_pendiente)]) }}@endif</span>
-            <a class="btn ghost sm" href="{{ route('ventas.ver', $ultimaVenta) }}" target="_blank" rel="noopener">{{ __('Ver venta') }}</a>
+            <div style="display:inline-flex; align-items:center; gap:8px;">
+                <button type="button" class="btn soft sm" onclick="window.imprimirTicketDirecto('{{ $urlImprimirRollo }}')" title="{{ __('Imprimir ticket en rollo') }}">
+                    <x-icon name="print" size="sm" /> {{ __('Imprimir') }}
+                </button>
+                <a class="btn ghost sm" href="{{ route('ventas.ver', $ultimaVenta) }}" target="_blank" rel="noopener">{{ __('Ver venta') }}</a>
+            </div>
         </div>
     @endif
 
@@ -137,12 +152,46 @@
                 </div>
                 <div class="pos-grid" aria-live="polite" wire:loading.class="is-loading" wire:target="busqueda,filtrarCategoria,sucursal_id,verMas">
                     @forelse ($productos as $producto)
+                        @if ($producto instanceof \App\Models\Modelo)
+                            {{-- Tallas y colores (V2): el modelo abre el selector con el stock de cada combinación. --}}
+                            @php
+                                $resumen = $resumenModelos[$producto->id] ?? ['variantes' => 0, 'stock' => '0', 'sin_control' => 0];
+                                $alerta = $resumen['sin_control'] >= $resumen['variantes'] ? 'sin_control'
+                                    : ($resumen['sin_control'] === 0 && Decimal::comparar($resumen['stock'], '0') <= 0 ? 'sin_stock' : 'normal');
+                            @endphp
+                            <button type="button" class="pos-product" wire:key="pos-modelo-{{ $producto->id }}" wire:click="abrirSelector({{ $producto->id }})"
+                                @disabled($alerta === 'sin_stock') aria-label="{{ __('Elegir combinación de :producto', ['producto' => $producto->nombre]) }}" data-test="pos-modelo-{{ $producto->id }}">
+                                <span class="pos-stock {{ $alerta }}"><i></i> {{ match ($alerta) {
+                                    'sin_stock' => __('Sin stock'),
+                                    'sin_control' => __('Sin control'),
+                                    default => __(':cantidad disp.', ['cantidad' => Decimal::formatear($resumen['stock'])]),
+                                } }}</span>
+                                <span class="pos-visual" style="--tono:{{ $tono($producto) }}">
+                                    @if ($producto->imagen_path)
+                                        <img src="{{ route('productos.modelos.imagen', $producto) }}" alt="" loading="lazy">
+                                    @else
+                                        <span class="pos-initials">{{ $iniciales($producto) }}</span>
+                                    @endif
+                                </span>
+                                <span class="pos-name">{{ $producto->nombre }}</span>
+                                <span class="pos-sku">{{ $producto->categoria->nombre ?? __('Sin categoría') }} · <span class="pos-combinaciones">{{ trans_choice(':count combinación|:count combinaciones', $resumen['variantes']) }}</span></span>
+                                <span class="pos-bottom">
+                                    <span class="pos-price"><small>Bs </small>{{ Decimal::formatear($producto->precio_consumidor, 2, 2) }}</span>
+                                    <span class="pos-add"><x-icon name="plus" size="sm" /></span>
+                                </span>
+                            </button>
+                            @continue
+                        @endif
                         @php
-                            $alerta = ListadoProductos::alerta((string) $producto->stock, (string) $producto->minimo);
+                            $alerta = ListadoProductos::alerta((string) $producto->stock, (string) $producto->minimo, $producto->controla_stock);
                         @endphp
                         <button type="button" class="pos-product" wire:key="pos-producto-{{ $producto->id }}" wire:click="agregarProducto({{ $producto->id }})"
                             @disabled($alerta === 'sin_stock') aria-label="{{ __('Agregar :producto', ['producto' => $producto->nombre]) }}">
-                            <span class="pos-stock {{ $alerta }}"><i></i> {{ $alerta === 'sin_stock' ? __('Sin stock') : __(':cantidad disp.', ['cantidad' => Decimal::formatear($producto->stock)]) }}</span>
+                            <span class="pos-stock {{ $alerta }}"><i></i> {{ match ($alerta) {
+                                'sin_stock' => __('Sin stock'),
+                                'sin_control' => __('Sin control'),
+                                default => __(':cantidad disp.', ['cantidad' => Decimal::formatear($producto->stock)]),
+                            } }}</span>
                             <span class="pos-visual" style="--tono:{{ $tono($producto) }}">
                                 @if ($producto->imagen_path)
                                     <img src="{{ route('productos.imagen', $producto) }}" alt="" loading="lazy">
@@ -151,7 +200,7 @@
                                 @endif
                             </span>
                             <span class="pos-name">{{ $producto->nombre }}</span>
-                            <span class="pos-sku">{{ $producto->categoria->nombre ?? __('Sin categoría') }} · {{ $producto->sku }}</span>
+                            <span class="pos-sku">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->categoria->nombre ?? __('Sin categoría') }} · {{ $producto->sku }}</span>
                             <span class="pos-bottom">
                                 <span class="pos-price"><small>Bs </small>{{ Decimal::formatear($producto->precio_consumidor, 2, 2) }}</span>
                                 <span class="pos-add"><x-icon name="plus" size="sm" /></span>
@@ -172,7 +221,7 @@
             <div class="pos-check-head">
                 <div>
                     <div class="pos-title" id="pos-venta">{{ __('Venta actual') }}</div>
-                    <div class="pos-receipt">{{ __('El número se asigna al confirmar') }} <span style="color:var(--border)">·</span> <span class="ok">{{ __('Nueva venta') }}</span></div>
+                    <div class="pos-receipt">{{ __('El número se asigna al confirmar') }} <span style="color:var(--border)">·</span> <span class="ok">{{ $pestanaActiva ? __('Venta :numero', ['numero' => $pestanaActiva['numero']]) : __('Nueva venta') }}</span></div>
                 </div>
                 <button type="button" class="pos-clear" wire:click="vaciar" @disabled($filas === [])><x-icon name="trash" size="sm" /> {{ __('Vaciar') }}</button>
             </div>
@@ -201,6 +250,10 @@
                             </button>
                         @endforeach
                     </div>
+                @elseif (! $cliente && mb_strlen(trim($buscarCliente)) >= 2)
+                    <div class="search-results open" role="status" data-test="sin-clientes">
+                        <div class="search-result search-result-vacio"><span><b>{{ __('Cliente no encontrado') }}</b><small>{{ __('Revisa el nombre o el CI/NIT, o regístralo con +.') }}</small></span></div>
+                    </div>
                 @endif
             </div>
             @error('cliente_id')<p class="auth-error pos-client-error" role="alert">{{ $message }}</p>@enderror
@@ -212,11 +265,11 @@
                         $i = $fila['indice'];
                         $producto = $fila['producto'];
                         $neto = $calculo['por_indice'][$i]['total'] ?? null;
-                        $falta = $fila['cantidad'] !== null && Decimal::comparar($fila['stock'], $fila['cantidad']) < 0;
+                        $falta = $fila['cantidad'] !== null && $fila['stock'] !== null && Decimal::comparar($fila['stock'], $fila['cantidad']) < 0;
                     @endphp
                     <div class="pos-item" wire:key="pos-linea-{{ $i }}-{{ $producto->id }}">
                         <span class="pos-item-img" style="--tono:{{ $tono($producto) }}">
-                            @if ($producto->imagen_path)
+                            @if ($producto->tieneFoto())
                                 <img src="{{ route('productos.imagen', $producto) }}" alt="" loading="lazy">
                             @else
                                 <span>{{ $iniciales($producto) }}</span>
@@ -224,7 +277,7 @@
                         </span>
                         <div class="pos-item-info">
                             <div class="pos-item-name"><b>{{ $producto->nombre }}</b><strong>{{ $neto === null ? '—' : Decimal::bs($neto) }}</strong></div>
-                            <div class="pos-item-unit">{{ $fila['precio'] === null ? __('Sin precio en esta lista') : __(':precio c/u', ['precio' => Decimal::bs($fila['precio'])]) }} · {{ $producto->unidad->abreviatura }}</div>
+                            <div class="pos-item-unit">@if ($producto->marca){{ $producto->marca }} · @endif{{ $fila['precio'] === null ? __('Sin precio en esta lista') : __(':precio c/u', ['precio' => Decimal::bs($fila['precio'])]) }} · {{ $producto->unidad->abreviatura }}</div>
                             <div class="pos-item-mini">
                                 <select class="pos-tiny" aria-label="{{ __('Lista de precio de :producto', ['producto' => $producto->nombre]) }}" wire:model.live="lineas.{{ $i }}.tipo_precio">
                                     @foreach (TipoPrecio::cases() as $tipo)
@@ -312,12 +365,38 @@
                     </div>
                 @endif
 
+                @if ($flujoEntrega !== null)
+                    <div class="pos-entrega">
+                        @if ($flujoEntrega === \App\Enums\Capacidad::Cocina)
+                            <div class="pos-field pos-mesa">
+                                <label for="nombreMesa">{{ __('Nombre o mesa') }}</label>
+                                <input id="nombreMesa" type="text" maxlength="40" autocomplete="off" placeholder="{{ __('Ej.: Juan, Mesa 4') }}" wire:model="nombreMesa" data-nombre-mesa>
+                            </div>
+                        @endif
+                        @include('livewire.despachos.casilla-entregado')
+                    </div>
+                @endif
+
                 @if ($mensajes !== [])
                     <div class="pos-status error" role="alert">@foreach ($mensajes as $mensaje){{ $mensaje }}@if (! $loop->last)<br>@endif @endforeach</div>
                 @elseif ($pago !== null)
                     <div class="pos-status ok">{{ $saldo !== null && Decimal::comparar($saldo, '0', 2) > 0 ? __('Saldo pendiente del crédito: :saldo.', ['saldo' => Decimal::bs($saldo)]) : __('Cobro listo para confirmar.') }}</div>
                 @else
                     <div class="pos-status">{{ __('Agrega productos para comenzar la venta.') }}</div>
+                @endif
+
+                @if ($flujoEntrega !== null)
+                    <div class="pos-entrega-resultado">@include('livewire.despachos.estado-resultante')</div>
+                @endif
+
+                {{-- Facturación SIAT: solo muestra el check si la empresa tiene SIAT habilitado y modo manual --}}
+                @if ($fiscal && $fiscal['modo'] === ModoFacturacion::Manual)
+                    <div class="pos-factura-check" style="margin-bottom:12px;">
+                        <label class="row" style="cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-weight:600; margin:0; user-select:none;">
+                            <input type="checkbox" wire:model.live="emitirFactura" data-test="pos-check-factura">
+                            <span>{{ __('Emitir factura SIAT') }}</span>
+                        </label>
+                    </div>
                 @endif
 
                 <button type="button" class="pos-complete" data-pos-confirmar wire:click="confirmar" wire:loading.attr="disabled" wire:target="confirmar" @disabled(! $listo)>
@@ -327,6 +406,42 @@
             </div>
         </section>
     </div>
+
+    {{-- Ventas abiertas: cada pestaña es una venta independiente (productos, cliente y cobro) hasta confirmarla o
+         cancelarla. Cambiar de pestaña no toca stock ni caja; solo «Confirmar venta» lo hace. --}}
+    <nav class="pos-tabs" aria-label="{{ __('Ventas abiertas') }}" data-test="pos-ventas">
+        <div class="pos-tabs-list" role="tablist">
+            @foreach ($pestanas as $p)
+                @php
+                    $activa = $p['id'] === $ventaActiva;
+                    $conProductos = Decimal::comparar($p['articulos'], '0') > 0;
+                @endphp
+                <div class="pos-tab {{ $activa ? 'active' : '' }}" wire:key="pos-venta-{{ $p['id'] }}">
+                    <button type="button" class="pos-tab-main" role="tab" aria-selected="{{ $activa ? 'true' : 'false' }}"
+                        wire:click="cambiarVenta('{{ $p['id'] }}')" title="{{ $etiquetaVenta($p) }}{{ $p['cliente'] ? ' · '.$p['cliente'] : '' }}">
+                        <span class="pos-tab-dot {{ $conProductos ? 'busy' : '' }}" aria-hidden="true"></span>
+                        <span class="pos-tab-text">
+                            <b>{{ $etiquetaVenta($p) }}</b>
+                            <small>{{ $p['cliente'] ? $p['cliente'].' · ' : '' }}{{ $conProductos
+                                ? __(':cantidad art.', ['cantidad' => Decimal::formatear($p['articulos'])]).($p['total'] !== null ? ' · '.Decimal::bs($p['total']) : '')
+                                : __('Vacía') }}</small>
+                        </span>
+                    </button>
+                    @if (count($pestanas) > 1 || $conProductos)
+                        <button type="button" class="pos-tab-close" wire:click="cerrarVenta('{{ $p['id'] }}')"
+                            @if ($conProductos) wire:confirm="{{ __('¿Cancelar :venta? Se quitarán sus productos.', ['venta' => $etiquetaVenta($p)]) }}" @endif
+                            aria-label="{{ __('Cancelar :venta', ['venta' => $etiquetaVenta($p)]) }}" title="{{ __('Cancelar venta') }}"><x-icon name="x" size="sm" /></button>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+        <button type="button" class="pos-tab-new" data-pos-nueva wire:click="nuevaVenta" @disabled(count($pestanas) >= \App\Livewire\Ventas\Pos::MAX_VENTAS)
+            title="{{ __('Atender a otro cliente sin perder esta venta') }}">
+            <x-icon name="plus" size="sm" /> {{ __('Nueva venta') }} <span class="pos-kbd">F8</span>
+        </button>
+    </nav>
+
+    @include('livewire.catalogo.partials.selector-variante')
 
     @if ($formCliente)
         <x-modal titulo="Registrar cliente" descripcion="Datos mínimos para identificarlo. Obligatorio en ventas a crédito." cerrar="$set('formCliente', false)">
@@ -472,6 +587,7 @@
             <div class="pos-shortcut"><span>{{ __('Buscar o escanear producto') }}</span><kbd>F2</kbd></div>
             <div class="pos-shortcut"><span>{{ __('Agregar el producto escaneado') }}</span><kbd>Enter</kbd></div>
             <div class="pos-shortcut"><span>{{ __('Confirmar venta') }}</span><kbd>F4</kbd></div>
+            <div class="pos-shortcut"><span>{{ __('Abrir otra venta (pestaña nueva)') }}</span><kbd>F8</kbd></div>
             <div class="pos-shortcut"><span>{{ __('Limpiar la búsqueda') }}</span><kbd>Esc</kbd></div>
             <div class="modal-actions"><button type="button" class="btn primary" @click="atajos = false">{{ __('Entendido') }}</button></div>
         </div>

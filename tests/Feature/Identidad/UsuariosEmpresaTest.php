@@ -126,8 +126,9 @@ test('role, branch and status changes are audited without passwords', function (
 test('the users screen lists only the own company with search', function () {
     [$empresa, $admin] = empresaConAdministrador();
     $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id, 'nombre' => 'Casa Matriz']);
-    User::factory()->vendedor($sucursal)->create(['name' => 'Andrea Salazar']);
-    User::factory()->vendedor($sucursal)->create(['name' => 'Luis Rojas']);
+    // Correos fijos: la búsqueda también mira el correo, y uno aleatorio de Faker puede contener «andrea».
+    User::factory()->vendedor($sucursal)->create(['name' => 'Andrea Salazar', 'email' => 'andrea.salazar@ejemplo.test']);
+    User::factory()->vendedor($sucursal)->create(['name' => 'Luis Rojas', 'email' => 'luis.rojas@ejemplo.test']);
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->assertSee('Andrea Salazar')->assertSee('Luis Rojas')->assertSee('Casa Matriz')

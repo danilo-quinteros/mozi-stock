@@ -17,12 +17,12 @@
         ['tag', 'Productos estancados', 'Mozi te muestra qué modelos no se venden y cuánto capital tienes parado.'],
         ['chart', 'Más vendidos', 'Reportes por producto para saber qué reponer en la próxima temporada.'],
     ]"
-    :modulos="['punto-de-venta', 'inventario', 'creditos', 'multisucursal', 'asistente-ia', 'reportes']"
+    :modulos="['punto-de-venta', 'inventario', 'creditos', 'multisucursal', 'agente-ia', 'reportes']"
     :preguntas="[
         ['¿Cómo manejo tallas y colores?', 'Registra cada combinación de modelo, talla y color como un producto con su propio código y código de barras. Así ves el stock exacto de cada una.'],
         ['¿Puedo registrar cambios de prenda?', 'Sí. Registras la devolución de la prenda sobre la venta original y haces una nueva venta con la prenda de cambio.'],
         ['¿Sirve si tengo tiendas en distintos lugares?', 'Sí. Cada tienda tiene su stock y su caja, y puedes traspasar prendas de una a otra.'],
-        ['¿Puedo saber qué modelos no se venden?', 'Sí. Los reportes y el asistente Mozi te muestran los productos sin movimiento y el dinero inmovilizado en ellos.'],
+        ['¿Puedo saber qué modelos no se venden?', 'Sí. Los reportes y el agente Mozi te muestran los productos sin movimiento y el dinero inmovilizado en ellos.'],
     ]"
     cierre="Ordena tu tienda de ropa y calzado">
     <x-slot:visual>

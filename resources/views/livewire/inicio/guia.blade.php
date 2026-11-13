@@ -48,93 +48,9 @@
         </section>
 
         @if ($siat)
-            {{-- Mismos puntos que Facturación → Facturas «Preparación para facturar». La clave cambia con el paso pendiente: así el paso activo avanza solo al cerrar un popup. --}}
-            @php($pantallas = [
-                ['icono' => 'lock', 'titulo' => __('Asociación y token delegado'), 'texto' => __('Asocia tu empresa con el sistema proveedor MoziStock en el portal SIAT, genera el token delegado y cárgalo aquí. Al guardarlo se sincronizan los catálogos del SIN.'), 'boton' => __('Cargar token delegado'), 'popup' => 'token'],
-                ['icono' => 'building', 'titulo' => __('Datos fiscales de tu empresa'), 'texto' => __('Registra el NIT y la razón social con los que tu negocio está inscrito en Impuestos Nacionales, y elige la actividad y el producto SIN que se usarán por defecto.'), 'boton' => __('Abrir Datos fiscales'), 'popup' => 'datos-fiscales'],
-                ['icono' => 'store', 'titulo' => __('Sucursal y punto de venta'), 'texto' => __('Registra tu sucursal con el código y el municipio del padrón del SIN. Al registrarla se crea su punto de venta 0.'), 'boton' => __('Registrar sucursal en el SIN'), 'popup' => 'sucursal-siat'],
-                ['icono' => 'shield', 'titulo' => __('Verifica tu configuración'), 'texto' => __('MoziStock revisa que los requisitos estén listos para emitir facturas. Es la misma revisión que ves en Facturación.'), 'boton' => __('Comprobar configuración'), 'popup' => null],
-            ])
-            @php($ultimo = count($siat['pasos']) - 1)
-
-            <section class="card guia-siat" id="configuracion-siat" aria-labelledby="siat-titulo" wire:key="siat-{{ $siat['actual'] }}"
-                x-data="{ paso: {{ $siat['actual'] }} }" x-show="siat" x-cloak>
-                <div class="siat-top">
-                    <div class="siat-name">
-                        <span class="heading-icon"><x-icon name="receipt" /></span>
-                        <div><h2 id="siat-titulo">{{ __('Configuración de facturación SIAT') }}</h2><p>{{ __('Configura los datos fiscales y prepara la facturación en línea de tu empresa.') }}</p></div>
-                    </div>
-                    <span class="badge warning">{{ __('Pendiente de configurar') }}</span>
-                </div>
-
-                <div class="siat-layout">
-                    <nav class="siat-sidebar" aria-label="{{ __('Pasos de configuración SIAT') }}">
-                        <div class="siat-label">{{ __('Pasos de activación') }}</div>
-                        @foreach ($siat['pasos'] as $i => $paso)
-                            <button type="button" class="siat-step" :class="{ active: paso === {{ $i }} }" :aria-current="paso === {{ $i }} ? 'step' : null" x-on:click="paso = {{ $i }}">
-                                <span class="siat-num {{ $paso['listo'] ? 'done' : '' }}">@if ($paso['listo'])<x-icon name="check" size="sm" />@else{{ $i + 1 }}@endif</span>
-                                <span><b>{{ $paso['titulo'] }}</b><small>{{ $paso['detalle'] }}</small></span>
-                            </button>
-                        @endforeach
-                        <aside class="siat-info"><x-icon name="shield" /><p>{{ __('Solo el administrador puede administrar la configuración fiscal. La habilitación debe ser autorizada por el SIN y por el superadministrador.') }}</p></aside>
-                    </nav>
-
-                    <div class="siat-main">
-                        @foreach ($siat['pasos'] as $i => $paso)
-                            @php($pantalla = $pantallas[$i])
-                            <div x-show="paso === {{ $i }}" @if ($i !== $siat['actual']) x-cloak @endif>
-                                <h3 class="heading"><x-icon :name="$pantalla['icono']" class="accent-text" /> {{ $pantalla['titulo'] }}</h3>
-                                <p class="siat-lead">{{ $pantalla['texto'] }}</p>
-
-                                @if ($i === $ultimo)
-                                    <div class="siat-verify {{ $paso['listo'] ? 'ok' : '' }}">
-                                        <span class="heading-icon"><x-icon :name="$paso['listo'] ? 'status-ok' : 'shield'" /></span>
-                                        <div><b>{{ $paso['listo'] ? __('Todo listo para facturar') : __('Todavía falta completar la configuración') }}</b><p>{{ __('La emisión no se habilita hasta que la autorización y la configuración sean válidas.') }}</p></div>
-                                    </div>
-                                @endif
-
-                                <div class="siat-facts">
-                                    @if ($i === $ultimo)
-                                        @foreach (array_slice($siat['pasos'], 0, $ultimo) as $anterior)
-                                            <div class="siat-fact"><b>{{ $anterior['titulo'] }}</b><span class="badge {{ $anterior['listo'] ? 'success' : 'warning' }}">{{ $anterior['listo'] ? __('Listo') : __('Pendiente') }}</span></div>
-                                        @endforeach
-                                    @endif
-                                    @foreach ($paso['puntos'] as $punto)
-                                        <div class="siat-fact">
-                                            <div class="grow"><b>{{ $punto['punto'] }}</b><small>{{ $punto['detalle'] }}</small></div>
-                                            @if ($punto['listo'])
-                                                <span class="badge success">{{ __('Listo') }}</span>
-                                            @elseif ($punto['automatico'])
-                                                <span class="badge info">{{ __('Automático') }}</span>
-                                            @elseif ($punto['clave'] === 'catalogos' && $paso['puntos'][0]['listo'])
-                                                {{-- El token ya está y aun así falta algún catálogo: se reintenta en Facturación. --}}
-                                                <a class="btn soft sm" href="{{ route('facturacion', ['seccion' => 'catalogos']) }}" target="_blank" rel="noopener">{{ __('Sincronizar') }} <x-icon name="arrow" size="sm" /></a>
-                                            @else
-                                                <span class="badge warning">{{ __('Pendiente') }}</span>
-                                            @endif
-                                        </div>
-                                    @endforeach
-                                </div>
-
-                                @if ($pantalla['popup'])
-                                    <button type="button" class="btn {{ $paso['listo'] ? '' : 'primary' }}" style="margin-top:18px" wire:click="abrir('{{ $pantalla['popup'] }}')">{{ $pantalla['boton'] }} <x-icon name="arrow" size="sm" /></button>
-                                @else
-                                    <button type="button" class="btn {{ $paso['listo'] ? '' : 'primary' }}" style="margin-top:18px" wire:click="$refresh" wire:loading.attr="disabled"><x-icon name="history" size="sm" /> {{ $pantalla['boton'] }}</button>
-                                @endif
-                            </div>
-                        @endforeach
-
-                        <div class="siat-actions">
-                            @foreach ($siat['pasos'] as $i => $paso)
-                                <span class="subtle" x-show="paso === {{ $i }}" @if ($i !== $siat['actual']) x-cloak @endif>{{ __('Paso :paso de :total', ['paso' => $i + 1, 'total' => $ultimo + 1]) }}</span>
-                            @endforeach
-                            <div class="row">
-                                <button type="button" class="btn" x-on:click="paso--" :disabled="paso === 0">{{ __('Anterior') }}</button>
-                                <button type="button" class="btn" x-on:click="paso++" :disabled="paso === {{ $ultimo }}">{{ __('Siguiente') }} <x-icon name="arrow" size="sm" /></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            {{-- El mismo asistente de Facturación → Datos fiscales, embebido: cada guardado avisa a la guía para que se recalcule. --}}
+            <section class="guia-siat-asistente" id="configuracion-siat" aria-label="{{ __('Configuración de facturación SIAT') }}" x-show="siat" x-cloak>
+                <livewire:facturacion.asistente :empresa-id="$empresaId" :embebido="true" :key="'guia-asistente-siat'" />
             </section>
         @endif
 
@@ -142,18 +58,6 @@
         @if ($popup === 'empresa')
             <x-modal titulo="Datos de tu empresa" descripcion="Los mismos datos de Mi empresa. Guarda y cierra para continuar." cerrar="cerrar">
                 <livewire:empresa.configuracion :embebido="true" :key="'guia-empresa'" />
-            </x-modal>
-        @elseif ($popup === 'sucursal')
-            <x-modal titulo="Configura tu sucursal" descripcion="Revisa los datos de tu sucursal principal. Puedes registrar más sucursales en Sucursales." cerrar="cerrar">
-                <livewire:empresa.sucursales :embebido="true" :key="'guia-sucursal'" />
-            </x-modal>
-        @elseif ($popup === 'token')
-            <x-modal titulo="Token delegado del SIN" descripcion="Al guardarlo se sincronizan los catálogos del SIN." cerrar="cerrar">
-                <livewire:facturacion.datos :empresa-id="$empresaId" parte="token" :key="'guia-token'" />
-            </x-modal>
-        @elseif ($popup === 'datos-fiscales')
-            <x-modal titulo="Datos fiscales" descripcion="NIT, razón social, actividad y producto SIN por defecto." cerrar="cerrar">
-                <livewire:facturacion.datos :empresa-id="$empresaId" parte="datos" :key="'guia-datos-fiscales'" />
             </x-modal>
         @elseif ($popup === 'sucursal-siat')
             <x-modal titulo="Sucursal en el SIN" descripcion="Datos tal como figuran en el padrón del SIN (0 = casa matriz)." cerrar="cerrar">

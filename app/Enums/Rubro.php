@@ -9,6 +9,7 @@ namespace App\Enums;
  */
 enum Rubro: string
 {
+    /** Se muestra como «Tienda» (decisión del propietario, 09/11/2026); el valor guardado sigue siendo «general». */
     case General = 'general';
     case Ropa = 'ropa';
     case Farmacia = 'farmacia';
@@ -18,12 +19,18 @@ enum Rubro: string
     public function etiqueta(): string
     {
         return match ($this) {
-            self::General => __('General'),
+            self::General => __('Tienda'),
             self::Ropa => __('Tienda de ropa y calzado'),
             self::Farmacia => __('Farmacia'),
             self::Distribuidora => __('Distribuidora'),
             self::Restaurante => __('Restaurante'),
         };
+    }
+
+    /** Etiqueta del campo «marca» del producto: en farmacias importa también el laboratorio. */
+    public function etiquetaMarca(): string
+    {
+        return $this === self::Farmacia ? __('Marca / laboratorio') : __('Marca');
     }
 
     /** Para quién es, en una línea (columna «Para quién» de la especificación). */
@@ -51,6 +58,58 @@ enum Rubro: string
             self::Farmacia => [Capacidad::LotesVencimientos],
             self::Distribuidora => [Capacidad::Despachos],
             self::Restaurante => [Capacidad::Cocina],
+        };
+    }
+
+    /**
+     * Categorías de productos base que se precargan al registrar una empresa con este rubro.
+     * Si devuelve un arreglo vacío (como en General / Tienda), no se crea ninguna categoría.
+     *
+     * @return list<string>
+     */
+    public function categoriasSugeridas(): array
+    {
+        return match ($this) {
+            self::General => [],
+            self::Ropa => [
+                'Ropa de hombre',
+                'Ropa de mujer',
+                'Ropa infantil',
+                'Calzado',
+                'Accesorios',
+                'Ropa deportiva',
+                'Ropa interior',
+                'Bolsos y carteras',
+            ],
+            self::Farmacia => [
+                'Medicamentos',
+                'Vitaminas y suplementos',
+                'Cuidado personal',
+                'Higiene y cuidado infantil',
+                'Primeros auxilios',
+                'Material médico',
+                'Productos dermatológicos',
+                'Productos veterinarios',
+            ],
+            self::Distribuidora => [
+                'Bebidas',
+                'Abarrotes',
+                'Lácteos',
+                'Snacks y golosinas',
+                'Limpieza',
+                'Higiene personal',
+                'Alimentos envasados',
+                'Productos para el hogar',
+            ],
+            self::Restaurante => [
+                'Platos',
+                'Entradas',
+                'Bebidas',
+                'Postres',
+                'Ensaladas',
+                'Sopas y caldos',
+                'Combos y promociones',
+            ],
         };
     }
 }

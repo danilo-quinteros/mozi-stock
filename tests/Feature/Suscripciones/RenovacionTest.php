@@ -71,15 +71,15 @@ test('T25: a pending or rejected receipt never renews; only an approval does, ke
         ->and(vencimientoDe($this->empresa))->toBe('2026-10-28')
         ->and(fn () => $this->revisar->aprobar($this->superadmin, $pendiente->id, true))->toThrow(ValidationException::class);
 
-    $dos = comprobante($this->admin, 2);
-    expect($dos->importe)->toBe('298.00');
+    $dos = comprobante($this->admin, 3);
+    expect($dos->importe)->toBe('447.00');
     $aprobado = $this->revisar->aprobar($this->superadmin, $dos->id, true);
 
     expect($aprobado->estado)->toBe(EstadoPagoSaas::Aprobado)
         ->and($aprobado->vencimiento_anterior?->format('Y-m-d'))->toBe('2026-10-28')
-        ->and($aprobado->vencimiento_nuevo?->format('Y-m-d'))->toBe('2026-12-28')
+        ->and($aprobado->vencimiento_nuevo?->format('Y-m-d'))->toBe('2027-01-28')
         ->and($aprobado->revisado_por)->toBe($this->superadmin->id)
-        ->and(vencimientoDe($this->empresa))->toBe('2026-12-28')
+        ->and(vencimientoDe($this->empresa))->toBe('2027-01-28')
         ->and(Auditoria::query()->where('empresa_id', $this->empresa->id)->orderBy('id')->pluck('accion')->all())->toBe([
             'suscripcion.configurada', 'suscripcion.comprobante_enviado', 'suscripcion.pago_rechazado',
             'suscripcion.comprobante_enviado', 'suscripcion.pago_aprobado',
@@ -156,15 +156,15 @@ test('one receipt under review at a time and a repeated key does not duplicate i
 test('the price is frozen in each receipt when it is sent', function () {
     planPara($this->empresa, '2026-10-28');
     $this->actingAs($this->admin);
-    $pago = comprobante($this->admin, 2);
+    $pago = comprobante($this->admin, 3);
 
     $this->actingAs($this->superadmin);
     app(ConfigurarSuscripcion::class)->ejecutar($this->superadmin, $this->empresa, '199,50', '2026-10-28');
     $aprobado = $this->revisar->aprobar($this->superadmin, $pago->id, true);
-    expect($aprobado->importe)->toBe('298.00')->and(vencimientoDe($this->empresa))->toBe('2026-12-28');
+    expect($aprobado->importe)->toBe('447.00')->and(vencimientoDe($this->empresa))->toBe('2027-01-28');
 
     $this->actingAs($this->admin);
-    expect(comprobante($this->admin, 2)->importe)->toBe('399.00');
+    expect(comprobante($this->admin, 3)->importe)->toBe('598.50');
 });
 
 test('invalid months, files by content, oversize files and missing plans are rejected', function () {

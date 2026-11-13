@@ -8,6 +8,7 @@ use App\Domain\Caja\LibroCaja;
 use App\Domain\Compras\CalculadoraCompra;
 use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
 use App\Domain\CuentasPagar\AbrirCuentaPagar;
+use App\Domain\Inventario\DatosLote;
 use App\Domain\Inventario\LibroStock;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Domain\Ventas\ValidadorPago;
@@ -39,6 +40,10 @@ use Illuminate\Validation\ValidationException;
  * propietario: solo administradores y siempre con la fecha y hora actuales (23/10/2026); el
  * efectivo sale de un turno abierto o, si el administrador lo indica, fuera de caja (30/10/2026).
  * Repetir la clave no repite la compra.
+ *
+ * Lotes y vencimientos (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 5.1 y § 6.5): cada línea de un producto con
+ * vencimiento exige número de lote y vencimiento; el mismo producto puede ir en varias líneas, una por lote, y cada
+ * línea de compra guarda su lote_id. Los productos sin vencimiento repetidos se agrupan en una línea.
  */
 final class RegistrarCompra
 {
@@ -52,7 +57,7 @@ final class RegistrarCompra
     ) {}
 
     /**
-     * @param  array{sucursal_id: int|null, proveedor_id: int|null, referencia: string|null, lineas: array<int|string, array{cantidad?: mixed, costo?: mixed}>, condicion?: string|null, pagado?: string|null, vencimiento?: string|null, metodo: string|null, efectivo: string|null, electronico: string|null, externo?: bool, turno_id?: int|null, clave: string}  $datos
+     * @param  array{sucursal_id: int|null, proveedor_id: int|null, referencia: string|null, lineas: array<int|string, array<string, mixed>>, condicion?: string|null, pagado?: string|null, vencimiento?: string|null, metodo: string|null, efectivo: string|null, electronico: string|null, externo?: bool, turno_id?: int|null, clave: string}  $datos
      */
     public function ejecutar(User $actor, array $datos): Compra
     {
@@ -80,6 +85,9 @@ final class RegistrarCompra
 
         $lineas = $this->prepararLineas($empresaId, $datos['lineas']);
         $total = array_reduce($lineas, fn (string $suma, array $l) => Decimal::sumar($suma, $l['subtotal'], 2), '0.00');
+        $cambios = array_map(fn (array $l) => [
+            'sucursal_id' => $sucursal->id, 'producto_id' => $l['producto_id'], 'cantidad' => $l['cantidad'], 'nombre' => $l['nombre'],
+        ] + ($l['lote'] === null ? [] : ['lote' => $l['lote']]), $lineas);
 
         if (Decimal::comparar($total, '0', 2) <= 0) {
             throw ValidationException::withMessages(['lineas' => __('El total de la compra debe ser mayor que Bs 0,00. Para ingresar stock sin costo usa Ajustes → Entrada.')]);
@@ -90,12 +98,11 @@ final class RegistrarCompra
             ? ValidadorPago::exacto($pagado, $datos['metodo'], $datos['efectivo'], $datos['electronico'],
                 $condicion === 'contado' ? 'total de la compra' : 'pago inicial de la compra')
             : null;
-        $this->libro->asegurarNiveles($empresaId, array_map(
-            fn (int $productoId) => ['sucursal_id' => $sucursal->id, 'producto_id' => $productoId], array_keys($lineas),
-        ));
+        // Saldos y, en productos con vencimiento, lotes nuevos: fuera de la transacción (lotes § 7.6).
+        $this->libro->asegurarNiveles($empresaId, $cambios);
 
         try {
-            return DB::transaction(function () use ($actor, $datos, $sucursal, $proveedor, $referencia, $lineas, $total, $condicion, $pagado, $vencimiento, $pago): Compra {
+            return DB::transaction(function () use ($actor, $datos, $sucursal, $proveedor, $referencia, $lineas, $cambios, $total, $condicion, $pagado, $vencimiento, $pago): Compra {
                 $caja = $pago === null ? ['caja_id' => null, 'turno_id' => null, 'externo' => false]
                     : $this->cajas->resolver($actor, $sucursal->id, $pago['efectivo'], (bool) ($datos['externo'] ?? false), 'externo', isset($datos['turno_id']) ? (int) $datos['turno_id'] : null);
                 $nota = 'Compra · '.$proveedor->nombre.($referencia !== '' ? ' · '.$referencia : '');
@@ -106,9 +113,8 @@ final class RegistrarCompra
                     'sucursal_destino_id' => null,
                     'nota' => mb_substr($nota, 0, 250),
                     'clave' => $datos['clave'],
-                ], array_values(array_map(fn (array $l) => [
-                    'sucursal_id' => $sucursal->id, 'producto_id' => $l['producto_id'], 'cantidad' => $l['cantidad'], 'nombre' => $l['nombre'],
-                ], $lineas)));
+                ], $cambios);
+                $lotes = $this->lotesDe((int) $actor->empresa_id, $lineas);
 
                 $compra = new Compra;
                 $compra->empresa_id = (int) $actor->empresa_id;
@@ -138,6 +144,7 @@ final class RegistrarCompra
                         'empresa_id' => $compra->empresa_id,
                         'compra_id' => $compra->id,
                         'producto_id' => $l['producto_id'],
+                        'lote_id' => $l['lote'] === null ? null : ($lotes[DatosLote::clave($l['producto_id'], $l['lote']['numero'])] ?? null),
                         'orden' => ++$orden,
                         'descripcion' => $l['nombre'],
                         'sku' => $l['sku'],
@@ -216,25 +223,38 @@ final class RegistrarCompra
     }
 
     /**
-     * Cantidades (reglas de stock) y costos unitarios de cada línea, con su snapshot.
+     * Cantidades (reglas de stock), costos unitarios y, en productos con vencimiento, lote de cada línea, con su
+     * snapshot (lotes § 5.1 y § 6.5). Acepta la lista [{producto_id, cantidad, costo, lote, vencimiento}, …] o, como
+     * antes, producto_id => {cantidad, costo}. Cada línea se valida por separado y después se agrupan: los productos
+     * sin vencimiento por producto (como siempre) y los que tienen vencimiento por producto y lote. Un grupo admite
+     * un solo costo unitario.
      *
-     * @param  array<int|string, array{cantidad?: mixed, costo?: mixed}>  $lineas
-     * @return array<int, array{producto_id: int, nombre: string, sku: string, unidad: string, cantidad: string, costo: string, subtotal: string}>
+     * @param  array<int|string, array<string, mixed>>  $lineas
+     * @return list<array{producto_id: int, nombre: string, sku: string, unidad: string, cantidad: string, costo: string, subtotal: string, lote: array{numero: string, vencimiento: string}|null}>
      */
     private function prepararLineas(int $empresaId, array $lineas): array
     {
-        $cantidades = $this->libro->prepararLineas($empresaId, array_map(fn (array $l) => $l['cantidad'] ?? '', $lineas));
+        $lista = [];
+
+        foreach ($lineas as $clave => $linea) {
+            $lista[] = $linea + ['producto_id' => $clave];
+        }
+
+        $cantidades = $this->libro->prepararLista($empresaId, array_map(fn (array $l) => [
+            'producto_id' => $l['producto_id'], 'cantidad' => $l['cantidad'] ?? '',
+        ], $lista));
         $productos = DB::table('productos')
             ->join('unidades_medida', 'unidades_medida.id', '=', 'productos.unidad_medida_id')
             ->where('productos.empresa_id', $empresaId)
-            ->whereIn('productos.id', array_keys($cantidades))
+            ->whereIn('productos.id', array_values(array_unique(array_column($cantidades, 'producto_id'))))
             ->get(['productos.id', 'productos.sku', 'unidades_medida.abreviatura'])
             ->keyBy('id');
-        $preparadas = [];
+        $grupos = [];
         $errores = [];
 
-        foreach ($cantidades as $productoId => $linea) {
-            $valor = $lineas[$productoId]['costo'] ?? '';
+        foreach ($cantidades as $indice => $linea) {
+            $productoId = $linea['producto_id'];
+            $valor = $lista[$indice]['costo'] ?? '';
             $costo = Decimal::normalizar(is_scalar($valor) ? (string) $valor : '', Decimal::ESCALA_DINERO);
 
             if ($costo === null || Decimal::comparar($costo, '0', 2) < 0) {
@@ -243,22 +263,91 @@ final class RegistrarCompra
                 continue;
             }
 
-            $preparadas[$productoId] = [
-                'producto_id' => $productoId,
-                'nombre' => $linea['nombre'],
-                'sku' => (string) $productos->get($productoId)?->sku,
-                'unidad' => (string) $productos->get($productoId)?->abreviatura,
-                'cantidad' => $linea['cantidad'],
-                'costo' => $costo,
-                'subtotal' => CalculadoraCompra::subtotal($linea['cantidad'], $costo),
-            ];
+            $lote = null;
+
+            if ($linea['controla_vencimiento']) {
+                $lote = $this->lote($linea['nombre'], $lista[$indice]['lote'] ?? null, $lista[$indice]['vencimiento'] ?? null, $errores);
+
+                if ($lote === null) {
+                    continue;
+                }
+            }
+
+            $clave = $lote === null ? (string) $productoId : DatosLote::clave($productoId, $lote['numero']);
+            $grupo = $grupos[$clave] ?? null;
+
+            if ($grupo === null) {
+                $grupos[$clave] = [
+                    'producto_id' => $productoId,
+                    'nombre' => $linea['nombre'],
+                    'sku' => (string) $productos->get($productoId)?->sku,
+                    'unidad' => (string) $productos->get($productoId)?->abreviatura,
+                    'cantidad' => $linea['cantidad'],
+                    'costo' => $costo,
+                    'subtotal' => '0.00',
+                    'lote' => $lote,
+                ];
+
+                continue;
+            }
+
+            if ($lote !== null && $grupo['lote']['vencimiento'] !== $lote['vencimiento']) {
+                $errores[] = __(':producto: el lote :lote tiene dos vencimientos distintos.', ['producto' => $linea['nombre'], 'lote' => $grupo['lote']['numero']]);
+            } elseif (Decimal::comparar($grupo['costo'], $costo, 2) !== 0) {
+                $errores[] = $lote === null
+                    ? __(':producto aparece en varias líneas con costos distintos; déjalo en una sola línea.', ['producto' => $linea['nombre']])
+                    : __(':producto, lote :lote: aparece en varias líneas con costos distintos; déjalo en una sola línea.', ['producto' => $linea['nombre'], 'lote' => $lote['numero']]);
+            } else {
+                $grupos[$clave]['cantidad'] = Decimal::sumar($grupo['cantidad'], $linea['cantidad']);
+            }
         }
 
         if ($errores !== []) {
-            throw ValidationException::withMessages(['lineas' => $errores]);
+            throw ValidationException::withMessages(['lineas' => array_values(array_unique($errores))]);
         }
 
-        return $preparadas;
+        return array_values(array_map(fn (array $g) => ['subtotal' => CalculadoraCompra::subtotal($g['cantidad'], $g['costo'])] + $g, $grupos));
+    }
+
+    /**
+     * Número y vencimiento de una línea con lote (§ 5.1): el número es obligatorio (P1), hasta 40 caracteres y sin
+     * espacios al inicio ni al final; la fecha, completa o mes/año.
+     *
+     * @param  list<array<mixed>|string>  $errores  mensajes de __()
+     *
+     * @param-out list<array<mixed>|string>  $errores
+     *
+     * @return array{numero: string, vencimiento: string}|null
+     */
+    private function lote(string $producto, mixed $numero, mixed $vencimiento, array &$errores): ?array
+    {
+        return DatosLote::leer($producto, $numero, $vencimiento, $errores);
+    }
+
+    /**
+     * Ids de los lotes de la compra, por clave producto|NÚMERO, para compra_items.lote_id. Dentro de la transacción,
+     * después de LibroStock::aplicar(), que ya los tiene con bloqueo compartido. Sin líneas con lote, ninguna consulta.
+     *
+     * @param  list<array{producto_id: int, lote: array{numero: string, vencimiento: string}|null}>  $lineas
+     * @return array<string, int>
+     */
+    private function lotesDe(int $empresaId, array $lineas): array
+    {
+        $conLote = array_values(array_filter($lineas, fn (array $l) => $l['lote'] !== null));
+
+        if ($conLote === []) {
+            return [];
+        }
+
+        return DB::table('lotes')
+            ->where('empresa_id', $empresaId)
+            ->where('es_regularizacion', false)
+            ->whereIn('producto_id', array_values(array_unique(array_column($conLote, 'producto_id'))))
+            ->whereIn('numero', array_values(array_unique(array_map(fn (array $l) => $l['lote']['numero'], $conLote))))
+            ->sharedLock()
+            ->get(['id', 'producto_id', 'numero'])
+            ->mapWithKeys(fn (object $l) => [DatosLote::clave((int) $l->producto_id, (string) $l->numero) => (int) $l->id])
+            ->all();
     }
 
     /**

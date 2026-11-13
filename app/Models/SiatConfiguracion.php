@@ -33,6 +33,8 @@ use Illuminate\Support\Facades\Storage;
  * @property string|null $certificado_nombre
  * @property string|null $certificado_pass
  * @property Carbon|null $certificado_vence_en
+ * @property array{huella?: string, resultado?: string, mensajes?: list<string>}|null $verificacion
+ * @property Carbon|null $verificado_en
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -51,7 +53,7 @@ class SiatConfiguracion extends Model
      * @var array<string, mixed>
      */
     protected $attributes = [
-        'modo' => 'automatica',
+        'modo' => 'manual',
         'modalidad' => 'computarizada',
     ];
 
@@ -69,6 +71,8 @@ class SiatConfiguracion extends Model
             'token_actualizado_en' => 'datetime',
             'certificado_pass' => 'encrypted',
             'certificado_vence_en' => 'datetime',
+            'verificacion' => 'array',
+            'verificado_en' => 'datetime',
         ];
     }
 

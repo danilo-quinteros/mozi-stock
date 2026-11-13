@@ -46,6 +46,14 @@ final class PreparacionFacturacion
             fn (Catalogo $catalogo): bool => ! in_array($catalogo->name, $sincronizados, true)));
         $productoListo = $configuracion?->actividad_economica !== null && $configuracion->producto_sin !== null;
 
+        $firma = [];
+
+        if ($configuracion?->esElectronica()) {
+            $certificado = CertificadoDigital::revisar($configuracion);
+            $firma[] = self::punto('firma', __('Firma digital (.p12)'), $certificado['valido'],
+                $certificado['valido'] ? __('Certificado válido.') : (string) $certificado['error']);
+        }
+
         return [
             self::punto('habilitada', __('Facturación habilitada por MoziStudios'), $empresa->siat_habilitado,
                 $empresa->siat_habilitado ? __('Habilitada.') : __('MoziStudios la habilita desde el panel de empresas.')),
@@ -56,6 +64,7 @@ final class PreparacionFacturacion
             self::punto('token', __('Token delegado vigente'), $configuracion !== null && $configuracion->tieneToken() && ! $configuracion->tokenVencido(),
                 $configuracion?->tieneToken() ? ($configuracion->tokenVencido() ? __('Vencido: carga uno nuevo.') : __('Termina en …:sufijo.', ['sufijo' => $configuracion->token_sufijo]))
                     : __('Cárgalo en «Datos fiscales».')),
+            ...$firma,
             self::punto('puntos', __('Sucursal registrada y punto de venta activo'), $puntosActivos > 0 && DeEmpresa::consulta(SiatSucursal::class, $empresa->id)->exists(),
                 $puntosActivos > 0 ? trans_choice(':count punto de venta activo.|:count puntos de venta activos.', $puntosActivos) : __('Regístralos en «Sucursales y puntos de venta».')),
             self::punto('catalogos', __('Catálogos del SIN sincronizados'), $faltantes === [],

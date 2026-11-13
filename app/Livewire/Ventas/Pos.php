@@ -8,9 +8,12 @@ use App\Domain\Caja\Actions\CerrarTurnoCaja;
 use App\Domain\Caja\CajaOperacion;
 use App\Domain\Catalogo\Consultas\ListadoProductos;
 use App\Domain\Facturacion\DatosFactura;
+use App\Domain\Inventario\Consultas\StockLotes;
+use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Domain\Ventas\Actions\VenderEnPos;
 use App\Domain\Ventas\CalculadoraPedido;
 use App\Domain\Ventas\ValidadorPago;
+use App\Enums\Capacidad;
 use App\Enums\MetodoPago;
 use App\Enums\ModoFacturacion;
 use App\Enums\TipoPrecio;
@@ -20,6 +23,7 @@ use App\Livewire\Concerns\EligeCliente;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Caja;
 use App\Models\Categoria;
+use App\Models\Modelo;
 use App\Models\Pedido;
 use App\Models\Producto;
 use App\Models\Sucursal;
@@ -30,6 +34,7 @@ use App\Support\Decimal;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -79,6 +84,12 @@ class Pos extends Component
 
     public string $pago_electronico = '';
 
+    /** Casilla «Entregado» (Despachos y cocina): desmarcada por defecto, la venta queda Por despachar o En cocina. */
+    public bool $entregado = false;
+
+    /** «Nombre o mesa» opcional (cocina § 4.1); el servidor lo ignora sin la capacidad. */
+    public string $nombreMesa = '';
+
     /** Efectivo que entrega el cliente: solo calcula el cambio, no se guarda. */
     public string $recibido = '';
 
@@ -103,6 +114,32 @@ class Pos extends Component
     #[Locked]
     public bool $turnoAnteriorAceptado = false;
 
+    /** Ventas abiertas a la vez en la barra inferior; más que esto ya no ayuda a atender. */
+    public const MAX_VENTAS = 8;
+
+    /**
+     * Campos propios de cada venta abierta (pestaña). La sucursal, la caja, el turno y el buscador del catálogo son
+     * del puesto de venta y se comparten entre pestañas.
+     */
+    private const CAMPOS_VENTA = [
+        'lineas', 'cliente_id', 'descuento_global_tipo', 'descuento_global_valor', 'pago_metodo', 'pago_en_cuotas',
+        'pago_cuota_inicial', 'pago_vencimiento', 'pago_efectivo', 'pago_electronico', 'entregado', 'nombreMesa',
+        'recibido', 'emitirFactura', 'factura', 'clave', 'claveConfirmacion',
+    ];
+
+    /**
+     * Ventas abiertas (pestañas). La activa vive en las propiedades de la pantalla; las demás guardan aquí su borrador
+     * (`datos`) y un resumen para la barra. Es solo un borrador de pantalla: no reserva stock ni registra cobros, y al
+     * confirmar VenderEnPos lo valida todo de nuevo. Cada pestaña tiene sus propias claves de idempotencia.
+     *
+     * @var list<array{id: string, numero: int, datos: array<string, mixed>, articulos: string, total: string|null, cliente: string|null}>
+     */
+    #[Locked]
+    public array $ventas = [];
+
+    #[Locked]
+    public string $ventaActiva = '';
+
     public function mount(): void
     {
         $this->authorize('create', Pedido::class);
@@ -113,6 +150,82 @@ class Pos extends Component
         $this->elegirCajaPorDefecto();
         $this->nuevasClaves();
         $this->prepararFactura();
+
+        if (! $this->restaurarVentas()) {
+            $this->ventas = [$this->pestanaNueva(1)];
+            $this->ventaActiva = $this->ventas[0]['id'];
+        }
+    }
+
+    /**
+     * Las ventas abiertas se guardan en la sesión del servidor (por empresa y usuario) para que recargar la página o
+     * ir a otra pantalla no las pierda.
+     */
+    public function dehydrate(): void
+    {
+        $ventas = $this->ventas;
+        $indice = $this->indiceVenta($this->ventaActiva);
+
+        if ($indice !== null) {
+            $ventas[$indice]['datos'] = $this->capturarVenta();
+        }
+
+        session()->put($this->claveSesion(), ['ventas' => $ventas, 'activa' => $this->ventaActiva]);
+    }
+
+    /** Abre otra venta en una pestaña nueva; la actual queda en espera con sus productos y cobro. */
+    public function nuevaVenta(): void
+    {
+        if (count($this->ventas) >= self::MAX_VENTAS) {
+            $this->avisar(__('Puedes tener hasta :max ventas abiertas. Confirma o cancela alguna para abrir otra.', ['max' => self::MAX_VENTAS]), 'danger');
+
+            return;
+        }
+
+        $this->guardarVentaActiva();
+        $pestana = $this->pestanaNueva(max(array_column($this->ventas, 'numero') ?: [0]) + 1);
+        $this->ventas[] = $pestana;
+        $this->ventaActiva = $pestana['id'];
+        $this->ventaEnBlanco();
+        $this->dispatch('pos-venta-cambiada');
+    }
+
+    /** Vuelve a una venta en espera tal como se dejó. */
+    public function cambiarVenta(string $id): void
+    {
+        $indice = $this->indiceVenta($id);
+
+        if ($indice === null || $id === $this->ventaActiva) {
+            return;
+        }
+
+        $this->guardarVentaActiva();
+        $this->ventaActiva = $id;
+        $this->cargarVenta($this->ventas[$indice]['datos']);
+        $this->dispatch('pos-venta-cambiada');
+    }
+
+    /** Cancela una venta abierta: se descarta su borrador (nunca tocó stock ni caja). */
+    public function cerrarVenta(string $id): void
+    {
+        $indice = $this->indiceVenta($id);
+
+        if ($indice === null) {
+            return;
+        }
+
+        $numero = $this->ventas[$indice]['numero'];
+
+        if ($id === $this->ventaActiva) {
+            $this->quitarVentaActiva();
+        } else {
+            $ventas = $this->ventas;
+            unset($ventas[$indice]);
+            $this->ventas = array_values($ventas);
+        }
+
+        $this->avisar(__('Venta :numero cancelada.', ['numero' => $numero]), 'info');
+        $this->dispatch('pos-venta-cambiada');
     }
 
     /**
@@ -167,15 +280,22 @@ class Pos extends Component
             'descuento_tipo' => 'bs', 'descuento_valor' => '0'];
     }
 
+    protected function admiteSinControlDeStock(): bool
+    {
+        return true;
+    }
+
     /**
-     * Agrega una unidad si la sucursal tiene stock para ella. ConfirmarVenta lo vuelve a validar con bloqueo.
+     * Agrega una unidad si la sucursal tiene stock para ella, o sin límite si el producto no controla
+     * stock. ConfirmarVenta lo vuelve a validar con bloqueo.
      */
     public function agregarProducto(int $id): bool
     {
         $enCarrito = collect($this->lineas)->firstWhere('id', $id)['cantidad'] ?? '0';
         $deseada = Decimal::sumar(Decimal::normalizar((string) $enCarrito, Decimal::ESCALA_CANTIDAD) ?? '0', '1');
+        $stock = $this->stockDe($id);
 
-        if (Decimal::comparar($this->stockDe($id), $deseada) < 0) {
+        if ($stock !== null && Decimal::comparar($stock, $deseada) < 0) {
             $nombre = Producto::query()->whereKey($id)->value('nombre');
             $this->mensajeCaptura = $nombre === null ? __('El producto no está disponible.')
                 : __('No hay más existencias de :producto en esta sucursal.', ['producto' => $nombre]);
@@ -187,6 +307,7 @@ class Pos extends Component
         if ($agregado) {
             $nombre = Producto::query()->whereKey($id)->value('nombre') ?? __('Producto');
             $this->avisar(__(':producto agregado al carrito.', ['producto' => $nombre]), 'success');
+            $this->dispatch('pos-producto-agregado');
         }
 
         return $agregado;
@@ -207,13 +328,19 @@ class Pos extends Component
             return;
         }
 
-        if ($paso > 0 && Decimal::comparar($this->stockDe($this->lineas[$indice]['id']), $nueva) < 0) {
+        $stock = $paso > 0 ? $this->stockDe($this->lineas[$indice]['id']) : null;
+
+        if ($stock !== null && Decimal::comparar($stock, $nueva) < 0) {
             $this->mensajeCaptura = __('Stock insuficiente en esta sucursal.');
 
             return;
         }
 
         $this->lineas[$indice]['cantidad'] = Decimal::simple($nueva);
+
+        if ($paso > 0) {
+            $this->dispatch('pos-producto-agregado');
+        }
     }
 
     public function quitarIndice(int $indice): void
@@ -264,6 +391,18 @@ class Pos extends Component
 
         if ($this->emitirFactura) {
             $this->sugerirFactura();
+        }
+    }
+
+    public function updatedEmitirFactura(): void
+    {
+        if ($this->emitirFactura) {
+            $this->sugerirFactura();
+        } else {
+            $this->resetValidation([
+                'factura.tipo_documento', 'factura.numero_documento', 'factura.complemento',
+                'factura.razon_social', 'factura.metodo_pago',
+            ]);
         }
     }
 
@@ -496,7 +635,7 @@ class Pos extends Component
     {
         $this->reiniciarCaptura();
         $this->reset('descuento_global_tipo', 'descuento_global_valor', 'pago_en_cuotas', 'pago_cuota_inicial',
-            'pago_efectivo', 'pago_electronico', 'recibido', 'pago_vencimiento');
+            'pago_efectivo', 'pago_electronico', 'recibido', 'pago_vencimiento', 'entregado', 'nombreMesa');
         $this->resetValidation();
     }
 
@@ -560,14 +699,12 @@ class Pos extends Component
             'electronico' => $this->pago_electronico,
             'clave' => $this->claveConfirmacion,
             'vencimiento' => $this->pago_en_cuotas ? $this->pago_vencimiento : null,
-        ], $this->datosFactura());
+        ], $this->datosFactura(), entregado: $this->entregado, nombreMesa: $this->nombreMesa);
 
-        // Venta lista: el carrito queda vacío y con claves nuevas para la siguiente.
+        // Venta lista: su pestaña se cierra y se vuelve a la venta en espera más cercana, o a una nueva vacía con
+        // claves nuevas si no queda ninguna.
         $this->ultimaVentaId = $venta->id;
-        $this->vaciar();
-        $this->cliente_id = null;
-        $this->nuevasClaves();
-        $this->prepararFactura();
+        $this->quitarVentaActiva();
         $this->avisar(__('Venta :codigo confirmada.', ['codigo' => $venta->codigo()]));
         $this->dispatch('venta-finalizada');
     }
@@ -590,17 +727,59 @@ class Pos extends Component
         }
 
         $busqueda = trim($this->busqueda);
-        $consulta = ListadoProductos::consulta((int) $actor->empresa_id, $sucursalId, $busqueda,
-            $this->categoria === null ? null : (int) $this->categoria)->where('productos.activo', true);
-        $total = (clone $consulta)->count();
-        $productos = $consulta->limit($this->mostrar)->get();
+        $categoriaId = $this->categoria === null ? null : (int) $this->categoria;
+        $resumenModelos = [];
+
+        if (Gate::allows('capacidad', Capacidad::Variantes)) {
+            // Tallas y colores (V2): cada modelo es UNA tarjeta que abre el selector; los sueltos se ven como siempre.
+            // Cuatro consultas por página: entradas, sueltos, modelos y totales de sus combinaciones.
+            $pagina = ListadoProductos::entradas((int) $actor->empresa_id, $sucursalId, $busqueda, $categoriaId, null, null,
+                $this->mostrar, soloActivos: true, pagina: 1);
+            $entradas = collect($pagina->items());
+            $sueltoIds = array_values($entradas->where('tipo', 'producto')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
+            $modeloIds = array_values($entradas->where('tipo', 'modelo')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
+            $sueltos = $sueltoIds === [] ? collect() : ListadoProductos::consulta((int) $actor->empresa_id, $sucursalId)
+                ->whereIn('productos.id', $sueltoIds)->get()->keyBy('id');
+            $modelos = $modeloIds === [] ? collect() : Modelo::query()->with('categoria:id,nombre')->whereIn('id', $modeloIds)
+                ->get(['id', 'nombre', 'sku_base', 'categoria_id', 'precio_consumidor', 'imagen_path'])->keyBy('id');
+            $resumenModelos = ListadoProductos::resumenModelos((int) $actor->empresa_id, $sucursalId, $modeloIds);
+            $total = $pagina->total();
+            $productos = $entradas->map(fn (object $e): Producto|Modelo|null => $e->tipo === 'modelo' ? $modelos->get((int) $e->entrada_id) : $sueltos->get((int) $e->entrada_id))
+                ->filter()->values();
+        } else {
+            $consulta = ListadoProductos::consulta((int) $actor->empresa_id, $sucursalId, $busqueda, $categoriaId)->where('productos.activo', true);
+            $total = (clone $consulta)->count();
+            $sueltos = $consulta->limit($this->mostrar)->get();
+            $productos = $sueltos;
+        }
+
+        // Lotes y vencimientos (§ 4): la grilla muestra el stock vendible, sin las unidades vencidas. Los productos de
+        // $sueltos son los mismos objetos que muestra la grilla.
+        $conLote = $sueltos->filter(fn (Producto $p): bool => (bool) $p->controla_vencimiento);
+        if ($sucursalId !== null && $conLote->isNotEmpty()) {
+            $vencidas = app(StockLotes::class)->vencidas((int) $actor->empresa_id, $sucursalId, array_values($conLote->pluck('id')->map(fn ($id): int => (int) $id)->all()));
+
+            foreach ($conLote as $producto) {
+                if (isset($vencidas[$producto->id])) {
+                    $producto->setAttribute('stock', Decimal::restar((string) $producto->getAttribute('stock'), $vencidas[$producto->id]));
+                }
+            }
+        }
+
         $modoFiscal = $this->configuracionFiscal()?->modo;
         $facturaActiva = $modoFiscal === ModoFacturacion::Automatica || ($modoFiscal !== null && $this->emitirFactura);
         $cajaActual = $this->cajaActual();
         $turnoActual = $this->turnoActual();
+        $cliente = $this->clienteActual();
+        // La pestaña activa se resume con lo que se ve ahora; las demás, con lo que tenían al dejarlas en espera.
+        $pestanas = array_map(fn (array $v): array => $v['id'] === $this->ventaActiva
+            ? ['articulos' => $this->articulos($resumen['filas']), 'total' => $resumen['calculo']['total'] ?? null, 'cliente' => $cliente?->nombre] + $v
+            : $v, $this->ventas);
 
         return view('livewire.ventas.pos', [
+            'pestanas' => $pestanas,
             'productos' => $productos,
+            'resumenModelos' => $resumenModelos,
             'totalProductos' => $total,
             'categorias' => Categoria::query()->where('activa', true)
                 ->whereIn('id', Producto::query()->where('activo', true)->whereNotNull('categoria_id')->select('categoria_id'))
@@ -615,11 +794,14 @@ class Pos extends Component
             'sucursales' => $actor->esAdministrador()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
-            'cliente' => $this->clienteActual(),
+            'cliente' => $cliente,
             'clientesEncontrados' => $this->clientesEncontrados(),
             'modoFiscal' => $modoFiscal,
-            'fiscal' => $facturaActiva ? $this->contextoFiscal($resumen['calculo']['total'] ?? '0') : null,
-            'ultimaVenta' => $this->ultimaVentaId === null ? null : Venta::query()->find($this->ultimaVentaId),
+            'fiscal' => $modoFiscal !== null ? $this->contextoFiscal($resumen['calculo']['total'] ?? '0') : null,
+            'facturaActiva' => $facturaActiva,
+            // Despachos o cocina: la casilla «Entregado» y, en cocina, «Nombre o mesa».
+            'flujoEntrega' => app(CapacidadesEmpresa::class)->flujoEntrega((int) $actor->empresa_id),
+            'ultimaVenta' => $this->ultimaVentaId === null ? null : Venta::query()->with('factura')->find($this->ultimaVentaId),
             'cajaActual' => $cajaActual,
             'turnoActual' => $turnoActual,
             'arqueoCierre' => $this->modalCierreAbierto && $turnoActual ? $turnoActual->calcularArqueo($this->montoCierre) : null,
@@ -642,7 +824,7 @@ class Pos extends Component
     private function resumen(): array
     {
         $sucursalId = $this->sucursal_id === null ? null : (int) $this->sucursal_id;
-        $datos = $this->datosDeLineas($sucursalId);
+        $datos = $this->datosDeLineas($sucursalId, vendible: true);
         $filas = [];
         $lineasCalculo = [];
         $errores = [];
@@ -657,7 +839,8 @@ class Pos extends Component
             $tipo = TipoPrecio::tryFrom((string) ($linea['tipo_precio'] ?? '')) ?? TipoPrecio::Consumidor;
             $precio = $producto->{$tipo->columna()};
             $cantidad = Decimal::normalizar((string) $linea['cantidad'], Decimal::ESCALA_CANTIDAD);
-            $stock = $datos['stock'][$producto->id] ?? '0';
+            // null: el producto no controla stock y se vende en cualquier cantidad.
+            $stock = $producto->controla_stock ? ($datos['stock'][$producto->id] ?? '0') : null;
 
             if ($precio === null) {
                 $errores[] = __(':producto no tiene precio :lista.', ['producto' => $producto->nombre, 'lista' => mb_strtolower($tipo->etiqueta())]);
@@ -667,7 +850,7 @@ class Pos extends Component
                 $lineasCalculo[$indice] = ['cantidad' => $cantidad, 'precio_unitario' => (string) $precio,
                     'descuento_tipo' => 'bs', 'descuento_valor' => '0'];
 
-                if (Decimal::comparar($stock, $cantidad) < 0) {
+                if ($stock !== null && Decimal::comparar($stock, $cantidad) < 0) {
                     $errores[] = __(':producto: stock insuficiente en esta sucursal.', ['producto' => $producto->nombre]);
                 }
             }
@@ -711,17 +894,31 @@ class Pos extends Component
             ? null : Decimal::restar($recibido, $cobro, Decimal::ESCALA_DINERO);
     }
 
-    private function stockDe(int $productoId): string
+    /**
+     * Stock del producto en la sucursal del POS; null si no controla stock (sin límite).
+     */
+    private function stockDe(int $productoId): ?string
     {
+        $controla = Producto::query()->whereKey($productoId)->value('controla_stock');
+
+        if ($controla !== null && ! (bool) $controla) {
+            return null;
+        }
+
         if ($this->sucursal_id === null) {
             return '0';
         }
 
-        return (string) (DB::table('stock_niveles')
-            ->where('empresa_id', $this->actor()->empresa_id)
+        $empresaId = (int) $this->actor()->empresa_id;
+        $total = (string) (DB::table('stock_niveles')
+            ->where('empresa_id', $empresaId)
             ->where('sucursal_id', (int) $this->sucursal_id)
             ->where('producto_id', $productoId)
             ->value('cantidad') ?? '0');
+        // Lotes y vencimientos (§ 4): lo vencido no se vende, así que no cuenta para el tope.
+        $vencidas = app(StockLotes::class)->vencidas($empresaId, (int) $this->sucursal_id, [$productoId])[$productoId] ?? '0';
+
+        return Decimal::restar($total, $vencidas);
     }
 
     protected function clienteElegido(): void
@@ -761,6 +958,175 @@ class Pos extends Component
         }
 
         $this->factura = DatosFactura::sugeridos($this->clienteActual(), $metodo);
+    }
+
+    /**
+     * @return array{id: string, numero: int, datos: array<string, mixed>, articulos: string, total: string|null, cliente: string|null}
+     */
+    private function pestanaNueva(int $numero): array
+    {
+        return ['id' => Str::lower(Str::random(12)), 'numero' => $numero, 'datos' => [], 'articulos' => '0', 'total' => null, 'cliente' => null];
+    }
+
+    private function indiceVenta(string $id): ?int
+    {
+        foreach ($this->ventas as $indice => $venta) {
+            if ($venta['id'] === $id) {
+                return $indice;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function capturarVenta(): array
+    {
+        $datos = [];
+
+        foreach (self::CAMPOS_VENTA as $campo) {
+            $datos[$campo] = $this->{$campo};
+        }
+
+        return $datos;
+    }
+
+    /** Deja en espera la venta activa con su borrador y el resumen que muestra su pestaña. */
+    private function guardarVentaActiva(): void
+    {
+        $indice = $this->indiceVenta($this->ventaActiva);
+
+        if ($indice === null) {
+            return;
+        }
+
+        $resumen = $this->resumen();
+        $total = $resumen['calculo']['total'] ?? null;
+        $this->ventas[$indice] = [
+            'datos' => $this->capturarVenta(),
+            'articulos' => $this->articulos($resumen['filas']),
+            'total' => is_string($total) ? $total : null,
+            'cliente' => $this->clienteActual()?->nombre,
+        ] + $this->ventas[$indice];
+    }
+
+    /**
+     * Carga el borrador de una pestaña. Lo que no tenga el tipo esperado (por ejemplo, una sesión de una versión
+     * anterior) queda en blanco; el cliente y los productos se vuelven a resolver con el scope de la empresa.
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function cargarVenta(array $datos): void
+    {
+        $this->ventaEnBlanco();
+
+        foreach (self::CAMPOS_VENTA as $campo) {
+            if (! array_key_exists($campo, $datos)) {
+                continue;
+            }
+
+            $valor = $datos[$campo];
+
+            if ($campo === 'cliente_id') {
+                $this->cliente_id = is_int($valor) ? $valor : null;
+
+                continue;
+            }
+
+            if ($campo === 'lineas' && is_array($valor)) {
+                $valor = array_values(array_filter($valor, fn ($l): bool => is_array($l) && is_int($l['id'] ?? null) && is_string($l['cantidad'] ?? null)));
+            }
+
+            if (get_debug_type($valor) === get_debug_type($this->{$campo})) {
+                $this->{$campo} = $valor;
+            }
+        }
+    }
+
+    /** Venta vacía con claves nuevas; el buscador del catálogo, la sucursal y la caja no cambian. */
+    private function ventaEnBlanco(): void
+    {
+        $this->lineas = [];
+        $this->seleccionadas = [];
+        $this->mensajeCaptura = null;
+        $this->cerrarSelector();
+        $this->reset('descuento_global_tipo', 'descuento_global_valor', 'pago_metodo', 'pago_en_cuotas', 'pago_cuota_inicial',
+            'pago_efectivo', 'pago_electronico', 'recibido', 'pago_vencimiento', 'entregado', 'nombreMesa', 'factura',
+            'buscarCliente', 'formCliente');
+        $this->cliente_id = null;
+        $this->resetValidation();
+        $this->nuevasClaves();
+        $this->prepararFactura();
+    }
+
+    /** Cierra la pestaña activa (confirmada o cancelada) y pasa a la venta en espera más cercana, o a una nueva. */
+    private function quitarVentaActiva(): void
+    {
+        $indice = $this->indiceVenta($this->ventaActiva) ?? 0;
+        $ventas = $this->ventas;
+        unset($ventas[$indice]);
+        $this->ventas = array_values($ventas);
+
+        if ($this->ventas === []) {
+            $this->ventas = [$this->pestanaNueva(1)];
+            $this->ventaActiva = $this->ventas[0]['id'];
+            $this->ventaEnBlanco();
+
+            return;
+        }
+
+        $siguiente = $this->ventas[max(0, $indice - 1)];
+        $this->ventaActiva = $siguiente['id'];
+        $this->cargarVenta($siguiente['datos']);
+    }
+
+    /** Recupera de la sesión las ventas abiertas de este usuario en esta empresa; false si no hay. */
+    private function restaurarVentas(): bool
+    {
+        $guardado = session()->get($this->claveSesion());
+
+        if (! is_array($guardado) || ! is_array($guardado['ventas'] ?? null)) {
+            return false;
+        }
+
+        $ventas = [];
+
+        foreach (array_slice($guardado['ventas'], 0, self::MAX_VENTAS) as $v) {
+            if (is_array($v) && is_string($v['id'] ?? null) && is_int($v['numero'] ?? null) && is_array($v['datos'] ?? null)) {
+                $ventas[] = ['id' => $v['id'], 'numero' => $v['numero'], 'datos' => $v['datos'],
+                    'articulos' => is_string($v['articulos'] ?? null) ? $v['articulos'] : '0',
+                    'total' => is_string($v['total'] ?? null) ? $v['total'] : null,
+                    'cliente' => is_string($v['cliente'] ?? null) ? $v['cliente'] : null];
+            }
+        }
+
+        if ($ventas === []) {
+            return false;
+        }
+
+        $this->ventas = $ventas;
+        $activa = is_string($guardado['activa'] ?? null) ? $this->indiceVenta($guardado['activa']) : null;
+        $this->ventaActiva = $ventas[$activa ?? 0]['id'];
+        $this->cargarVenta($ventas[$activa ?? 0]['datos']);
+
+        return true;
+    }
+
+    private function claveSesion(): string
+    {
+        $actor = $this->actor();
+
+        return 'pos.ventas.'.(int) $actor->empresa_id.'.'.$actor->id;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function articulos(array $filas): string
+    {
+        return array_reduce($filas, fn (string $suma, array $fila): string => Decimal::sumar($suma, $fila['cantidad'] ?? '0'), '0');
     }
 
     private function nuevasClaves(): void

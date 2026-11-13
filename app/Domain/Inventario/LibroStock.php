@@ -21,21 +21,57 @@ use LogicException;
  * bloquea los saldos en orden (sucursal, producto), valida que ninguno quede negativo,
  * toma el correlativo, guarda la cabecera y actualiza saldos e historial en lote.
  * Con la misma clave de idempotencia devuelve la operación ya registrada sin repetirla.
+ *
+ * Productos sin control de stock (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 4.4): prepararLineas() los rechaza,
+ * así compras, ajustes y traspasos los rechazan en el servidor sin código propio, y aplicar() lanza una excepción
+ * si le llega uno. Invariante: un producto sin control nunca tiene movimientos posteriores a su desmarcado.
+ * Una venta solo de esos productos guarda su operación como cabecera, sin cambios (total_lineas = 0).
+ *
+ * Lotes y vencimientos (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 7): los productos con vencimiento de una empresa con la
+ * capacidad pasan además por LibroLotes en la misma transacción, que mueve el saldo por lote y mantiene
+ * stock_niveles = Σ stock_lotes. El saldo total se agrupa por sucursal y producto: varias líneas del mismo producto
+ * (una por lote) generan un solo movimiento de stock_niveles. Sin productos marcados no hay ninguna consulta extra.
  */
 final class LibroStock
 {
     public const MAX_LINEAS = 1000;
 
-    public function __construct(private readonly Numerador $numerador) {}
+    public function __construct(private readonly Numerador $numerador, private readonly LibroLotes $lotes) {}
 
     /**
      * Valida cantidades (texto) por producto: positivas, con decimales solo si la unidad
-     * los admite, de productos activos de la empresa. Una sola consulta para todas las líneas.
+     * los admite, de productos activos de la empresa que controlan stock. Una sola consulta
+     * para todas las líneas.
      *
      * @param  array<int|string, mixed>  $lineas  producto_id => cantidad
      * @return array<int, array{cantidad: string, nombre: string}>
      */
     public function prepararLineas(int $empresaId, array $lineas): array
+    {
+        $lista = [];
+
+        foreach ($lineas as $id => $valor) {
+            $lista[] = ['producto_id' => $id, 'cantidad' => $valor];
+        }
+
+        $preparadas = [];
+
+        foreach ($this->prepararLista($empresaId, $lista) as $linea) {
+            $preparadas[$linea['producto_id']] = ['cantidad' => $linea['cantidad'], 'nombre' => $linea['nombre']];
+        }
+
+        return $preparadas;
+    }
+
+    /**
+     * Como prepararLineas(), con las líneas como lista: un producto puede repetirse, por ejemplo una línea por lote
+     * (§ 6.5). Cada línea se valida por separado y conserva su índice. `controla_vencimiento` indica si la línea
+     * necesita lote: producto marcado y capacidad activa, que solo se consulta si algún producto está marcado.
+     *
+     * @param  list<array{producto_id: mixed, cantidad: mixed}>  $lineas
+     * @return array<int, array{producto_id: int, cantidad: string, nombre: string, controla_vencimiento: bool}>
+     */
+    public function prepararLista(int $empresaId, array $lineas): array
     {
         if ($lineas === []) {
             throw ValidationException::withMessages(['lineas' => __('Agrega al menos un producto.')]);
@@ -45,20 +81,23 @@ final class LibroStock
             throw ValidationException::withMessages(['lineas' => __('Una operación admite como máximo :maximo productos.', ['maximo' => self::MAX_LINEAS])]);
         }
 
-        $ids = array_map('intval', array_keys($lineas));
+        $ids = array_map(fn (array $linea): int => is_numeric($linea['producto_id'] ?? null) ? (int) $linea['producto_id'] : 0, $lineas);
         $productos = DB::table('productos')
             ->join('unidades_medida', 'unidades_medida.id', '=', 'productos.unidad_medida_id')
             ->where('productos.empresa_id', $empresaId)
             ->where('productos.activo', true)
-            ->whereIn('productos.id', $ids)
-            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.tipo_venta', 'unidades_medida.admite_decimales', 'unidades_medida.abreviatura'])
+            ->whereIn('productos.id', array_values(array_unique($ids)))
+            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.tipo_venta', 'productos.controla_stock', 'productos.controla_vencimiento', 'unidades_medida.admite_decimales', 'unidades_medida.abreviatura'])
             ->keyBy('id');
+        $conLote = $productos->contains(fn (object $p): bool => (bool) $p->controla_vencimiento) && $this->lotes->activo($empresaId);
 
         $preparadas = [];
         $errores = [];
 
-        foreach ($lineas as $id => $valor) {
-            $producto = $productos->get((int) $id);
+        foreach ($lineas as $indice => $linea) {
+            $id = $ids[$indice];
+            $valor = $linea['cantidad'] ?? '';
+            $producto = $productos->get($id);
 
             if ($producto === null) {
                 $errores[] = __('Uno de los productos no existe o está inactivo.');
@@ -70,12 +109,18 @@ final class LibroStock
             $nombre = Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->abreviatura);
             $esEntera = ($producto->tipo_venta ?? 'unidad') === 'unidad' || ! $producto->admite_decimales;
 
-            if ($cantidad === null || Decimal::comparar($cantidad, '0') <= 0) {
+            if (! (bool) $producto->controla_stock) {
+                // Sin saldo que mover: no se compra, no se ajusta ni se traspasa (§ 2, S3).
+                $errores[] = __(':producto no controla stock.', ['producto' => $nombre]);
+            } elseif ($cantidad === null || Decimal::comparar($cantidad, '0') <= 0) {
                 $errores[] = __(':nombre: la cantidad debe ser mayor que cero (hasta 3 decimales).', ['nombre' => $nombre]);
             } elseif ($esEntera && ! Decimal::esEntero($cantidad)) {
                 $errores[] = __(':nombre: se mide en unidades enteras.', ['nombre' => $nombre]);
             } else {
-                $preparadas[(int) $id] = ['cantidad' => $cantidad, 'nombre' => $nombre];
+                $preparadas[$indice] = [
+                    'producto_id' => $id, 'cantidad' => $cantidad, 'nombre' => $nombre,
+                    'controla_vencimiento' => $conLote && (bool) $producto->controla_vencimiento,
+                ];
             }
         }
 
@@ -95,8 +140,8 @@ final class LibroStock
     }
 
     /**
-     * @param  array{tipo: TipoOperacionInventario, motivo: string|null, sucursal_id: int, sucursal_destino_id: int|null, nota: string|null, clave: string}  $cabecera
-     * @param  list<array{sucursal_id: int, producto_id: int, cantidad: string, nombre: string}>  $cambios  cantidad con signo
+     * @param  array{tipo: TipoOperacionInventario, motivo: string|null, sucursal_id: int, sucursal_destino_id: int|null, nota: string|null, clave: string, serie?: string}  $cabecera
+     * @param  list<array{sucursal_id: int, producto_id: int, cantidad: string, nombre: string, lote?: array{numero: string, vencimiento: string}, lote_id?: int, replica_de?: int, devolucion?: array{salida: int, previas: list<int>}}>  $cambios  cantidad con signo
      */
     public function registrar(User $actor, array $cabecera, array $cambios): OperacionInventario
     {
@@ -127,8 +172,14 @@ final class LibroStock
      * (ajuste, traspaso o venta), después de asegurarNiveles(). Bloquea saldos en orden,
      * valida que ninguno quede negativo, toma el correlativo y escribe en lote.
      *
-     * @param  array{tipo: TipoOperacionInventario, motivo: string|null, sucursal_id: int, sucursal_destino_id: int|null, nota: string|null, clave: string}  $cabecera
-     * @param  list<array{sucursal_id: int, producto_id: int, cantidad: string, nombre: string}>  $cambios
+     * Con $cambios vacío solo guarda la cabecera (venta solo de productos sin control de stock):
+     * conserva el correlativo y la clave de idempotencia sin tocar saldos ni historial.
+     *
+     * Cada cambio de un producto con vencimiento puede indicar `lote` ({numero, vencimiento Y-m-d}, para ingresos) o
+     * `lote_id`; sin ellos, LibroLotes reparte la salida según el tipo de operación (§ 7.1).
+     *
+     * @param  array{tipo: TipoOperacionInventario, motivo: string|null, sucursal_id: int, sucursal_destino_id: int|null, nota: string|null, clave: string, serie?: string}  $cabecera
+     * @param  list<array{sucursal_id: int, producto_id: int, cantidad: string, nombre: string, lote?: array{numero: string, vencimiento: string}, lote_id?: int, replica_de?: int, devolucion?: array{salida: int, previas: list<int>}}>  $cambios
      */
     public function aplicar(User $actor, array $cabecera, array $cambios): OperacionInventario
     {
@@ -137,7 +188,8 @@ final class LibroStock
         }
 
         $empresaId = (int) $actor->empresa_id;
-        $niveles = DB::table('stock_niveles')
+        $conLote = $this->leerMarcas($empresaId, $cambios);
+        $niveles = $cambios === [] ? collect() : DB::table('stock_niveles')
             ->where('empresa_id', $empresaId)
             ->whereIn('sucursal_id', array_values(array_unique(array_column($cambios, 'sucursal_id'))))
             ->whereIn('producto_id', array_values(array_unique(array_column($cambios, 'producto_id'))))
@@ -147,43 +199,67 @@ final class LibroStock
             ->get(['id', 'sucursal_id', 'producto_id', 'cantidad'])
             ->keyBy(fn (object $fila) => $fila->sucursal_id.':'.$fila->producto_id);
 
-        $saldos = [];
-        $movimientos = [];
-        $faltantes = [];
+        // Total por sucursal y producto: varias líneas del mismo producto (una por lote) mueven el saldo total una vez.
+        $totales = [];
 
         foreach ($cambios as $cambio) {
             $clave = $cambio['sucursal_id'].':'.$cambio['producto_id'];
+            $totales[$clave] ??= ['sucursal_id' => $cambio['sucursal_id'], 'producto_id' => $cambio['producto_id'], 'cantidad' => '0', 'nombre' => $cambio['nombre']];
+            $totales[$clave]['cantidad'] = Decimal::sumar($totales[$clave]['cantidad'], $cambio['cantidad']);
+        }
+
+        $previos = [];
+        $movimientos = [];
+        $faltantes = [];
+
+        foreach ($totales as $clave => $total) {
             $nivel = $niveles->get($clave)
                 ?? throw ValidationException::withMessages(['lineas' => __('No se pudo preparar el stock de la sucursal. Inténtalo de nuevo.')]);
-            $anterior = $saldos[$clave] ?? (string) $nivel->cantidad;
-            $posterior = Decimal::sumar($anterior, $cambio['cantidad']);
+            $anterior = (string) $nivel->cantidad;
+            $previos[$clave] = $anterior;
 
-            if (Decimal::comparar($posterior, '0') < 0) {
-                $faltantes[] = __(':producto: stock disponible :cantidad.', ['producto' => $cambio['nombre'], 'cantidad' => Decimal::formatear($anterior)]);
+            // Un cambio neto 0 (p. ej. pasar unidades de un lote a otro) no mueve el saldo total.
+            if (Decimal::comparar($total['cantidad'], '0') === 0) {
+                continue;
             }
 
-            $saldos[$clave] = $posterior;
+            $posterior = Decimal::sumar($anterior, $total['cantidad']);
+
+            if (Decimal::comparar($posterior, '0') < 0) {
+                $faltantes[$clave] = [__(':producto: stock disponible :cantidad.', ['producto' => $total['nombre'], 'cantidad' => Decimal::formatear($anterior)])];
+            }
+
             $movimientos[] = [
                 'nivel_id' => (int) $nivel->id,
-                'sucursal_id' => $cambio['sucursal_id'],
-                'producto_id' => $cambio['producto_id'],
-                'cantidad' => $cambio['cantidad'],
+                'sucursal_id' => $total['sucursal_id'],
+                'producto_id' => $total['producto_id'],
+                'cantidad' => $total['cantidad'],
                 'saldo_anterior' => $anterior,
                 'saldo_posterior' => $posterior,
             ];
         }
 
+        $cambiosLote = array_values(array_filter($cambios, fn (array $c): bool => isset($conLote[(int) $c['producto_id']])));
+        $planLotes = $cambiosLote === [] ? null : $this->lotes->preparar($empresaId, $cabecera['tipo'], $cambiosLote, $previos);
+
+        // En productos con lote, el mensaje de LibroLotes (vendible y vencido) reemplaza al del saldo total.
+        foreach ($planLotes['errores'] ?? [] as $clave => $mensajes) {
+            $faltantes[$clave] = $mensajes;
+        }
+
         if ($faltantes !== []) {
             throw ValidationException::withMessages(['lineas' => array_merge(
-                [__('No hay stock suficiente; no se guardó ningún cambio.')], $faltantes,
+                [__('No hay stock suficiente; no se guardó ningún cambio.')], ...array_values($faltantes),
             )]);
         }
 
         $tipo = $cabecera['tipo'];
+        // Las operaciones que solo pasan unidades de un lote a otro llevan su propia serie (LOT), sin huecos en AJU.
+        $serie = $cabecera['serie'] ?? $tipo->serie();
         $operacion = new OperacionInventario;
         $operacion->empresa_id = $empresaId;
-        $operacion->serie = $tipo->serie();
-        $operacion->numero = $this->numerador->siguiente($empresaId, $tipo->serie());
+        $operacion->serie = $serie;
+        $operacion->numero = $this->numerador->siguiente($empresaId, $serie);
         $operacion->tipo = $tipo;
         $operacion->motivo = $cabecera['motivo'];
         $operacion->sucursal_id = $cabecera['sucursal_id'];
@@ -197,14 +273,55 @@ final class LibroStock
         $this->actualizarSaldos($empresaId, $movimientos);
         $this->insertarMovimientos($empresaId, $operacion->id, $movimientos);
 
+        if ($planLotes !== null) {
+            $this->lotes->escribir($empresaId, $operacion->id, $planLotes['movimientos']);
+        }
+
         return $operacion;
     }
 
     /**
-     * Crea con cantidad 0 las filas de saldo que aún no existen. Llamar fuera de la
-     * transacción de la operación.
+     * Guardia del invariante (§ 4.4): una sola consulta, con bloqueo compartido de las fichas para que
+     * GuardarProducto no desmarque la casilla mientras la operación está en curso. Llegar aquí con un
+     * producto sin control es un error de programación, no una entrada del usuario.
      *
-     * @param  list<array{sucursal_id: int, producto_id: int}>  $cambios
+     * La misma consulta lee controla_vencimiento: devuelve los productos que se llevan por lote, y la capacidad
+     * solo se consulta si alguno está marcado (lotes § 7.3).
+     *
+     * @param  list<array{producto_id: int}>  $cambios
+     * @return array<int, true>
+     */
+    private function leerMarcas(int $empresaId, array $cambios): array
+    {
+        $ids = array_values(array_unique(array_column($cambios, 'producto_id')));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $marcas = DB::table('productos')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->sharedLock()
+            ->get(['id', 'controla_stock', 'controla_vencimiento']);
+        $sinControl = $marcas->reject(fn (object $p) => (bool) $p->controla_stock)->pluck('id');
+
+        if ($sinControl->isNotEmpty()) {
+            throw new LogicException('LibroStock::aplicar() recibió productos sin control de stock: '.$sinControl->implode(', ').'.');
+        }
+
+        $conVencimiento = $marcas->filter(fn (object $p) => (bool) $p->controla_vencimiento)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+
+        return $conVencimiento !== [] && $this->lotes->activo($empresaId) ? array_fill_keys($conVencimiento, true) : [];
+    }
+
+    /**
+     * Crea con cantidad 0 las filas de saldo que aún no existen. Llamar fuera de la
+     * transacción de la operación. Con la cantidad (con signo) y, si corresponde, el lote, también crea los lotes y
+     * saldos por lote que van a recibir unidades.
+     *
+     * @param  list<array{sucursal_id: int, producto_id: int, cantidad?: string, nombre?: string, lote?: array{numero: string, vencimiento: string}, lote_id?: int, replica_de?: int, devolucion?: array{salida: int, previas: list<int>}}>  $cambios
      */
     public function asegurarNiveles(int $empresaId, array $cambios): void
     {
@@ -225,6 +342,10 @@ final class LibroStock
         foreach (array_chunk($filas, 500) as $lote) {
             DB::table('stock_niveles')->insertOrIgnore($lote);
         }
+
+        // Productos con vencimiento: lotes nuevos y sus saldos por sucursal, también en cero (lotes § 7.6). Solo para
+        // los cambios que traen su cantidad y son ingresos; sin productos marcados no consulta tablas de lotes.
+        $this->lotes->asegurar($empresaId, $cambios);
     }
 
     /**

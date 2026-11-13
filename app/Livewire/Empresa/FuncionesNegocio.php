@@ -28,6 +28,12 @@ class FuncionesNegocio extends Component
     /** @var list<string> */
     public array $capacidades = [];
 
+    /** «Avisar pedidos con demora a partir de N minutos» (cocina § 4.4). Solo se guarda con cocina marcada. */
+    public string $minutosAlertaCocina = '15';
+
+    /** Lo escrito para apagar «Lotes y vencimientos» con productos marcados (rubros § 5.2). */
+    public string $confirmacionLotes = '';
+
     /** Resumen abierto. Solo lo cambia el servidor: el guardado exige haber pasado por revisar(). */
     #[Locked]
     public bool $revisando = false;
@@ -59,23 +65,26 @@ class FuncionesNegocio extends Component
     public function revisar(CambiarFuncionesEmpresa $accion): void
     {
         $this->authorize('cambiarFunciones', $this->empresa());
-        [$rubro, $capacidades] = $this->validados();
+        [$rubro, $capacidades, $minutos] = $this->validados();
         $accion->validarCompatibles($capacidades);
 
         $empresa = $this->empresa();
 
-        if ($empresa->rubro === $rubro && $this->valores($empresa->capacidadesActivas()) === $this->valores($capacidades)) {
+        if ($empresa->rubro === $rubro && $this->valores($empresa->capacidadesActivas()) === $this->valores($capacidades)
+            && ($minutos === null || $minutos === $empresa->minutos_alerta_cocina)) {
             $this->avisar(__('No hay cambios que guardar.'), 'info');
 
             return;
         }
 
+        $this->confirmacionLotes = '';
         $this->revisando = true;
     }
 
     public function cancelar(): void
     {
         $this->revisando = false;
+        $this->confirmacionLotes = '';
     }
 
     public function guardar(CambiarFuncionesEmpresa $accion): void
@@ -84,10 +93,25 @@ class FuncionesNegocio extends Component
             return;
         }
 
-        [$rubro, $capacidades] = $this->validados();
-        $cambio = $accion->ejecutar($this->actor(), $this->empresa(), $rubro, $capacidades);
+        [$rubro, $capacidades, $minutos] = $this->validados();
+        $empresa = $this->empresa();
 
+        // Rubros § 5.2: la palabra se pide en el mismo resumen, que queda abierto hasta escribirla bien. La acción
+        // lo vuelve a comprobar en su transacción.
+        $productosConLote = $this->apagaLotes($empresa, $capacidades) ? $accion->productosConLote($empresa->id) : 0;
+
+        if ($productosConLote > 0 && mb_strtoupper(trim($this->confirmacionLotes)) !== CambiarFuncionesEmpresa::CONFIRMAR_LOTES) {
+            $this->addError('confirmacionLotes', __('Escribe :palabra para continuar.', ['palabra' => CambiarFuncionesEmpresa::CONFIRMAR_LOTES]));
+
+            return;
+        }
+
+        // Si una regla de apagado lo rechaza (por ejemplo, despachos con ventas sin entregar), se cierra
+        // el resumen para que el motivo se vea debajo de las funciones.
         $this->revisando = false;
+        $cambio = $accion->ejecutar($this->actor(), $empresa, $rubro, $capacidades, $minutos, $this->confirmacionLotes);
+        $this->confirmacionLotes = '';
+
         $this->cargar($this->empresa());
         $this->avisar($cambio ? __('Funciones del negocio guardadas.') : __('Las funciones ya estaban así; no se cambió nada.'));
     }
@@ -97,15 +121,28 @@ class FuncionesNegocio extends Component
         $empresa = $this->empresa();
         $actuales = $this->valores($empresa->capacidadesActivas());
         $marcadas = array_values(array_filter(Capacidad::cases(), fn (Capacidad $c): bool => in_array($c->value, $this->capacidades, true)));
+        $productosConLote = $this->revisando && $this->apagaLotes($empresa, $marcadas) ? app(CambiarFuncionesEmpresa::class)->productosConLote($empresa->id) : 0;
 
         return view('livewire.empresa.funciones-negocio', [
             'rubros' => Rubro::cases(),
             'funciones' => Capacidad::cases(),
             'bloqueadas' => $this->bloqueadas($marcadas),
             'rubroActual' => $empresa->rubro,
+            'minutosActuales' => $empresa->minutos_alerta_cocina,
             'activan' => array_values(array_filter($marcadas, fn (Capacidad $c): bool => ! in_array($c->value, $actuales, true))),
             'desactivan' => array_values(array_filter(Capacidad::cases(), fn (Capacidad $c): bool => in_array($c->value, $actuales, true) && ! in_array($c->value, $this->capacidades, true))),
+            'productosConLote' => $productosConLote,
+            'mensajeLotes' => $productosConLote > 0 ? CambiarFuncionesEmpresa::mensajeLotes($productosConLote) : null,
+            'palabraLotes' => CambiarFuncionesEmpresa::CONFIRMAR_LOTES,
         ]);
+    }
+
+    /**
+     * @param  list<Capacidad>  $capacidades  las que quedan encendidas
+     */
+    private function apagaLotes(Empresa $empresa, array $capacidades): bool
+    {
+        return $empresa->tieneCapacidad(Capacidad::LotesVencimientos) && ! in_array(Capacidad::LotesVencimientos, $capacidades, true);
     }
 
     /**
@@ -134,28 +171,40 @@ class FuncionesNegocio extends Component
     {
         $this->rubro = $empresa->rubro->value;
         $this->capacidades = $this->valores($empresa->capacidadesActivas());
+        $this->minutosAlertaCocina = (string) $empresa->minutos_alerta_cocina;
     }
 
     /**
-     * @return array{0: Rubro, 1: list<Capacidad>}
+     * @return array{0: Rubro, 1: list<Capacidad>, 2: int|null} el límite de demora solo con cocina marcada
      */
     private function validados(): array
     {
+        $conCocina = in_array(Capacidad::Cocina->value, $this->capacidades, true);
+        $limites = ['min' => CambiarFuncionesEmpresa::MINUTOS_ALERTA_MIN, 'max' => CambiarFuncionesEmpresa::MINUTOS_ALERTA_MAX];
+        $this->minutosAlertaCocina = trim($this->minutosAlertaCocina);
+
         $this->validate([
             'rubro' => ['required', 'string', Rule::enum(Rubro::class)],
             'capacidades' => ['array'],
             'capacidades.*' => ['string', 'distinct', Rule::enum(Capacidad::class)],
+            'minutosAlertaCocina' => $conCocina
+                ? ['required', 'integer', 'between:'.$limites['min'].','.$limites['max']]
+                : ['nullable'],
         ], [
             'rubro.required' => __('Elige qué tipo de negocio tienes.'),
             'rubro.enum' => __('Elige qué tipo de negocio tienes.'),
             'capacidades.*.enum' => __('Elige solo funciones de la lista.'),
             'capacidades.*.distinct' => __('Elige solo funciones de la lista.'),
             'capacidades.*.string' => __('Elige solo funciones de la lista.'),
+            'minutosAlertaCocina.required' => __('Escribe los minutos, entre :min y :max.', $limites),
+            'minutosAlertaCocina.integer' => __('Escribe los minutos, entre :min y :max.', $limites),
+            'minutosAlertaCocina.between' => __('Escribe los minutos, entre :min y :max.', $limites),
         ]);
 
         return [
             Rubro::from($this->rubro),
             array_values(array_filter(Capacidad::cases(), fn (Capacidad $c): bool => in_array($c->value, $this->capacidades, true))),
+            $conCocina ? (int) $this->minutosAlertaCocina : null,
         ];
     }
 

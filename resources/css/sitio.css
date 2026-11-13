@@ -260,7 +260,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
     transform: translateX(-38%);
 }
 .dropdown::before { content: ""; position: absolute; inset: -12px 0 auto; height: 12px; }
-.nav-group.is-open .dropdown { display: block; animation: pop .25s var(--ease); }
+/* Animación propia: conserva el translateX del panel. Con «pop» (que anima transform) el panel
+   aparecía corrido a la derecha y saltaba a su lugar al terminar la animación. */
+.nav-group.is-open .dropdown { display: block; animation: dropdown-in .2s var(--ease); }
 .dropdown-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; }
 .dropdown-sm { width: min(360px, 92vw); }
 .dropdown-sm .dropdown-grid { grid-template-columns: minmax(0, 1fr); }
@@ -571,6 +573,17 @@ h2 { font-size: clamp(2rem, 3.8vw, 2.9rem); line-height: 1.08; letter-spacing: -
 .checks .ico { width: 18px; height: 18px; margin-top: 3px; color: var(--ok); stroke-width: 2.3; }
 .checks strong { color: var(--strong); font-weight: 720; }
 .plan .btn-block { margin-top: auto; }
+/* Tres planes: tres columnas en escritorio; en tablet y celular, una debajo de otra. */
+.plans.is-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1180px; }
+.plans.is-3 .plan { padding: clamp(22px, 2.4vw, 28px); }
+.plans.is-3 .plan h3 { font-size: 21px; }
+.plan-ia-ico { width: 22px; height: 22px; color: var(--info); }
+.plans.is-3 + .plan-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1180px; margin-inline: auto; }
+.plans.is-3 + .plan-notes .note { max-width: none; }
+@media (max-width: 1020px) {
+    .plans.is-3 { grid-template-columns: minmax(0, 1fr); gap: 28px; max-width: 520px; }
+    .plans.is-3 + .plan-notes { grid-template-columns: minmax(0, 1fr); max-width: 520px; }
+}
 .plan-notes { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
 .note { display: flex; align-items: center; gap: 12px; max-width: 440px; padding: 13px 18px; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
 .note .ico { color: var(--accent); }
@@ -625,6 +638,7 @@ h2 { font-size: clamp(2rem, 3.8vw, 2.9rem); line-height: 1.08; letter-spacing: -
 @keyframes grow { from { transform: scaleY(.12); opacity: .35; } }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(223, 131, 65, .6); } 70%, 100% { box-shadow: 0 0 0 9px rgba(223, 131, 65, 0); } }
 @keyframes drift { 0%, 100% { translate: 0 0; } 50% { translate: 0 -7px; } }
+@keyframes dropdown-in { 0% { opacity: 0; transform: translateX(-38%) translateY(8px); } 100% { opacity: 1; transform: translateX(-38%); } }
 @keyframes pop { 0% { opacity: 0; transform: translateY(10px) scale(.94); } 100% { opacity: 1; transform: none; } }
 @keyframes typing { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
 

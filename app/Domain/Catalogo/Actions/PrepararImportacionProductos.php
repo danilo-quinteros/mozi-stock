@@ -5,6 +5,7 @@ namespace App\Domain\Catalogo\Actions;
 use App\Domain\Catalogo\Importacion\CamposImportacion;
 use App\Domain\Catalogo\Importacion\LectorHojaCalculo;
 use App\Domain\Catalogo\Importacion\ValidadorImportacion;
+use App\Domain\Inventario\LibroLotes;
 use App\Models\ImportacionProducto;
 use App\Models\Producto;
 use App\Models\User;
@@ -54,7 +55,14 @@ final class PrepararImportacionProductos
     public function __construct(
         private readonly LectorHojaCalculo $lector,
         private readonly ValidadorImportacion $validador,
+        private readonly LibroLotes $lotes,
     ) {}
+
+    /** Las columnas de lote solo se proponen y aceptan con «Lotes y vencimientos» activa. */
+    private function conLotes(int $empresaId): bool
+    {
+        return $this->lotes->activo($empresaId);
+    }
 
     public function crear(User $actor, UploadedFile $archivo): ImportacionProducto
     {
@@ -128,7 +136,7 @@ final class PrepararImportacionProductos
         }
 
         $importacion->fila_encabezados = $fila;
-        $importacion->mapeo = CamposImportacion::detectar(array_column($this->columnas($importacion), 'encabezado', 'indice'));
+        $importacion->mapeo = CamposImportacion::detectar(array_column($this->columnas($importacion), 'encabezado', 'indice'), $this->conLotes($importacion->empresa_id));
         $importacion->estado = ImportacionProducto::COLUMNAS;
         $importacion->save();
     }
@@ -173,6 +181,7 @@ final class PrepararImportacionProductos
         $this->autorizarAbierta($actor, $importacion);
 
         $indices = array_column($this->columnas($importacion), 'indice');
+        $campos = CamposImportacion::campos($this->conLotes($importacion->empresa_id));
         $mapeo = [];
         $errores = [];
 
@@ -181,7 +190,7 @@ final class PrepararImportacionProductos
                 continue;
             }
 
-            if (! isset(CamposImportacion::CAMPOS[$campo])) {
+            if (! isset($campos[$campo])) {
                 $errores['mapeo'] = __('Elige un campo válido para cada columna.');
             } elseif (isset($mapeo[$campo])) {
                 $errores['mapeo'] = __('«:campo» está asignado a dos columnas. Deja solo una.', ['campo' => __(CamposImportacion::CAMPOS[$campo]['etiqueta'])]);
@@ -405,7 +414,7 @@ final class PrepararImportacionProductos
         $importacion->usar_stock = null;
         $importacion->resumen = null;
         $importacion->save();
-        $importacion->mapeo = $total === 0 ? [] : CamposImportacion::detectar(array_column($this->columnas($importacion), 'encabezado', 'indice'));
+        $importacion->mapeo = $total === 0 ? [] : CamposImportacion::detectar(array_column($this->columnas($importacion), 'encabezado', 'indice'), $this->conLotes($importacion->empresa_id));
         $importacion->save();
 
         return $total;

@@ -34,19 +34,103 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to ed
     padding-top: 0
 }
 
-
-
 .nav-subitems{
     margin-left: 0;
 }
 
-/* Cuadro naranja de producto y diseño responsivo */
+.pos-client-body .pos-client-label{
+    color: var(--text-strong)
+}
+
+/* ==========================================================================
+   Formulario de Productos (productos/nuevo y productos/editar) - Responsive
+   ========================================================================== */
+
+/* Contenedor del formulario */
+.product-form-container {
+    width: 100%;
+    max-width: 1040px;
+    margin: 0 auto;
+}
+
+.product-form-container .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Layout de subida de imagen + campos */
+.product-details {
+    display: grid;
+    grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
+/* Subida de imagen */
+.product-upload {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.upload-box {
+    width: 100%;
+    min-height: 180px;
+    border-radius: 13px;
+    border: 1.5px dashed var(--accent-border, #e08441);
+    background: var(--accent-soft, rgba(224, 132, 65, 0.04));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    user-select: none;
+}
+
+.upload-box:hover,
+.upload-box:focus-visible {
+    background: var(--panel-elevated, #24201a);
+    border-color: var(--brand-bright, #e08441);
+    outline: none;
+}
+
+.upload-box:active {
+    transform: scale(0.99);
+}
+
+.upload-preview-img {
+    max-width: 100%;
+    max-height: 140px;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
+.upload-box b {
+    font-size: 12px;
+    color: var(--text-strong, #fff);
+    margin-top: 2px;
+}
+
+.upload-box small {
+    font-size: 10.5px;
+    color: var(--muted, #94a3b8);
+    line-height: 1.3;
+}
+
+/* Cuadro naranja superior (Nombre, Vista previa, Tipo de venta, Contenido) */
 .product-content-box {
     grid-column: 1 / -1;
     border: 1.5px solid var(--accent-border, #e08441);
     background: var(--accent-soft, rgba(224, 132, 65, 0.04));
     border-radius: 14px;
-    padding: 20px;
+    padding: clamp(14px, 2.2vw, 20px);
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -54,40 +138,98 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to ed
     container-name: pbox;
 }
 
+/* Fila 1: Nombre y Vista previa */
 .product-content-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-    gap: 20px;
+    gap: 16px;
     align-items: flex-end;
 }
 
+.product-preview-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.product-preview-label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.product-preview-pill {
+    min-height: 42px;
+    border-radius: 10px;
+    background: var(--panel, #18181b);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    text-align: center;
+    width: 100%;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.product-preview-text {
+    font-size: clamp(15px, 2vw, 19px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    display: inline-flex;
+    gap: 8px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.product-preview-base {
+    color: var(--text-strong, #ffffff);
+}
+
+.product-preview-extra {
+    color: var(--brand-bright, #e08441);
+}
+
+.product-preview-placeholder {
+    color: var(--faint, #71717a);
+    font-size: 12px;
+    font-style: italic;
+    user-select: none;
+}
+
+/* Fila 2: Selector de Tipo de venta (Unidad vs Medida) */
 .product-selling-type-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
 }
 
 .selling-type-card {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
+    padding: 11px 14px;
     border-radius: 10px;
     background: var(--panel, #18181b);
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    border: 1.5px solid var(--border, rgba(255, 255, 255, 0.1));
     cursor: pointer;
     transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     user-select: none;
+    min-height: 48px;
 }
 
 .selling-type-card:hover {
-    border-color: rgba(224, 132, 65, 0.5);
+    border-color: rgba(224, 132, 65, 0.45);
+    background: var(--panel-elevated, #24201a);
 }
 
 .selling-type-card.is-selected {
-    border: 1.5px solid var(--brand-bright, #e08441);
-    background: rgba(224, 132, 65, 0.06);
-    box-shadow: 0 0 0 1px rgba(224, 132, 65, 0.2);
+    border-color: var(--brand-bright, #e08441);
+    background: rgba(224, 132, 65, 0.08);
+    box-shadow: 0 0 0 1px rgba(224, 132, 65, 0.25);
 }
 
 .selling-type-indicator {
@@ -134,143 +276,375 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to ed
 }
 
 .selling-type-title {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-strong, #ffffff);
     line-height: 1.3;
 }
 
 .selling-type-desc {
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--muted, #94a3b8);
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.35;
+    white-space: normal;
 }
 
+/* Fila 3: Contenido / Presentación inputs */
 .product-content-inputs-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
 }
 
-.product-preview-pill {
-    min-height: 44px;
-    border-radius: 10px;
-    background: var(--panel, rgba(0, 0, 0, 0.3));
-    border: 1px solid var(--border);
+/* Precios de venta */
+.product-prices-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+/* Casilla de control de stock */
+.producto-control-stock {
+    grid-column: 1 / -1;
+}
+
+/* Barra de acciones al final del formulario */
+.product-form-actions {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 8px 16px;
-    text-align: center;
-    width: 100%;
-    word-break: break-word;
-    overflow-wrap: anywhere;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-soft);
 }
 
-.pos-client-body .pos-client-label{
-    color: var(--text-strong)
+/* Formulario de producto reordenado (10/11/2026): opciones como tarjetas marcables, stock inicial y un solo
+   botón Guardar al final, fuera de las tarjetas. */
+.producto-campo-ancho {
+    grid-column: 1 / -1;
+}
+
+.producto-opciones {
+    display: grid;
+    gap: 10px;
+}
+
+.producto-opcion {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 13px 15px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel-soft);
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+}
+
+.producto-opcion input {
+    margin-top: 2px;
+    accent-color: var(--brand-bright);
+}
+
+.producto-opcion span {
+    display: grid;
+    gap: 3px;
+}
+
+.producto-opcion b {
+    color: var(--text-strong);
+    font-size: 13px;
+}
+
+.producto-opcion small {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.producto-opcion.is-activo {
+    border-color: var(--accent-border);
+    background: var(--accent-soft);
+}
+
+.producto-opciones + .auth-error,
+.producto-opcion + .auth-error {
+    margin: 0;
+}
+
+.producto-stock-inicial {
+    margin-top: 14px;
+    padding: 14px 15px;
+    border: 1px dashed var(--accent-border);
+    border-radius: 14px;
+}
+
+.producto-stock-inicial-nota {
+    align-self: center;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.producto-minimo {
+    margin-top: 16px;
+}
+
+.producto-stock-sucursales {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-soft);
+}
+
+.producto-form-final {
+    margin-top: 0;
+    padding-top: 4px;
+    border-top: 0;
+}
+
+.card[data-test="producto-tallas-colores"] .variantes-eleccion {
+    margin-top: 16px;
+}
+
+
+
+/* Campos en una misma fila de grilla: si uno lleva texto de ayuda o un error, la fila crece y el .field vecino
+   (display:grid) repartía ese alto entre su etiqueta y su input, que bajaba. Con align-content:start la etiqueta y el
+   input quedan arriba y alineados con los del campo de al lado; el espacio sobrante queda debajo. */
+.field {
+    align-content: start;
+}
+
+
+.product-content-inputs-grid {
+    grid-template-columns: 140px minmax(0,1fr);
 }
 
 
 
 
+/* ==========================================================================
+   Adaptaciones Responsivas (Container Queries y Media Queries)
+   ========================================================================== */
 
-/* Cuando el contenedor mide menos de 680px o pantalla < 960px, apilar en 1 columna limpia */
-@container pbox (max-width: 680px) {
+/* Adaptación dentro del cuadro naranja según ancho del contenedor */
+@container pbox (max-width: 620px) {
     .product-content-grid {
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 14px;
         align-items: stretch;
     }
+
     .product-selling-type-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-    .product-content-inputs-grid {
         grid-template-columns: 1fr;
-        gap: 10px;
-    }
-    .selling-type-desc {
-        white-space: normal;
+        gap: 8px;
     }
 }
 
+@container pbox (max-width: 440px) {
+    .product-content-inputs-grid {
+        grid-template-columns: 105px 1fr;
+        gap: 8px;
+    }
+    .product-content-box {
+        padding: 12px;
+    }
+}
 
 @media (max-width: 1000px) {
+    .theme-toggle span {
+        display: none;
+    }
 
-.theme-toggle span {
-    display: none;
+    .lang-toggle select {
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        position: absolute;
+        inset: 0;
+    }
+
+    .crumbs .crumb-pre, .vline, .user-avatar {
+        display: none;
+    }
 }
 
-.lang-toggle select {
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    position: absolute;
-    inset: 0;
+/* Breakpoint Tablet / Pantallas Medianas (<= 880px) */
+@media (max-width: 880px) {
+    .product-details {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .product-upload {
+        max-width: 320px;
+        margin: 0 auto;
+    }
+
+    .upload-box {
+        min-height: 155px;
+        padding: 14px;
+    }
 }
 
-.crumbs .crumb-pre, .vline, .user-avatar {
-    display: none;
-}
+/* Breakpoint Móvil Grande / Tablet vertical (<= 680px) */
+@media (max-width: 680px) {
+    .product-prices-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
 
-}
-
-@media (max-width: 960px) {
     .product-content-grid {
         grid-template-columns: 1fr;
-        gap: 16px;
-        align-items: stretch;
+        gap: 14px;
     }
+
     .product-selling-type-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-    .product-content-inputs-grid {
         grid-template-columns: 1fr;
-        gap: 10px;
-    }
-    .selling-type-desc {
-        white-space: normal;
+        gap: 8px;
     }
 }
 
 @media (max-width: 640px) {
-    .crumbs{
-        display: none
+    .crumbs {
+        display: none;
+    }
+}
+
+/* Breakpoint Móvil (<= 560px) */
+@media (max-width: 560px) {
+    .product-details .fields {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .product-form-actions {
+        flex-direction: column-reverse;
+        gap: 10px;
+        margin-top: 18px;
+        padding-top: 16px;
+    }
+
+    .product-form-actions .btn {
+        width: 100%;
+        min-height: 46px;
+        justify-content: center;
+    }
+
+    .product-upload {
+        max-width: 100%;
     }
 }
 
 @media (max-width: 520px) {
-    
-    
-    .top-caja-pill .badge.soft{
-        display: none
+    .top-caja-pill .badge.soft {
+        display: none;
     }
-    
-    .product-content-box {
-        padding: 14px 12px;
-    }
-    .product-selling-type-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-    }
+}
+
+/* Breakpoint Móvil Pequeño (<= 400px) */
+@media (max-width: 400px) {
     .product-content-inputs-grid {
         grid-template-columns: 1fr;
         gap: 8px;
     }
-    .selling-type-card {
-        padding: 8px 10px;
-        gap: 8px;
-    }
-    .selling-type-title {
-        font-size: 12px;
-    }
-    .selling-type-desc {
-        font-size: 10.5px;
-    }
+}
+
+/* Avisos (toast) de error e información. «danger» lo usan avisar(..., 'danger') y el aviso de validación de app.js. */
+.toast.danger{border-color:rgba(240,141,129,.55);background:#3a1714;color:#ffb4aa;box-shadow:0 16px 45px rgba(0,0,0,.35),0 0 18px rgba(240,141,129,.15);font-weight:600}
+:root[data-theme="light"] .toast.danger{background:#fdecea;border-color:rgba(200,70,55,.55);color:#9b2a1d;box-shadow:0 10px 30px rgba(155,42,29,.14)}
+.toast-validacion{pointer-events:auto;cursor:pointer;text-align:left;font:inherit;font-size:12px;font-weight:600;line-height:1.45}
+/* En el POS el aviso sube por encima de la barra de ventas abiertas. */
+body:has([data-pos]) #toast-validacion{bottom:52px}/* Autocompletados sin coincidencias: «Producto no encontrado» / «Cliente no encontrado» (no es una opción elegible). */
+.suggestion-vacia,.search-result-vacio{cursor:default}
+.suggestion-vacia:hover,.search-result-vacio:hover{background:none}
+.suggestion-vacia b,.search-result-vacio b{color:var(--muted)}
+/* Interruptor (toggle) sobre un checkbox nativo: misma apariencia que .switch, con teclado y lector de pantalla del checkbox. */
+input[type="checkbox"].toggle {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    position: relative;
+    width: 38px;
+    height: 22px;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    background: var(--panel-elevated);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background .2s, border-color .2s;
+}
+
+input[type="checkbox"].toggle::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .2);
+    transition: transform .22s var(--ease), background .2s;
+}
+
+input[type="checkbox"].toggle:checked {
+    background: var(--brand);
+    border-color: var(--brand);
+}
+
+input[type="checkbox"].toggle:checked::before {
+    transform: translateX(16px);
+    background: #fff8f0;
+}
+
+input[type="checkbox"].toggle:focus-visible {
+    outline: 2px solid var(--brand-bright);
+    outline-offset: 2px;
+}
+
+input[type="checkbox"].toggle:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.sku-campo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sku-campo .input {
+    flex: 1;
+    min-width: 0;
+}
+
+.toggle-etiqueta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.sku-ayuda {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.sku-campo .input:disabled {
+    background: var(--panel-soft);
+    border-style: dashed;
+    color: var(--muted);
+    opacity: .7;
+    cursor: not-allowed;
 }

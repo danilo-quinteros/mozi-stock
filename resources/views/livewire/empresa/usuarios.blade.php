@@ -53,7 +53,7 @@
                             <tr wire:key="usuario-{{ $usuario->id }}">
                                 <td><div class="item-name"><span class="token">{{ $usuario->initials() }}</span><span><b>{{ $usuario->name }}</b>@if ($usuario->id === auth()->id())<small>{{ __('Tu cuenta') }}</small>@endif</span></div></td>
                                 <td>{{ $usuario->email }}</td>
-                                <td><span class="badge info">{{ $usuario->rol?->etiqueta() }}</span></td>
+                                <td><span class="badge info">{{ $usuario->rol?->etiqueta() }}</span>@if ($conDespachos && $usuario->esVendedor() && $usuario->puede_despachar) <span class="badge warning" title="{{ __('Permiso de almacén (puede despachar)') }}">{{ __('Almacén') }}</span>@endif</td>
                                 <td>{{ $usuario->sucursal->nombre ?? __('Todas') }}</td>
                                 <td><span class="badge secondary">{{ $usuario->caja->nombre ?? ($usuario->esVendedor() ? __('Sin caja') : __('Supervisa')) }}</span></td>
                                 <td><span class="badge {{ $usuario->activo ? 'success' : 'danger' }}">{{ $usuario->activo ? __('Activo') : __('Inactivo') }}</span></td>
@@ -149,6 +149,16 @@
                     </x-campo>
                 </div>
                 <p class="subtle" style="margin:12px 0 0">{{ __('Mínimo 12 caracteres, con letras y números.') }}</p>
+                @if ($conDespachos)
+                    @if ($rol === \App\Enums\Rol::Vendedor->value)
+                        <label class="entrega-check" style="margin-top:16px">
+                            <input type="checkbox" wire:model="puede_despachar" data-permiso-almacen>
+                            <span><b>{{ __('Permiso de almacén (puede despachar)') }}</b><small>{{ __('Autoriza la salida de las ventas Por despachar de su sucursal. Queda registrado en la auditoría.') }}</small></span>
+                        </label>
+                    @else
+                        <p class="subtle" style="margin:12px 0 0">{{ __('Los administradores siempre pueden despachar.') }}</p>
+                    @endif
+                @endif
                 @if ($editandoId)
                     <label class="row" style="margin-top:16px">
                         <input type="checkbox" wire:model="activo" @disabled($editandoPropiaCuenta)>

@@ -144,6 +144,8 @@ test('each step is validated on the server before moving on', function () {
         ->assertSee('Ya existe una cuenta con este correo');
 
     $prueba->set('email', 'jose@ejemplo.com')->call('avanzar')->assertHasNoErrors()->assertSet('paso', 2)
+        // El rubro general se muestra como «Tienda».
+        ->assertSeeHtml('<b>Tienda</b>')->assertDontSeeHtml('<b>General</b>')
         ->set('empresa', '')->set('telefono', 'abc')->set('nit', 'ABC')
         ->call('avanzar')->assertHasErrors(['empresa', 'telefono'])->assertSet('paso', 2)
         ->set('empresa', 'Tienda José')->set('telefono', '71234567')->set('rubro', 'general')

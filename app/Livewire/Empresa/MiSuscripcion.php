@@ -149,7 +149,7 @@ class MiSuscripcion extends Component
     public function enviar(EnviarComprobantePago $accion): void
     {
         $this->validate([
-            'meses' => ['required', 'integer', 'between:1,'.CalendarioSuscripcion::MAX_MESES],
+            'meses' => ['required', 'integer', 'in:'.implode(',', CalendarioSuscripcion::MESES_PAGABLES)],
             'nota' => ['nullable', 'string', 'max:300'],
             'archivo' => self::REGLAS_ARCHIVO,
         ], array_map(__(...), self::MENSAJES), ['meses' => __('meses'), 'nota' => __('nota')]);
@@ -183,7 +183,7 @@ class MiSuscripcion extends Component
             $suscripcion->aplicarPlanSiguienteSiVencio($hoy);
         }
 
-        $mesesElegidos = (int) $this->meses >= 1 && (int) $this->meses <= CalendarioSuscripcion::MAX_MESES ? (int) $this->meses : 1;
+        $mesesElegidos = in_array((int) $this->meses, CalendarioSuscripcion::MESES_PAGABLES, true) ? (int) $this->meses : 1;
         $precioRenovacion = $suscripcion ? $suscripcion->precioRenovacion() : '0.00';
 
         $planSeleccionado = $this->planSeleccionadoId ? Plan::query()->find($this->planSeleccionadoId) : null;

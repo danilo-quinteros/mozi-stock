@@ -5,10 +5,13 @@ namespace App\Domain\Ventas\Actions;
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\CajaOperacion;
 use App\Domain\Caja\LibroCaja;
+use App\Domain\Despachos\Actions\CancelarEntregaDevuelta;
+use App\Domain\Despachos\HistorialEntrega;
 use App\Domain\Inventario\LibroStock;
 use App\Domain\Tenancy\Numerador;
 use App\Domain\Ventas\CalculadoraDevolucion;
 use App\Domain\Ventas\ValidadorPago;
+use App\Enums\EstadoEntrega;
 use App\Enums\EstadoFactura;
 use App\Enums\TipoOperacionInventario;
 use App\Models\Devolucion;
@@ -38,6 +41,15 @@ use Illuminate\Validation\ValidationException;
  * Decisiones del propietario (23/10/2026): solo administradores; importe automático. El efectivo
  * reembolsado sale, como un egreso, de un turno abierto de esa sucursal que el usuario opera o,
  * si el administrador lo indica, fuera de caja (01/11/2026, § 18.7).
+ *
+ * Con una venta Por despachar (ESPECIFICACION_DESPACHOS.md § 5.5) todo lo devuelto reingresa al stock y,
+ * si se devuelve todo, la venta pasa a Cancelado en la misma transacción. Con una venta En cocina
+ * (ESPECIFICACION_COCINA.md § 5.6) la devolución total también la cancela, pero el reingreso no se fuerza:
+ * la comida pudo haberse preparado. En los demás estados es una devolución normal y el estado de entrega
+ * no cambia.
+ *
+ * Las líneas de productos sin control de stock nunca reingresan, pida lo que pida la solicitud
+ * (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 4.3); si ninguna reingresa, la devolución queda sin operación.
  */
 final class RegistrarDevolucion
 {
@@ -47,6 +59,7 @@ final class RegistrarDevolucion
         private readonly CajaOperacion $cajas,
         private readonly Numerador $numerador,
         private readonly Auditor $auditor,
+        private readonly HistorialEntrega $historial,
     ) {}
 
     /**
@@ -72,8 +85,14 @@ final class RegistrarDevolucion
         }
 
         $items = VentaItem::query()->where('venta_id', $venta->id)->orderBy('orden')->orderBy('id')->get()->keyBy('id');
-        $reingresan = $items->filter(fn (VentaItem $item) => (bool) ($datos['lineas'][$item->id]['reingresa'] ?? false))
+        $sinControl = DB::table('productos')->where('empresa_id', $empresaId)->where('controla_stock', false)
+            ->whereIn('id', $items->pluck('producto_id')->unique()->values()->all())->pluck('id')->map(fn ($id) => (int) $id)->all();
+        // Por despachar, todo lo devuelto reingresa (se vuelve a comprobar con la venta bloqueada), salvo lo que no controla stock.
+        $reingresan = $items->filter(fn (VentaItem $item) => ! in_array($item->producto_id, $sinControl, true)
+            && ($venta->estado_entrega === EstadoEntrega::PorDespachar || (bool) ($datos['lineas'][$item->id]['reingresa'] ?? false)))
             ->pluck('producto_id')->unique();
+        // Con lotes y vencimientos, lo devuelto vuelve a los lotes de los que salió la venta (§ 5.5): sus saldos ya
+        // existen en la sucursal, así que aquí solo hacen falta las filas de stock_niveles.
         $this->libro->asegurarNiveles($empresaId, array_values($reingresan->map(fn ($productoId) => [
             'sucursal_id' => $venta->sucursal_id, 'producto_id' => (int) $productoId,
         ])->all()));
@@ -122,7 +141,12 @@ final class RegistrarDevolucion
             throw ValidationException::withMessages(['lineas' => __('La sucursal de la venta está inactiva; actívala para registrar la devolución.')]);
         }
 
-        $lineas = $this->prepararLineas($venta, $items, $datos['lineas']);
+        // Despachos § 5.5: antes del despacho la mercadería nunca salió del almacén, así que siempre reingresa.
+        $porDespachar = $venta->estado_entrega === EstadoEntrega::PorDespachar;
+        // Despachos § 5.5 y cocina § 5.6: devuelta por completo antes de llegar al cliente, se cancela.
+        $sinEntregar = $porDespachar || $venta->estado_entrega === EstadoEntrega::EnCocina;
+        $estadoAnterior = $venta->estado_entrega;
+        $lineas = $this->prepararLineas($venta, $items, $datos['lineas'], $porDespachar);
         $importe = array_reduce($lineas, fn (string $suma, array $l) => Decimal::sumar($suma, $l['importe'], 2), '0.00');
         $deuda = Decimal::comparar($importe, $venta->saldo_pendiente, 2) <= 0 ? $importe : $venta->saldo_pendiente;
         $reembolso = Decimal::restar($importe, $deuda, Decimal::ESCALA_DINERO);
@@ -133,6 +157,13 @@ final class RegistrarDevolucion
             : $this->cajas->resolver($actor, $venta->sucursal_id, $pago['efectivo'], (bool) ($datos['externo'] ?? false), 'externo', isset($datos['turno_id']) ? (int) $datos['turno_id'] : null);
         $fecha = Carbon::now();
         $cambios = [];
+        // Lotes (§ 5.5): LibroLotes lee el reparto de la venta y lo ya devuelto antes, con la venta bloqueada.
+        $origen = [
+            'salida' => (int) $venta->operacion_inventario_id,
+            'previas' => array_values(Devolucion::withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $venta->empresa_id)
+                ->where('venta_id', $venta->id)->whereNotNull('operacion_inventario_id')
+                ->pluck('operacion_inventario_id')->map(fn ($id): int => (int) $id)->all()),
+        ];
 
         foreach (array_filter($lineas, fn (array $l) => $l['reingresa']) as $linea) {
             $clave = $linea['producto_id'];
@@ -141,6 +172,7 @@ final class RegistrarDevolucion
                 'producto_id' => $linea['producto_id'],
                 'cantidad' => Decimal::sumar($cambios[$clave]['cantidad'] ?? '0', $linea['cantidad']),
                 'nombre' => $linea['descripcion'],
+                'devolucion' => $origen,
             ];
         }
 
@@ -188,8 +220,21 @@ final class RegistrarDevolucion
         $venta->saldo_pendiente = Decimal::restar($venta->saldo_pendiente, $deuda, Decimal::ESCALA_DINERO);
         $venta->devuelto = Decimal::sumar($venta->devuelto, $importe, Decimal::ESCALA_DINERO);
         $venta->reembolsado = Decimal::sumar($venta->reembolsado, $reembolso, Decimal::ESCALA_DINERO);
+        // Devuelta por completo antes del despacho o de salir de cocina: queda Cancelado y el despacho o la
+        // entrega que espera el bloqueo la encontrará cancelada. Una devolución parcial no cambia el estado.
+        $cancelada = $sinEntregar && CancelarEntregaDevuelta::devueltaPorCompleto($venta);
+
+        if ($cancelada) {
+            $venta->estado_entrega = EstadoEntrega::Cancelado;
+        }
+
         $venta->save();
         $this->reducirCuotas($venta, $deuda);
+
+        if ($cancelada) {
+            $this->historial->registrar($venta, $estadoAnterior, EstadoEntrega::Cancelado, $actor, $fecha,
+                mb_substr(__('Devolución :codigo', ['codigo' => $devolucion->codigo()]), 0, 250));
+        }
 
         if ($pago !== null) {
             $this->caja->registrar($actor, $venta->sucursal_id, 'egreso',
@@ -202,7 +247,7 @@ final class RegistrarDevolucion
             'devolucion' => $devolucion->codigo(), 'importe' => $importe, 'deuda_reducida' => $deuda,
             'reembolso' => $reembolso, 'metodo' => $pago === null ? null : $pago['metodo']->value, 'lineas' => count($lineas),
             'turno_caja_id' => $caja['turno_id'], 'externo' => $caja['externo'],
-        ]);
+        ] + ($cancelada ? ['estado_entrega' => EstadoEntrega::Cancelado->value] : []));
 
         return $devolucion;
     }
@@ -213,9 +258,10 @@ final class RegistrarDevolucion
      *
      * @param  Collection<int, VentaItem>  $items
      * @param  array<int|string, array{cantidad?: mixed, reingresa?: bool}>  $solicitadas
+     * @param  bool  $reingresoForzado  venta Por despachar: todas las líneas que controlan stock reingresan, pida lo que pida la solicitud
      * @return list<array{venta_item_id: int, producto_id: int, descripcion: string, cantidad: string, importe: string, reingresa: bool}>
      */
-    private function prepararLineas(Venta $venta, Collection $items, array $solicitadas): array
+    private function prepararLineas(Venta $venta, Collection $items, array $solicitadas, bool $reingresoForzado = false): array
     {
         $previas = self::devueltoPorLinea($venta->empresa_id, array_values($items->keys()->all()));
         $netos = CalculadoraDevolucion::netosPorLinea($items->map(fn (VentaItem $i) => $i->total)->all(), $venta->descuento_global);
@@ -229,6 +275,15 @@ final class RegistrarDevolucion
                     ->orWhere('unidades_medida.admite_decimales', false);
             })
             ->pluck('productos.id')->map(fn ($id) => (int) $id)->all();
+        // Marca leída con bloqueo compartido, como en la venta: no cambia mientras se registra la devolución.
+        $controlan = DB::table('productos')
+            ->where('empresa_id', $venta->empresa_id)
+            ->whereIn('id', $items->pluck('producto_id')->unique()->values()->all())
+            ->orderBy('id')
+            ->sharedLock()
+            ->pluck('controla_stock', 'id')
+            ->mapWithKeys(fn ($controla, $id) => [(int) $id => (bool) $controla])
+            ->all();
         $lineas = [];
         $errores = [];
 
@@ -267,7 +322,8 @@ final class RegistrarDevolucion
                     'descripcion' => $item->descripcion,
                     'cantidad' => $cantidad,
                     'importe' => CalculadoraDevolucion::importe($netos[$item->id], $item->cantidad, $devueltas, $cantidad),
-                    'reingresa' => (bool) ($solicitud['reingresa'] ?? false),
+                    // Sin control de stock no hay saldo al que volver (§ 4.3).
+                    'reingresa' => ($controlan[$item->producto_id] ?? true) && ($reingresoForzado || (bool) ($solicitud['reingresa'] ?? false)),
                 ];
             }
         }

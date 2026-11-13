@@ -23,6 +23,7 @@ class PlanFactory extends Factory
             'descripcion' => fake()->sentence(),
             'precio_mensual' => '150.00',
             'siat_habilitado' => false,
+            'agente_ia' => false,
             'activo' => true,
             'orden' => fake()->numberBetween(1, 10),
         ];
@@ -34,6 +35,17 @@ class PlanFactory extends Factory
             'titulo' => 'Inventarios + Facturación SIAT',
             'precio_mensual' => '300.00',
             'siat_habilitado' => true,
+        ]);
+    }
+
+    /** Plan con SIAT y el Agente Mozi (IA), como el tercer plan comercial. */
+    public function agenteIa(): static
+    {
+        return $this->state(fn () => [
+            'titulo' => 'Agente Mozi: Tu Ayudante con IA',
+            'precio_mensual' => '599.00',
+            'siat_habilitado' => true,
+            'agente_ia' => true,
         ]);
     }
 }

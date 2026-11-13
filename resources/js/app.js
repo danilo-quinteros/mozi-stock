@@ -212,3 +212,97 @@ function dispatchScannedBarcode(barcode) {
 
 initBarcodeScanner();
 
+
+// ==========================================================================
+// Errores de validación: aviso rojo abajo a la derecha
+// ==========================================================================
+// Al pulsar un botón (acción Livewire) o enviar un formulario clásico, si el servidor devuelve errores de validación,
+// además del mensaje bajo cada campo se muestra un aviso con el primero: el campo puede quedar fuera de la pantalla.
+// Pulsar el aviso lleva al primer campo marcado. Solo muestra lo que respondió el servidor; no valida nada.
+function textosValidacion() {
+    const meta = document.querySelector('meta[name="mozistock-validacion"]');
+
+    return { mas: meta?.dataset.mas ?? '(+:n)', ver: meta?.dataset.ver ?? '' };
+}
+
+function irAlPrimerError() {
+    const marca = document.querySelector('[aria-invalid="true"], .auth-error, .field-error');
+
+    if (! marca) {
+        return;
+    }
+
+    marca.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const campo = marca.matches('input, select, textarea')
+        ? marca
+        : marca.closest('.field, .pos-field, .rapid-field, td, label')?.querySelector('input:not([type=hidden]), select, textarea');
+    campo?.focus({ preventScroll: true });
+}
+
+export function mostrarErrorValidacion(mensaje, total = 1) {
+    let host = document.getElementById('toast-validacion');
+
+    if (! host) {
+        host = document.createElement('div');
+        host.id = 'toast-validacion';
+        host.className = 'toast-host';
+        host.setAttribute('role', 'alert');
+        host.setAttribute('aria-live', 'assertive');
+        document.body.appendChild(host);
+    }
+
+    const textos = textosValidacion();
+    const aviso = document.createElement('button');
+    aviso.type = 'button';
+    aviso.className = 'toast danger toast-validacion';
+    aviso.textContent = total > 1 ? `${mensaje} ${textos.mas.replace(':n', String(total - 1))}` : mensaje;
+    aviso.title = textos.ver;
+    aviso.addEventListener('click', () => {
+        irAlPrimerError();
+        aviso.remove();
+    });
+
+    host.replaceChildren(aviso);
+    clearTimeout(host.ocultar);
+    host.ocultar = setTimeout(() => aviso.remove(), 6000);
+}
+
+window.mostrarErrorValidacion = mostrarErrorValidacion;
+
+function erroresDe(snapshot) {
+    let datos = snapshot;
+
+    if (typeof datos === 'string') {
+        try { datos = JSON.parse(datos); } catch (_) { return []; }
+    }
+
+    return Object.values(datos?.memo?.errors ?? {}).flat().filter(mensaje => typeof mensaje === 'string' && mensaje !== '');
+}
+
+document.addEventListener('livewire:init', () => {
+    window.Livewire.hook('commit', ({ commit, succeed }) => {
+        // Solo acciones del usuario (guardar, confirmar, revisar...); escribir en un campo no muestra el aviso.
+        const acciones = (commit?.calls ?? []).filter(llamada => ! String(llamada.method ?? '').startsWith('$') && ! String(llamada.method ?? '').startsWith('_'));
+
+        if (acciones.length === 0) {
+            return;
+        }
+
+        succeed(({ snapshot }) => {
+            const errores = erroresDe(snapshot);
+
+            if (errores.length > 0) {
+                mostrarErrorValidacion(errores[0], errores.length);
+            }
+        });
+    });
+});
+
+// Formularios clásicos (sin Livewire): los errores vuelven en la recarga y el layout los deja en la meta.
+document.addEventListener('DOMContentLoaded', () => {
+    const meta = document.querySelector('meta[name="mozistock-validacion"]');
+
+    if (meta?.dataset.primero) {
+        mostrarErrorValidacion(meta.dataset.primero, Number(meta.dataset.total ?? 1));
+    }
+});

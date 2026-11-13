@@ -7,6 +7,7 @@ use App\Domain\Ventas\Actions\GuardarPedido;
 use App\Models\AgenteMensaje;
 use App\Models\Empresa;
 use App\Models\Pedido;
+use App\Models\Plan;
 use App\Models\Producto;
 use App\Models\Sucursal;
 use App\Models\User;
@@ -31,6 +32,19 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+// Las pruebas de Agente Mozi cubren cómo funciona el agente, no quién lo tiene contratado: cada empresa
+// que crean nace con el plan que incluye al agente. El acceso por plan se prueba en
+// Suscripciones/AgentePorPlanTest. Inserción directa: sin eventos de modelo ni contexto de empresa.
+pest()->beforeEach(function () {
+    Empresa::created(function (Empresa $empresa): void {
+        $plan = Plan::query()->firstOrCreate(['codigo' => 'agente-pruebas'], Plan::factory()->agenteIa()->raw(['codigo' => 'agente-pruebas']));
+        DB::table('suscripciones')->insert([
+            'empresa_id' => $empresa->id, 'plan_id' => $plan->id, 'precio_mensual' => '599.00',
+            'dia_vencimiento' => 31, 'vencimiento' => '2099-12-31', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    });
+})->in('Feature/AgenteMozi');
 
 /*
 |--------------------------------------------------------------------------

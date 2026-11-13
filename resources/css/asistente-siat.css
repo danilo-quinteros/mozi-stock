@@ -1,0 +1,87 @@
+/* Asistente de conexión con el SIN (Facturación → Datos fiscales). Solo usa las variables del design system. */
+.asis{overflow:hidden}
+.asis-top{display:flex;align-items:center;gap:16px;padding:22px 26px;border-bottom:1px solid var(--border-soft)}
+.asis-top h2{margin:0 0 5px;font-size:19px;line-height:1.25;letter-spacing:-.035em;color:var(--text-strong)}
+.asis-top p{margin:0;color:var(--muted);font-size:12.5px}
+.asis-sello{flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:14px;background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--brand-bright)}
+.asis-cuerpo{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px;padding:22px 26px 24px}
+
+.asis-pasos{display:flex;flex-direction:column;gap:6px}
+.asis-paso{width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid transparent;border-radius:12px;background:transparent;color:var(--text);transition:background .2s,border-color .2s}
+.asis-paso:hover{background:var(--panel-soft)}
+.asis-paso.active{background:var(--accent-soft);border-color:var(--accent-border)}
+.asis-paso b{display:block;font-size:13px;color:var(--text-strong)}
+.asis-paso small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+.asis-paso.error small{color:var(--red)}
+.asis-num{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--panel-elevated);color:var(--muted);font-size:12px;font-weight:780}
+.asis-paso.active .asis-num{border-color:var(--brand);color:var(--brand-bright)}
+.asis-num.done{background:var(--green);border-color:var(--green);color:#fff}
+.asis-num.error{background:var(--red);border-color:var(--red);color:#fff}
+
+.asis-main{min-width:0;display:flex;flex-direction:column;gap:16px}
+.asis-panel{border:1px solid var(--border);border-radius:14px;padding:22px 24px;background:var(--panel)}
+.asis-panel fieldset{border:0;padding:0;margin:0;min-width:0}
+.asis-panel h3{margin:0 0 10px;font-size:16px;letter-spacing:-.025em;color:var(--text-strong)}
+.asis-lead{margin:0 0 18px;color:var(--muted);font-size:12.5px;line-height:1.6;max-width:760px}
+
+.asis-opciones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.asis-opcion{text-align:left;display:flex;flex-direction:column;gap:6px;padding:16px 18px;border:1.5px solid var(--border);border-radius:12px;background:var(--panel-soft);color:var(--text);transition:border-color .2s,background .2s,transform .2s}
+.asis-opcion:hover{border-color:var(--accent-border);transform:translateY(-1px)}
+.asis-opcion.active{border-color:var(--brand);background:var(--accent-soft)}
+.asis-opcion b{font-size:14px;color:var(--text-strong)}
+.asis-opcion span{font-size:12px;color:var(--muted);line-height:1.5}
+.asis-opcion em{font-style:normal;font-size:11.5px;font-weight:750;color:var(--brand-bright)}
+.asis-nota{display:flex;align-items:center;gap:9px;margin-top:14px;padding:11px 14px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--text);font-size:12px}
+.asis-nota .ico{color:var(--brand-bright)}
+
+.asis-datos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.asis-dato{padding:12px 14px;border-radius:11px;background:var(--panel-soft);border:1px solid var(--border-soft);min-width:0}
+.asis-dato small{display:block;font-size:10.5px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.asis-dato b,.asis-dato code{font-size:13px;color:var(--text-strong);overflow-wrap:anywhere}
+.asis-dato code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;letter-spacing:.04em}
+.asis-ancho{grid-column:1/-1}
+
+.asis-resultado{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--panel-soft)}
+.asis-resultado b{display:block;font-size:13px;color:var(--text-strong);margin-bottom:3px}
+.asis-resultado p{margin:0;font-size:12px;color:var(--muted);line-height:1.55;overflow-wrap:anywhere}
+.asis-resultado .ico{flex:none;margin-top:1px;color:var(--muted)}
+.asis-resultado.verificado,.asis-resultado.correcto{border-color:rgba(107,202,146,.3);background:rgba(107,202,146,.07)}
+.asis-resultado.verificado .ico,.asis-resultado.correcto .ico{color:var(--green)}
+.asis-resultado.error{border-color:rgba(240,141,129,.32);background:rgba(240,141,129,.07)}
+.asis-resultado.error .ico{color:var(--red)}
+.asis-resultado.pendiente{border-color:var(--accent-border);background:var(--accent-soft)}
+.asis-resultado.pendiente .ico{color:var(--brand-bright)}
+.asis-resultado.grande{margin:0 0 14px;padding:16px 18px}
+.asis-resultado.grande b{font-size:15px}
+.asis-pie-nota{margin:14px 0 0;font-size:11.5px}
+
+.asis-revision{display:grid;gap:8px}
+.asis-fila{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border-radius:11px;background:var(--panel-soft);border:1px solid var(--border-soft)}
+.asis-fila b{display:block;font-size:12.5px;color:var(--text-strong)}
+.asis-fila small{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.asis-fila .badge,.asis-fila .btn{flex:none}
+
+.asis-acciones{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+@media(max-width:900px){
+  .asis-cuerpo{grid-template-columns:1fr;padding:16px}
+  .asis-pasos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .asis-datos{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .asis-top{padding:18px 16px;align-items:flex-start;flex-wrap:wrap}
+  .asis-sello{width:42px;height:42px}
+  .asis-opciones{grid-template-columns:1fr}
+  .asis-panel{padding:16px}
+  .asis-top h2{font-size:17px}
+  .asis-pasos{gap:6px}
+  .asis-paso{padding:8px;gap:8px;min-width:0}
+  .asis-paso .grow{min-width:0}
+  .asis-paso b{font-size:12px;overflow-wrap:anywhere}
+  .asis-paso small{display:none}
+  .asis-num{width:26px;height:26px;font-size:11px}
+  .asis-acciones{flex-wrap:wrap}
+  .asis-acciones .btn{flex:1}
+  .asis-fila{flex-wrap:wrap}
+}
+.asis-valores{scroll-margin-top:20px}

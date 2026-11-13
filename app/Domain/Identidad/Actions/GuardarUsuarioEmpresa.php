@@ -3,6 +3,8 @@
 namespace App\Domain\Identidad\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Tenancy\CapacidadesEmpresa;
+use App\Enums\Capacidad;
 use App\Enums\Rol;
 use App\Models\Caja;
 use App\Models\Sucursal;
@@ -20,13 +22,18 @@ use Illuminate\Validation\ValidationException;
  * el vendedor queda fijado a una sucursal activa de la misma empresa y a una caja activa de
  * esa sucursal (Decisión C); varios vendedores pueden compartir la misma caja.
  * Los usuarios no se eliminan: se desactivan para conservar la trazabilidad.
+ * Con la capacidad «despachos», el vendedor puede llevar el permiso de almacén (puede despachar las ventas de
+ * su sucursal); el administrador siempre puede, así que la marca solo se guarda en vendedores.
  */
 final class GuardarUsuarioEmpresa
 {
-    public function __construct(private readonly Auditor $auditor) {}
+    public function __construct(
+        private readonly Auditor $auditor,
+        private readonly CapacidadesEmpresa $capacidades,
+    ) {}
 
     /**
-     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, password: string, activo: bool}  $datos
+     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, password: string, activo: bool, puede_despachar?: bool}  $datos
      */
     public function crear(User $actor, array $datos): User
     {
@@ -49,7 +56,7 @@ final class GuardarUsuarioEmpresa
     }
 
     /**
-     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, password?: string|null, activo: bool}  $datos
+     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, password?: string|null, activo: bool, puede_despachar?: bool}  $datos
      */
     public function actualizar(User $actor, User $usuario, array $datos): User
     {
@@ -130,7 +137,7 @@ final class GuardarUsuarioEmpresa
     }
 
     /**
-     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, activo: bool}  $datos
+     * @param  array{name: string, email: string, rol: Rol, sucursal_id: int|null, caja_id?: int|null, activo: bool, puede_despachar?: bool}  $datos
      */
     private function aplicar(User $actor, User $usuario, array $datos): void
     {
@@ -196,6 +203,14 @@ final class GuardarUsuarioEmpresa
         $usuario->sucursal_id = $sucursalId;
         $usuario->caja_id = $cajaId;
         $usuario->activo = $datos['activo'];
+
+        // Permiso de almacén: sin la capacidad, o si el dato no llega (p. ej. al asignar caja), se conserva.
+        if ($datos['rol'] !== Rol::Vendedor) {
+            $usuario->puede_despachar = false;
+        } elseif (array_key_exists('puede_despachar', $datos)
+            && $this->capacidades->tiene((int) $actor->empresa_id, Capacidad::Despachos)) {
+            $usuario->puede_despachar = $datos['puede_despachar'];
+        }
     }
 
     /**
@@ -210,6 +225,7 @@ final class GuardarUsuarioEmpresa
             'sucursal_id' => $usuario->sucursal_id,
             'caja_id' => $usuario->caja_id,
             'activo' => $usuario->activo,
+            'puede_despachar' => $usuario->puede_despachar,
         ];
     }
 }

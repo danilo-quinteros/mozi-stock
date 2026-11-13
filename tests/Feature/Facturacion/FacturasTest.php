@@ -10,15 +10,18 @@ use App\Domain\Facturacion\Montos\CalculadoraFiscal;
 use App\Domain\Ventas\Actions\ConfirmarVenta;
 use App\Domain\Ventas\Actions\RegistrarDevolucion;
 use App\Enums\EstadoFactura;
+use App\Enums\MetodoPago;
 use App\Enums\ModoFacturacion;
 use App\Http\Controllers\ImpersonacionController;
 use App\Jobs\Siat\EnviarFactura;
-use App\Livewire\Facturacion\Datos;
+use App\Livewire\Facturacion\Asistente;
 use App\Livewire\Facturacion\Facturas;
 use App\Livewire\Pedidos\Editor;
+use App\Livewire\Pedidos\Lista as PedidosLista;
 use App\Livewire\Ventas\Factura;
 use App\Livewire\Ventas\Pos;
 use App\Models\Auditoria;
+use App\Models\Cliente;
 use App\Models\MovimientoCaja;
 use App\Models\PagoVenta;
 use App\Models\Scopes\EmpresaScope;
@@ -267,6 +270,61 @@ test('una factura rechazada se corrige y vuelve a la cola conservando su número
     Queue::assertPushed(EnviarFactura::class, 2);
 });
 
+test('una factura que quedó sin método de pago fiscal lo toma del pago de la venta al reintentar', function () {
+    Queue::fake();
+    $datos = empresaFacturable();
+    // Así la registra la venta cuando aún no había catálogos sincronizados: sin método fiscal.
+    $factura = facturaDe(ventaFacturable($datos, factura: new DatosFactura(DatosFactura::TIPO_NIT, DatosFactura::SIN_DATOS_DOCUMENTO, null,
+        DatosFactura::SIN_DATOS_RAZON_SOCIAL, null, codigoExcepcion: 1)));
+
+    expect($factura->estado)->toBe(EstadoFactura::Bloqueada)
+        ->and($factura->motivo)->toContain('Falta elegir el método de pago fiscal.');
+
+    // «Corregir datos y reintentar» propone el método de la venta (efectivo).
+    Livewire::actingAs($datos['admin'])->test(Factura::class, ['ventaId' => $factura->venta_id])
+        ->call('abrirCorreccion', $factura->id)
+        ->assertSet('factura.metodo_pago', '1');
+
+    $corregida = app(EmitirFactura::class)->reintentar($datos['admin'], $factura);
+
+    expect($corregida->metodo_pago)->toBe(1)
+        ->and($corregida->estado)->toBe(EstadoFactura::Pendiente);
+});
+
+test('un producto sin código / SKU deja la factura bloqueada con el motivo, también al consultar al SIN', function () {
+    Queue::fake();
+    $datos = empresaFacturable();
+    $datos['producto']->forceFill(['sku' => null])->save();
+
+    $factura = facturaDe(ventaFacturable($datos));
+    expect($factura->estado)->toBe(EstadoFactura::Bloqueada)
+        ->and($factura->motivo)->toContain('Falta el código / SKU en: '.$datos['producto']->nombre);
+
+    // Factura registrada antes de esta validación: pendiente con una línea sin código. Al emitir se bloquea, sin error de tipos.
+    $datos['producto']->forceFill(['sku' => 'MED-01'])->save();
+    $vieja = facturaDe(ventaFacturable($datos));
+    $vieja->forceFill(['lineas' => array_map(fn (array $l): array => ['codigo_producto' => null] + $l, $vieja->lineas)])->save();
+
+    expect(app(EmisionFacturas::class)->procesar($datos['empresa']->id, $vieja->id))->toBeFalse()
+        ->and($vieja->refresh()->estado)->toBe(EstadoFactura::Bloqueada)
+        ->and($vieja->motivo)->toContain('Falta el código / SKU en:');
+});
+
+test('en Pedidos y ventas, la venta con factura validada tiene «Imprimir factura» y en POS el menú marca Pedidos', function () {
+    Queue::fake();
+    $datos = empresaFacturable();
+    $factura = facturaDe(ventaFacturable($datos));
+    $factura->forceFill(['estado' => EstadoFactura::Validada, 'xml' => '<facturaComputarizadaCompraVenta/>'])->save();
+    ventaFacturable($datos); // otra venta con la factura aún pendiente: sin enlace
+
+    $html = Livewire::actingAs($datos['admin'])->test(PedidosLista::class)->html();
+    expect(substr_count($html, 'data-test="imprimir-factura"'))->toBe(1)
+        ->and($html)->toContain(route('facturas.imprimir', $factura));
+
+    $this->actingAs($datos['admin'])->get(route('pos'))->assertOk()
+        ->assertSee('class="nav-item active" href="'.route('pedidos.index').'"', false);
+});
+
 test('anular y revertir en el SIN; durante «Entrar como» no se permite', function () {
     $datos = empresaFacturable();
     $this->transporte->responder(respuestaSin(908));
@@ -370,7 +428,7 @@ test('venta a crédito con cuota inicial sugiere método fiscal compuesto y conf
     $this->actingAs($datos['admin']);
     cargarStock($datos['admin'], $datos['sucursal'], $datos['producto'], '10');
 
-    $cliente = \App\Models\Cliente::create([
+    $cliente = Cliente::create([
         'empresa_id' => $datos['empresa']->id,
         'nombre' => 'Ana Morales',
         'documento' => '5566778',
@@ -380,7 +438,7 @@ test('venta a crédito con cuota inicial sugiere método fiscal compuesto y conf
     // Método sugerido: 34 (EFECTIVO – PAGO POSTERIOR)
     $metodoSugerido = DatosFactura::metodoSugerido(
         $datos['empresa']->id,
-        \App\Enums\MetodoPago::Efectivo,
+        MetodoPago::Efectivo,
         conSaldo: true,
         electronicoEmpresa: null,
     );
@@ -410,13 +468,13 @@ test('metodoSugerido propone códigos correctos para crédito y contado', functi
 
     // Con saldo (a crédito)
     expect(DatosFactura::metodoSugerido($id, null, conSaldo: true))->toBe(33)
-        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Efectivo, conSaldo: true))->toBe(34)
-        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Electronico, conSaldo: true))->toBe(57);
+        ->and(DatosFactura::metodoSugerido($id, MetodoPago::Efectivo, conSaldo: true))->toBe(34)
+        ->and(DatosFactura::metodoSugerido($id, MetodoPago::Electronico, conSaldo: true))->toBe(57);
 
     // Sin saldo (al contado)
-    expect(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Efectivo, conSaldo: false))->toBe(1)
-        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Electronico, conSaldo: false))->toBe(7)
-        ->and(DatosFactura::metodoSugerido($id, \App\Enums\MetodoPago::Mixto, conSaldo: false))->toBe(13);
+    expect(DatosFactura::metodoSugerido($id, MetodoPago::Efectivo, conSaldo: false))->toBe(1)
+        ->and(DatosFactura::metodoSugerido($id, MetodoPago::Electronico, conSaldo: false))->toBe(7)
+        ->and(DatosFactura::metodoSugerido($id, MetodoPago::Mixto, conSaldo: false))->toBe(13);
 });
 
 test('en modo manual la confirmación no factura si no se marca y avisa cuando el total no es facturable', function () {
@@ -488,7 +546,7 @@ test('los datos fiscales aceptan solo actividad, producto y unidad de los catál
 test('la pantalla de datos fiscales ofrece solo los productos SIN de la actividad elegida', function () {
     $datos = empresaFacturable();
 
-    Livewire::actingAs($datos['admin'])->test(Datos::class, ['empresaId' => $datos['empresa']->id])
+    Livewire::actingAs($datos['admin'])->test(Asistente::class, ['empresaId' => $datos['empresa']->id])
         ->assertSet('actividad_economica', ACTIVIDAD_PRUEBA)
         ->assertSee('62271 · MEDICAMENTOS')
         ->assertDontSee('83141 · SERVICIOS DE SOFTWARE')

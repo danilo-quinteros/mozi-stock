@@ -39,8 +39,14 @@
                                     @endif
                                 </td>
                                 <td data-label="{{ __('Vuelve al stock') }}">
-                                    @if (Decimal::comparar($fila['disponible'], '0') > 0)
-                                        <label class="row"><input type="checkbox" wire:model.live="lineas.{{ $item->id }}.reingresa" aria-label="{{ __(':producto vuelve al stock', ['producto' => $item->descripcion]) }}"><span class="subtle">{{ __('Sí') }}</span></label>
+                                    @if (! $fila['controla_stock'])
+                                        <span class="subtle" data-sin-control title="{{ __('Este producto no controla stock: no hay stock al que volver.') }}">{{ __('No controla stock') }}</span>
+                                    @elseif (Decimal::comparar($fila['disponible'], '0') > 0)
+                                        @if ($porDespachar)
+                                            <label class="row" title="{{ __('La venta está Por despachar: la mercadería sigue en el almacén.') }}"><input type="checkbox" checked disabled aria-label="{{ __(':producto vuelve al stock', ['producto' => $item->descripcion]) }}"><span class="subtle">{{ __('Sí') }}</span></label>
+                                        @else
+                                            <label class="row"><input type="checkbox" wire:model.live="lineas.{{ $item->id }}.reingresa" aria-label="{{ __(':producto vuelve al stock', ['producto' => $item->descripcion]) }}"><span class="subtle">{{ __('Sí') }}</span></label>
+                                        @endif
                                     @else
                                         —
                                     @endif
@@ -55,7 +61,14 @@
                 @if ($errors->has('lineas'))
                     @foreach ($errors->get('lineas') as $mensaje)<p class="danger-text" style="margin:0 0 4px">{{ $mensaje }}</p>@endforeach
                 @else
-                    {{ __('Cada unidad vale lo que se cobró por ella (con sus descuentos). Desmarca «Vuelve al stock» si el producto está dañado.') }}
+                    @if ($porDespachar)
+                        <span data-aviso-por-despachar>{{ __('La venta está Por despachar: la mercadería sigue en el almacén, así que todo vuelve al stock. Si devuelves todo, la venta queda Cancelada.') }}</span>
+                    @elseif ($enCocina)
+                        {{-- Cocina § 5.6: no se fuerza el reingreso, porque la comida pudo haberse preparado. --}}
+                        <span data-aviso-en-cocina>{{ __('El pedido está En cocina: si devuelves todo, queda Cancelado y sale de la lista. Marca «Vuelve al stock» solo si el producto no se usó.') }}</span>
+                    @else
+                        {{ __('Cada unidad vale lo que se cobró por ella (con sus descuentos). Desmarca «Vuelve al stock» si el producto está dañado.') }}
+                    @endif
                 @endif
             </div>
         </section>

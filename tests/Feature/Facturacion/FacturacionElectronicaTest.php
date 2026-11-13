@@ -2,14 +2,16 @@
 
 use App\Domain\Facturacion\Actions\GuardarDatosFiscales;
 use App\Domain\Facturacion\EmisionFacturas;
-use App\Domain\Facturacion\Firma\FirmadorXmlDSig;
+use App\Domain\Ventas\Actions\ConfirmarVenta;
+use App\Enums\EstadoFactura;
 use App\Enums\ModalidadFacturacion;
 use App\Enums\ModoFacturacion;
-use App\Livewire\Facturacion\Datos;
+use App\Livewire\Facturacion\Asistente;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\SiatConfiguracion;
 use App\Models\SiatFactura;
 use App\Models\Venta;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -116,7 +118,7 @@ function crearVentaParaPrueba(array $datos): Venta
     cargarStock($datos['admin'], $datos['sucursal'], $datos['producto'], '50');
     $pedido = crearPedido($datos['admin'], $datos['sucursal'], [['producto_id' => $datos['producto']->id, 'cantidad' => '1']]);
 
-    return app(\App\Domain\Ventas\Actions\ConfirmarVenta::class)->ejecutar($datos['admin'], $pedido, [
+    return app(ConfirmarVenta::class)->ejecutar($datos['admin'], $pedido, [
         'metodo' => 'efectivo',
         'en_cuotas' => false,
         'cuota_inicial' => null,
@@ -137,16 +139,16 @@ test('las empresas tienen por defecto la modalidad computarizada', function () {
         ->and($configuracion->tieneCertificado())->toBeFalse();
 });
 
-test('cambiar a modalidad electrónica sin certificado falla la validación', function () {
+test('el paso de firma digital exige el archivo .p12', function () {
     $datos = empresaParaPruebaElectronica();
 
     test()->actingAs($datos['admin']);
 
-    Livewire::test(Datos::class, ['empresaId' => $datos['empresa']->id])
-        ->set('modalidad', 'electronica')
+    Livewire::test(Asistente::class, ['empresaId' => $datos['empresa']->id])
+        ->call('ir', 'firma')
         ->set('certificado', null)
         ->set('certificado_pass', '')
-        ->call('guardarDatos')
+        ->call('guardarFirma')
         ->assertHasErrors(['certificado']);
 });
 
@@ -158,11 +160,11 @@ test('subir un archivo .p12 con contraseña incorrecta es rechazado y no se guar
 
     test()->actingAs($datos['admin']);
 
-    Livewire::test(Datos::class, ['empresaId' => $datos['empresa']->id])
-        ->set('modalidad', 'electronica')
+    Livewire::test(Asistente::class, ['empresaId' => $datos['empresa']->id])
+        ->call('ir', 'firma')
         ->set('certificado', $archivo)
         ->set('certificado_pass', 'ClaveIncorrecta')
-        ->call('guardarDatos')
+        ->call('guardarFirma')
         ->assertHasErrors(['certificado_pass']);
 
     expect(Storage::disk('local')->allFiles('certificados'))->toBeEmpty();
@@ -177,11 +179,14 @@ test('subir archivo .p12 con contraseña correcta guarda en storage privado y ci
 
     test()->actingAs($datos['admin']);
 
-    Livewire::test(Datos::class, ['empresaId' => $datos['empresa']->id])
-        ->set('modalidad', 'electronica')
+    // Pasar a electrónica cambia la modalidad que el SIN debe aceptar: el asistente vuelve a verificar.
+    test()->transporte->responder(SiatPruebas::cuis());
+
+    Livewire::test(Asistente::class, ['empresaId' => $datos['empresa']->id])
+        ->call('ir', 'firma')
         ->set('certificado', $archivo)
         ->set('certificado_pass', $claveReal)
-        ->call('guardarDatos')
+        ->call('guardarFirma')
         ->assertHasNoErrors();
 
     $configuracion = SiatConfiguracion::withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $datos['empresa']->id)->first();
@@ -286,7 +291,7 @@ test('aislamiento: el certificado y modalidad de una empresa no interfieren con 
             'modo' => 'automatica',
             'modalidad' => 'computarizada',
         ]);
-    })->toThrow(\Illuminate\Auth\Access\AuthorizationException::class);
+    })->toThrow(AuthorizationException::class);
 });
 
 test('si el SIN responde con error 1003 (CUFD invalido), se renueva automaticamente el CUFD y se valida la factura', function () {
@@ -350,7 +355,7 @@ test('si el SIN responde con error 1003 (CUFD invalido), se renueva automaticame
 
     $facturaRefrescada = $factura->fresh();
 
-    expect($facturaRefrescada->estado)->toBe(\App\Enums\EstadoFactura::Validada)
+    expect($facturaRefrescada->estado)->toBe(EstadoFactura::Validada)
         ->and($facturaRefrescada->codigo_estado)->toBe(908)
         ->and($facturaRefrescada->intentos)->toBe(2)
         ->and($facturaRefrescada->cuf)->toContain('A19E23EF34124CD');

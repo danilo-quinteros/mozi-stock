@@ -1,0 +1,140 @@
+/* Tallas y colores (ESPECIFICACION_TALLAS_Y_COLORES.md § 3 a § 5). Usa los tokens existentes; claro y oscuro salen de
+   las mismas variables. */
+
+/* El rótulo sr-only (absoluto) de las columnas de acción queda dentro del desplazamiento de la tabla: sin esto, a
+   375 px ensancha la página. */
+.variantes-cuadricula, .variantes-tabla, .catalogo-tabla { position: relative; }
+
+/* Configuración → Tallas y colores. */
+.variantes-vacio .notice p { margin: 6px 0 0; }
+.variantes-listas { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.talla-grupo { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border-soft); border-radius: 14px; background: var(--panel-soft); }
+.talla-grupo.is-inactivo { opacity: .72; }
+.talla-grupo-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.talla-grupo-head b { color: var(--text-strong); }
+.talla-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.talla-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color .2s, background .2s, color .2s; }
+.talla-chip:hover { border-color: var(--accent-border); color: var(--text-strong); }
+.talla-chip small { min-width: 18px; padding: 1px 5px; border-radius: 999px; background: var(--accent-soft); color: var(--brand-bright); font-size: 10px; text-align: center; }
+.talla-chip.is-inactiva { color: var(--faint); text-decoration: line-through; }
+.talla-agregar { display: inline-flex; align-items: center; gap: 6px; }
+.talla-agregar .input { width: 120px; min-height: 32px; padding: 0 10px; font-size: 12px; }
+.color-nombre { display: inline-flex; align-items: center; gap: 8px; }
+.color-muestra { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); background: repeating-linear-gradient(45deg, var(--panel-soft) 0 3px, var(--border-soft) 3px 6px); }
+.color-selector { width: 48px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); cursor: pointer; }
+
+/* Formulario del modelo: tallas y colores a marcar. */
+.variantes-eleccion { display: grid; gap: 16px; }
+.variantes-eleccion > .field:first-child .select { max-width: 320px; }
+.variantes-eleccion-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.variantes-eleccion-head .field-label { margin: 0 auto 0 0; }
+.variante-opciones { display: flex; flex-wrap: wrap; gap: 7px; }
+.variante-opcion { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color .2s, background .2s; }
+.variante-opcion input { position: absolute; opacity: 0; pointer-events: none; }
+.variante-opcion:has(input:checked) { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-strong); }
+.variante-opcion:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.variante-opcion.is-inactiva { color: var(--faint); }
+
+/* Cuadrícula de combinaciones (formulario) y de stock (detalle). */
+.variantes-resumen { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.variantes-cuadricula th[scope="row"] { text-align: left; white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 700; color: var(--text-strong); }
+.variantes-cuadricula thead th { text-align: center; white-space: nowrap; }
+/* Tallas del encabezado (formulario, detalle del modelo y selector de venta): la regla base de th (10 px, mayúsculas y
+   color tenue) las dejaba casi invisibles. Se leen como rótulos, con fondo suave y línea de acento. */
+.variantes-cuadricula thead th[scope="col"] {
+    padding: 10px 12px;
+    background: var(--panel-soft);
+    border-bottom: 2px solid var(--accent-border);
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+}
+.variantes-cuadricula thead th[scope="col"]:first-child { background: transparent; border-bottom-color: var(--border); }
+.variantes-cuadricula thead th[scope="col"]:nth-child(2) { border-top-left-radius: 10px; }
+.variantes-cuadricula thead th[scope="col"]:last-child { border-top-right-radius: 10px; }.variante-celda { min-width: 168px; vertical-align: top; }
+.variante-celda .input { width: 100%; min-height: 32px; padding: 0 9px; font-size: 12px; margin-top: 6px; }
+.variante-celda .input.is-error { border-color: var(--red); }
+.variante-celda .auth-error { margin: 4px 0 0; font-size: 10.5px; }
+.variante-celda.is-omitida { background: var(--panel-soft); }
+.variante-celda.is-omitida small { display: block; margin-top: 6px; }
+.variante-celda-crear { gap: 7px; }
+.variante-celda .variante-stock-inicial { border-color: var(--accent-border); background: var(--accent-soft); }
+.variantes-quitadas { margin-top: 14px; }
+.variantes-quitadas p { margin: 6px 0 0; }
+
+.variantes-stock td { text-align: center; }
+.variante-stock { min-width: 64px; border-left: 3px solid transparent; }
+.variante-stock b { display: block; color: var(--text-strong); }
+.variante-stock small { display: block; font-size: 10px; font-weight: 700; }
+.variante-stock.is-normal { border-left-color: rgba(107,202,146,.45); }
+.variante-stock.is-bajo { border-left-color: var(--brand); background: var(--accent-soft); }
+.variante-stock.is-bajo small { color: var(--brand-bright); }
+.variante-stock.is-sin_stock { border-left-color: var(--red); background: rgba(240,141,129,.07); }
+.variante-stock.is-sin_stock small { color: var(--red); }
+.variante-stock.is-inactiva { opacity: .55; }
+.variante-total { background: var(--panel-soft); }
+.variantes-leyenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+.variantes-leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+.variantes-leyenda i { width: 10px; height: 10px; border-radius: 3px; }
+.variantes-leyenda i.is-normal { background: rgba(107,202,146,.55); }
+.variantes-leyenda i.is-bajo { background: var(--brand); }
+.variantes-leyenda i.is-sin_stock { background: var(--red); }
+
+/* Catálogo agrupado: el modelo es una fila y sus combinaciones se despliegan debajo. */
+.modelo-enlace { color: inherit; text-decoration: none; }
+.modelo-enlace:hover b { color: var(--brand-bright); }
+.modelo-desplegar { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 0; border: 0; background: none; color: var(--brand-bright); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.modelo-desplegar .ico { transition: transform .2s; }
+.modelo-desplegar .ico.is-abierto { transform: rotate(180deg); }
+.variante-fila td { background: var(--panel-soft); }
+.variante-fila td:first-child { padding-left: 46px; }
+.variante-nombre { display: grid; gap: 2px; }
+.variante-nombre small { color: var(--muted); font-size: 11px; }
+
+@media (max-width: 1180px) {
+  .variantes-listas { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .talla-agregar { width: 100%; }
+  .talla-agregar .input { flex: 1; width: auto; min-width: 0; }
+  .variante-fila td:first-child { padding-left: 18px; }
+  .variante-celda { min-width: 150px; }
+}
+
+/* Selector de talla y color (V2): botones en Pedidos y POS, cuadrícula de cantidades en Compras, Ajustes y Traspasos. */
+.modal.selector-variante { width: min(720px, 100%); }
+.selector-grupo { display: grid; gap: 8px; margin-bottom: 16px; }
+.selector-grupo .field-label { margin: 0; }
+.selector-opciones { display: flex; flex-wrap: wrap; gap: 7px; }
+.selector-color.is-elegido { border-color: var(--accent-border); background: var(--accent-soft); color: var(--text-strong); }
+.selector-variantes { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.selector-variante-btn { display: grid; gap: 3px; justify-items: center; align-content: center; min-height: 64px; padding: 9px 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, background .2s; }
+.selector-variante-btn b { font-size: 15px; color: var(--text-strong); }
+.selector-variante-btn small { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.selector-variante-btn:hover:not(:disabled) { border-color: var(--accent-border); background: var(--accent-soft); }
+.selector-variante-btn:disabled, .selector-variante-btn.is-vacia { opacity: .45; cursor: not-allowed; }
+.selector-variante-btn .selector-precio { color: var(--brand-bright); }
+.selector-mensaje { min-height: 18px; margin: 0; }
+.selector-precio-base { margin-right: auto; align-self: center; color: var(--muted); font-size: 12px; }
+.selector-celda { min-width: 86px; vertical-align: top; }
+.selector-celda .input { width: 100%; min-height: 34px; padding: 0 8px; text-align: center; }
+.selector-celda .input.is-error { border-color: var(--red); }
+.selector-celda small { display: block; margin-top: 4px; font-size: 10.5px; color: var(--muted); }
+.selector-celda small.danger-text { color: var(--red); }
+.selector-celda.is-vacia { color: var(--faint); background: var(--panel-soft); }
+.selector-costo { margin-top: 14px; max-width: 260px; }
+
+/* POS: un modelo es una sola tarjeta con sus combinaciones. */
+.pos-product .pos-combinaciones { color: var(--brand-bright); }
+.variante-stock { position: relative; }
+.variante-foto { position: absolute; top: 4px; right: 5px; display: inline-flex; color: var(--brand-bright); }
+.variante-foto .ico, .variantes-leyenda .ico { width: 12px; height: 12px; }
+
+/* Catálogo: barra para agrupar productos sueltos marcados en un modelo (V3, § 9). */
+.agrupar-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 36px; margin-bottom: 10px; }
+.agrupar-barra .subtle { font-size: 12px; }
+.item-name .row-checkbox { flex: none; margin-right: 2px; }
+
+/* «Nuevo producto»: interruptor «Este producto tiene tallas y colores». */

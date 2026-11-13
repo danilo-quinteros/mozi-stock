@@ -2,17 +2,22 @@
 
 namespace App\Livewire\Catalogo;
 
+use App\Domain\Catalogo\Actions\CambiarPrecioVariante;
 use App\Domain\Catalogo\Actions\GuardarCategoria;
 use App\Domain\Catalogo\Actions\GuardarProducto;
 use App\Domain\Catalogo\Actions\GuardarUnidadMedida;
+use App\Domain\Catalogo\Actions\MarcarProductosConLote;
 use App\Domain\Catalogo\Consultas\ListadoProductos;
 use App\Domain\CatalogoExterno\Actions\SincronizarEmpresa;
+use App\Domain\Despachos\Consultas\ReservadoPorDespachar;
 use App\Domain\Facturacion\CatalogoEmpresa;
+use App\Enums\Capacidad;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\UsaSucursalActiva;
 use App\Models\CatalogoExternoProducto;
 use App\Models\Categoria;
 use App\Models\EmpresaProveedorExterno;
+use App\Models\Modelo;
 use App\Models\Producto;
 use App\Models\ProveedorExterno;
 use App\Models\SiatCatalogo;
@@ -21,7 +26,9 @@ use App\Models\UnidadMedida;
 use App\Models\User;
 use App\Support\Decimal;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -46,6 +53,14 @@ class Productos extends Component
 
     #[Url(as: 'stock', except: '')]
     public string $filtroStock = '';
+
+    /** Filtro por marca (vacío = todas). */
+    #[Url(except: '')]
+    public string $marca = '';
+
+    /** Tallas y colores § 5: '' (todos), 'modelos' o 'sueltos'; solo cuenta con la capacidad «variantes». */
+    #[Url(except: '')]
+    public string $tipo = '';
 
     #[Url(as: 'tab', except: 'productos')]
     public string $pestana = 'productos';
@@ -105,6 +120,18 @@ class Productos extends Component
     /** @var array<int, array{producto_id: int, externo_id: string, nombre: string, stock_total: string, unidad: string, sucursales: array<string, string>}> */
     public array $alertaStockBulk = [];
 
+    /** Confirmación de «Marcar con lote y vencimiento» (lotes § 9.2). */
+    public bool $confirmandoLotes = false;
+
+    public function marcarConLote(MarcarProductosConLote $accion): void
+    {
+        $this->confirmandoLotes = false;
+        $marcados = $accion->ejecutar($this->actor(), ctype_digit($this->categoria) ? (int) $this->categoria : null);
+        $this->avisar($marcados === 0
+            ? __('No quedaban productos por marcar.')
+            : trans_choice(':count producto ahora controla lote y vencimiento. Su stock quedó como «Sin lote (regularización)».|:count productos ahora controlan lote y vencimiento. Su stock quedó como «Sin lote (regularización)».', $marcados));
+    }
+
     public function mount(): void
     {
         $this->authorize('viewAny', Producto::class);
@@ -117,7 +144,7 @@ class Productos extends Component
 
     public function updated(string $propiedad): void
     {
-        if (in_array($propiedad, ['buscar', 'categoria', 'sucursal', 'filtroStock'], true)) {
+        if (in_array($propiedad, ['buscar', 'categoria', 'sucursal', 'filtroStock', 'tipo', 'marca'], true)) {
             $this->cancelarEdicionPrecio();
             $this->resetPage();
         }
@@ -149,7 +176,7 @@ class Productos extends Component
         $this->resetValidation('editandoPrecio');
     }
 
-    public function guardarPrecio(GuardarProducto $accion): void
+    public function guardarPrecio(GuardarProducto $accion, CambiarPrecioVariante $variante): void
     {
         $actor = $this->actor();
         abort_unless($actor->esAdministrador(), 403);
@@ -171,11 +198,37 @@ class Productos extends Component
             'editandoPrecio' => __('precio consumidor'),
         ]);
 
-        $producto = $accion->actualizarPrecioConsumidor($actor, $producto, $this->editandoPrecio);
+        // Combinación de tallas y colores con la capacidad activa: su precio lo gobierna el modelo, así que pasa por
+        // CambiarPrecioVariante (queda con precio propio). Sin la capacidad se edita como un producto suelto.
+        if ($producto->modelo_id !== null && Gate::allows('capacidad', Capacidad::Variantes)) {
+            $producto = $this->cambiarPrecioVariante($producto, $variante);
+        } else {
+            $producto = $accion->actualizarPrecioConsumidor($actor, $producto, $this->editandoPrecio);
+        }
 
         $this->editandoProductoId = null;
         $this->editandoPrecio = '';
         $this->avisar(__('Precio consumidor actualizado a :precio.', ['precio' => Decimal::bs($producto->precio_consumidor)]));
+    }
+
+    /**
+     * Cambia solo el precio consumidor de una combinación y conserva su minorista y mayorista. Si los tres vuelven a
+     * coincidir con los del modelo, deja de tener precio propio (sigue los cambios de precio del modelo).
+     */
+    private function cambiarPrecioVariante(Producto $variante, CambiarPrecioVariante $accion): Producto
+    {
+        $consumidor = Decimal::normalizar($this->editandoPrecio, Decimal::ESCALA_DINERO);
+        $modelo = Modelo::query()->find($variante->modelo_id, ['id', 'precio_consumidor', 'precio_minorista', 'precio_mayorista']);
+        $igualAlModelo = $modelo !== null && $consumidor !== null
+            && Decimal::comparar($consumidor, (string) $modelo->precio_consumidor, Decimal::ESCALA_DINERO) === 0
+            && $variante->precio_minorista === $modelo->precio_minorista
+            && $variante->precio_mayorista === $modelo->precio_mayorista;
+
+        return $accion->ejecutar($this->actor(), $variante, $igualAlModelo ? null : [
+            'precio_consumidor' => $this->editandoPrecio,
+            'precio_minorista' => $variante->precio_minorista,
+            'precio_mayorista' => $variante->precio_mayorista,
+        ]);
     }
 
     public function nuevaCategoria(): void
@@ -551,12 +604,64 @@ class Productos extends Component
         }
 
         $filtroStockValido = in_array($this->filtroStock, ['con_stock', 'sin_stock'], true) ? $this->filtroStock : null;
+        // Tallas y colores § 5: con la capacidad, cada modelo es una entrada con sus combinaciones; sin ella, la lista
+        // plana de siempre (las variantes se ven como productos sueltos con su nombre completo).
+        $agrupado = Gate::allows('capacidad', Capacidad::Variantes);
+        $sueltos = collect();
+        $variantes = collect();
+        $modelos = collect();
+        $resumenModelos = [];
+
+        if ($agrupado) {
+            $productos = ListadoProductos::entradas($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido,
+                in_array($this->tipo, ListadoProductos::TIPOS, true) ? $this->tipo : null, marca: $this->marca);
+            $entradas = collect($productos->items());
+            $sueltoIds = array_values($entradas->where('tipo', 'producto')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
+            $modeloIds = array_values($entradas->where('tipo', 'modelo')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
+            // Una consulta para los sueltos de la página, una para las combinaciones que cumplen los filtros (en el orden
+            // de sus tallas y colores), una para los modelos y una para sus totales.
+            $sueltos = $sueltoIds === [] ? collect() : ListadoProductos::consulta($empresaId, $sucursal?->id)
+                ->whereIn('productos.id', $sueltoIds)->get()->keyBy('id');
+            $variantes = $modeloIds === [] ? collect() : ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, 'modelos', $this->marca)
+                ->whereIn('productos.modelo_id', $modeloIds)
+                ->leftJoin('tallas as tv', fn (JoinClause $j) => $j->on('tv.id', '=', 'productos.talla_id')->on('tv.empresa_id', '=', 'productos.empresa_id'))
+                ->leftJoin('colores as cv', fn (JoinClause $j) => $j->on('cv.id', '=', 'productos.color_id')->on('cv.empresa_id', '=', 'productos.empresa_id'))
+                ->reorder()->orderByDesc('productos.activo')->orderByRaw('COALESCE(tv.orden, 0)')->orderBy('tv.id')->orderBy('cv.nombre')
+                ->get()->groupBy('modelo_id');
+            $modelos = $modeloIds === [] ? collect() : Modelo::query()->with(['categoria:id,nombre', 'unidad:id,abreviatura'])
+                ->whereIn('id', $modeloIds)->get()->keyBy('id');
+            $resumenModelos = ListadoProductos::resumenModelos($empresaId, $sucursal?->id, $modeloIds);
+            $idsPagina = array_merge($sueltoIds, array_values($variantes->flatten(1)->map(fn (Producto $p): int => $p->id)->all()));
+        } else {
+            $productos = ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, marca: $this->marca)->paginate(25);
+            $idsPagina = array_values(array_map(fn (Producto $p): int => $p->id, $productos->items()));
+        }
+
+        // Despachos § 5.4: unidades vendidas Por despachar que siguen en el almacén (una consulta, solo esta página).
+        $reservados = $sucursal !== null && $idsPagina !== [] && Gate::allows('capacidad', Capacidad::Despachos)
+            ? (ReservadoPorDespachar::cantidades($empresaId, $sucursal->id, $idsPagina)[$sucursal->id] ?? [])
+            : [];
+
+        // Lotes § 9.2: cuántos productos con stock aún no se llevan por lote (con el filtro de categoría).
+        $sinLote = $actor->esAdministrador() && Gate::allows('capacidad', Capacidad::LotesVencimientos)
+            ? app(MarcarProductosConLote::class)->pendientes($empresaId, $categoriaId) : 0;
 
         return view('livewire.catalogo.productos', [
-            'productos' => ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido)->paginate(25),
+            'productos' => $productos,
+            'agrupado' => $agrupado,
+            'conVariantes' => $agrupado && $actor->esAdministrador(),
+            'sueltos' => $sueltos,
+            'variantes' => $variantes,
+            'modelos' => $modelos,
+            'resumenModelos' => $resumenModelos,
+            'sinLote' => $sinLote,
+            'categoriaFiltro' => $categoriaId === null ? null : Categoria::query()->whereKey($categoriaId)->value('nombre'),
+            'reservados' => $reservados,
             'sucursalVista' => $sucursal,
             'sucursales' => $actor->esAdministrador() ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
             'categorias' => Categoria::query()->withCount('productos')->orderBy('nombre')->get(),
+            // Marcas usadas en la empresa (scope; índice empresa_id, marca) para el filtro.
+            'marcas' => Producto::query()->whereNotNull('marca')->distinct()->orderBy('marca')->limit(300)->pluck('marca'),
             'unidades' => UnidadMedida::query()->orderBy('nombre')->get(),
             'totalProductos' => Producto::query()->where('activo', true)->count(),
             'alertas' => $sucursal === null ? 0 : ListadoProductos::contarAlertas($empresaId, $sucursal->id),

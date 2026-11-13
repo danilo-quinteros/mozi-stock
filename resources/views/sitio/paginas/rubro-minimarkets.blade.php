@@ -17,7 +17,7 @@
         ['truck', 'Compras y proveedores', 'Registra lo que compras y lo que debes a cada proveedor.'],
         ['devices', 'Desde el celular', 'Revisa tus ventas y tu caja desde el celular, estés donde estés.'],
     ]"
-    :modulos="['punto-de-venta', 'caja', 'creditos', 'inventario', 'compras', 'asistente-ia']"
+    :modulos="['punto-de-venta', 'caja', 'creditos', 'inventario', 'compras', 'agente-ia']"
     :preguntas="[
         ['¿Necesito comprar una computadora?', 'No necesariamente. MoziStock funciona en el navegador de una computadora, una tablet o un celular con internet.'],
         ['¿Puedo cobrar con QR?', 'Sí. Registras el cobro como electrónico o mixto, y se guarda separado del efectivo de tu caja.'],

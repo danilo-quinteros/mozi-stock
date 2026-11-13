@@ -57,6 +57,8 @@
             'sugerencias' => $this->sugerencias,
             'etiquetaStock' => 'Stock actual',
             'etiquetaDespues' => 'Stock después',
+            'reservados' => $reservados,
+            'vencidas' => $vencidas,
         ])
         <aside class="rapid-aside">
             <section class="card card-pad summary-sticky">
@@ -66,6 +68,12 @@
                 <div class="summary-count"><span>{{ __('Variación de stock') }}</span><b>{{ Decimal::comparar($variacion, '0') > 0 ? '+' : '' }}{{ Decimal::formatear($variacion) }}</b></div>
                 <div class="divider"></div>
                 <div class="notice mini-note">{{ __('Un ajuste no es un cobro ni un egreso. Queda en el historial con tu usuario, la sucursal y la nota.') }}</div>
+                @if ($vencidos !== [])
+                    <div class="notice mini-note caja-alerta" style="margin-top:10px" data-aviso-vencidos><x-icon name="status-alert" /><div><b>{{ __('Lotes ya vencidos') }}</b> {{ __('Se ingresarán al stock, pero quedarán bloqueados para la venta desde el primer momento:') }} {{ implode('; ', $vencidos) }}</div></div>
+                @endif
+                @if (Decimal::comparar($reservadoTotal, '0') > 0)
+                    <div class="notice mini-note" style="margin-top:10px" data-aviso-reservado><x-icon name="status-alert" /><div>{{ __('Hay :cantidad unidades reservadas por despachar; inclúyelas en el conteo físico, no en el stock.', ['cantidad' => Decimal::formatear($reservadoTotal)]) }}</div></div>
+                @endif
                 <div class="rapid-final-actions">
                     <button class="btn primary" type="button" wire:click="revisar" @disabled($sucursales->isEmpty())>{{ __('Revisar y confirmar') }} <x-icon name="arrow" size="sm" /></button>
                     <a class="btn ghost" href="{{ route('inventario.movimientos') }}">{{ __('Volver sin guardar') }}</a>
@@ -82,12 +90,21 @@
                 <div><span class="subtle">{{ __('Productos') }}</span><b>{{ count($filas) }}</b></div>
                 <div><span class="subtle">{{ __('Unidades') }}</span><b>{{ Decimal::formatear($unidades) }}</b></div>
             </div>
+            @if ($vencidos !== [])
+                <div class="notice caja-alerta" style="margin-bottom:12px" role="status"><x-icon name="status-alert" /><div><b>{{ __('Lotes ya vencidos') }}</b><p>{{ __('Se ingresarán al stock, pero quedarán bloqueados para la venta desde el primer momento:') }} {{ implode('; ', $vencidos) }}</p></div></div>
+            @endif
             <div class="table-wrap" style="max-height:260px">
                 <table>
                     <thead><tr><th>{{ __('Producto') }}</th><th>{{ __('Cantidad') }}</th><th>{{ __('Stock después') }}</th></tr></thead>
                     <tbody>
                         @foreach ($filas as $fila)
-                            <tr wire:key="confirmar-{{ $fila['producto']->id }}"><td>{{ $fila['producto']->nombre }}</td><td>{{ $fila['cantidad'] === null ? '—' : Decimal::formatear($fila['cantidad']) }}</td><td>{{ $fila['despues'] === null ? '—' : Decimal::formatear($fila['despues']) }}</td></tr>
+                            <tr wire:key="confirmar-{{ $fila['clave'] }}"><td>{{ $fila['producto']->nombre }}
+                                @if ($fila['lote'])
+                                    <small class="lote-resumen" data-lote-confirmacion>{{ $fila['loteModo'] === 'ingreso'
+                                        ? __('Lote :lote · vence :fecha', ['lote' => $fila['numeroLote'], 'fecha' => \App\Domain\Inventario\DatosLote::formatear($fila['vence'])])
+                                        : ($fila['loteElegido'] ?? __('Automático (vence primero)')) }}</small>
+                                @endif
+                            </td><td>{{ $fila['cantidad'] === null ? '—' : Decimal::formatear($fila['cantidad']) }}</td><td>{{ $fila['despues'] === null ? '—' : Decimal::formatear($fila['despues']) }}</td></tr>
                         @endforeach
                     </tbody>
                 </table>

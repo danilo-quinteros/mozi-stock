@@ -1,16 +1,28 @@
 <?php
 
+use App\Domain\Catalogo\Actions\GuardarModelo;
+use App\Domain\Despachos\Actions\DespacharVenta;
+use App\Domain\Despachos\Actions\MarcarEntregada;
 use App\Domain\Tenancy\Actions\CambiarFuncionesEmpresa;
 use App\Enums\Capacidad;
+use App\Enums\EstadoEntrega;
 use App\Enums\Rubro;
 use App\Livewire\Admin\Empresas;
 use App\Livewire\Auth\Registro;
+use App\Livewire\Catalogo\Productos;
 use App\Livewire\Concerns\ExigeCapacidad;
 use App\Livewire\Empresa\FuncionesNegocio;
 use App\Models\Auditoria;
 use App\Models\Cliente;
+use App\Models\Color;
 use App\Models\Empresa;
+use App\Models\EventoEntrega;
+use App\Models\GrupoTalla;
+use App\Models\Modelo;
+use App\Models\Producto;
 use App\Models\Sucursal;
+use App\Models\Talla;
+use App\Models\UnidadMedida;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
@@ -24,8 +36,8 @@ use Livewire\Component;
 use Livewire\Livewire;
 
 /**
- * Etapa R0 de ESPECIFICACION_RUBROS_Y_CAPACIDADES.md (§ 7). Los casos que dependen de los módulos
- * (despachos, lotes, variantes) quedan como «todo» para sus etapas: hoy ninguna capacidad tiene datos.
+ * Etapa R0 de ESPECIFICACION_RUBROS_Y_CAPACIDADES.md (§ 7). La regla de apagado de despachos llegó con
+ * la etapa D1, la de lotes con L3 y la de variantes con V1 (ESPECIFICACION_TALLAS_Y_COLORES.md).
  */
 
 /** Componente mínimo de un módulo por rubro, para probar el rechazo en mount y en acciones. */
@@ -115,6 +127,14 @@ test('the public sign-up stores each rubro with exactly its capabilities', funct
     foreach (Capacidad::cases() as $capacidad) {
         expect($empresa->tieneCapacidad($capacidad))->toBe(in_array($capacidad, $rubro->capacidades(), true));
     }
+
+    // Tallas y colores (V1): solo el rubro con «variantes» recibe la lista sugerida de tallas y colores.
+    $conListas = in_array(Capacidad::Variantes, $rubro->capacidades(), true);
+    expect(DB::table('grupos_talla')->where('empresa_id', $empresa->id)->count())->toBe($conListas ? 4 : 0)
+        ->and(DB::table('tallas')->where('empresa_id', $empresa->id)->count())->toBe($conListas ? 32 : 0)
+        ->and(DB::table('colores')->where('empresa_id', $empresa->id)->count())->toBe($conListas ? 10 : 0)
+        ->and(DB::table('categorias')->where('empresa_id', $empresa->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe($rubro->categoriasSugeridas());
 })->with(fn () => array_map(fn (Rubro $r): array => [$r], Rubro::cases()));
 
 test('the «Tu negocio» step does not continue without a valid rubro', function () {
@@ -157,7 +177,9 @@ test('the superadmin must choose the rubro and the company is born with its capa
         ->and(capacidadesEnBase($empresa))->toBe(['despachos'])
         ->and(DB::table('empresa_capacidades')->where('empresa_id', $empresa->id)->value('cambiada_por'))->toBe($superadmin->id)
         ->and($auditoria->usuario_id)->toBe($superadmin->id)
-        ->and($auditoria->despues['rubro'])->toBe('distribuidora');
+        ->and($auditoria->despues['rubro'])->toBe('distribuidora')
+        ->and(DB::table('categorias')->where('empresa_id', $empresa->id)->orderBy('id')->pluck('nombre')->all())
+        ->toBe(Rubro::Distribuidora->categoriasSugeridas());
 });
 
 test('companies that already existed are General, without capabilities and with the same behavior', function () {
@@ -322,14 +344,15 @@ test('the administrator changes the rubro after reviewing a summary, and it stay
 
     $pantalla = Livewire::actingAs($admin)->test(FuncionesNegocio::class)
         ->assertSee('Funciones del negocio')
-        ->assertSee('Próximamente')
+        // Desde V1 las cuatro funciones están disponibles: ya no se muestra «Próximamente».
+        ->assertDontSee('Próximamente')
         // Sin cambios no hay nada que confirmar.
         ->call('revisar')->assertSet('revisando', false)->assertSee('No hay cambios que guardar.')
         ->set('rubro', 'ropa')->assertSet('capacidades', ['variantes'])
         ->set('capacidades', ['variantes', 'lotes_vencimientos'])
         ->call('revisar')->assertSet('revisando', true)
         ->assertSee('Revisa los cambios')
-        ->assertSee('General → Tienda de ropa y calzado')
+        ->assertSee('Tienda → Tienda de ropa y calzado')
         ->assertSee('Tallas y colores, Lotes y vencimientos')
         ->assertSee('El stock, las ventas, los pagos, la caja y los créditos no cambian.');
 
@@ -415,6 +438,87 @@ test('changing the rubro and the functions never touches stock, sales, payments,
         ->and(stockDe($sucursal, $producto))->toBe('7.000');
 });
 
-test('turning off despachos with sales pending delivery is rejected with the list (stage D1)')->todo();
-test('turning off lotes_vencimientos keeps stock_niveles and zeroes lot balances with their movement (stage L3)')->todo();
-test('turning variantes off and on keeps products, stock and sales and shows the models again (stage V1)')->todo();
+test('turning off despachos with sales pending or dispatched is rejected with the list; once delivered it is allowed', function () {
+    [$empresa, $admin] = empresaConAdministrador();
+    $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id]);
+    $producto = productoDe($empresa, ['precio_consumidor' => '10.00']);
+    $this->actingAs($admin);
+    cargarStock($admin, $sucursal, $producto, '10');
+    $accion = app(CambiarFuncionesEmpresa::class);
+    $accion->ejecutar($admin, $empresa, Rubro::Distribuidora, [Capacidad::Despachos]);
+    $venta = confirmarVenta($admin, crearPedido($admin, $sucursal, [['producto_id' => $producto->id, 'cantidad' => '1']]), ['metodo' => 'efectivo']);
+    $otra = confirmarVenta($admin, crearPedido($admin, $sucursal, [['producto_id' => $producto->id, 'cantidad' => '1']]), ['metodo' => 'efectivo']);
+    $auditorias = Auditoria::query()->where('accion', 'empresa.funciones_cambiadas')->count();
+
+    expect(fn () => $accion->ejecutar($admin, $empresa, Rubro::General, []))
+        ->toThrow(ValidationException::class, '2 ventas todavía no se entregaron (V-00001, V-00002)');
+
+    // Despachada todavía no llegó al cliente: sigue bloqueando. La pantalla muestra el motivo bajo las funciones.
+    app(DespacharVenta::class)->ejecutar($admin, $venta);
+    app(MarcarEntregada::class)->ejecutar($admin, $otra, despacharTambien: true);
+    Livewire::test(FuncionesNegocio::class)
+        ->set('rubro', 'general')->set('capacidades', [])
+        ->call('revisar')->call('guardar')
+        ->assertHasErrors(['capacidades'])
+        ->assertSet('revisando', false)
+        ->assertSee('la venta V-00001 todavía no se entregó');
+
+    expect($empresa->fresh()->tieneCapacidad(Capacidad::Despachos))->toBeTrue()
+        ->and(Auditoria::query()->where('accion', 'empresa.funciones_cambiadas')->count())->toBe($auditorias);
+
+    app(MarcarEntregada::class)->ejecutar($admin, $venta);
+    expect($accion->ejecutar($admin, $empresa, Rubro::General, []))->toBeTrue()
+        ->and($empresa->fresh()->tieneCapacidad(Capacidad::Despachos))->toBeFalse();
+
+    // Las ventas anteriores conservan su historial; las nuevas nacen Entregado.
+    $nueva = confirmarVenta($admin, crearPedido($admin, $sucursal, [['producto_id' => $producto->id, 'cantidad' => '1']]), ['metodo' => 'efectivo']);
+    expect($nueva->refresh()->estado_entrega)->toBe(EstadoEntrega::Entregado)
+        ->and(EventoEntrega::query()->where('venta_id', $venta->id)->count())->toBe(3);
+});
+test('turning variantes off and on keeps products, stock and sales and shows the models again (stage V1)', function () {
+    [$empresa, $admin] = empresaConAdministrador();
+    $this->actingAs($admin);
+    $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id, 'nombre' => 'Central']);
+    $unidad = new UnidadMedida(['nombre' => 'Unidad', 'abreviatura' => 'u', 'admite_decimales' => false]);
+    $unidad->empresa_id = $empresa->id;
+    $unidad->save();
+    $accion = app(CambiarFuncionesEmpresa::class);
+    $accion->ejecutar($admin, $empresa, Rubro::Ropa, [Capacidad::Variantes]);
+
+    $letras = GrupoTalla::query()->where('nombre', 'Letras')->sole();
+    $modelo = app(GuardarModelo::class)->crear($admin, [
+        'nombre' => 'Polera Básica', 'unidad_medida_id' => $unidad->id, 'sku_base' => 'POL001', 'precio_consumidor' => '49.90',
+        'stock_minimo' => '0', 'grupo_talla_id' => $letras->id,
+        'tallas' => Talla::query()->where('grupo_talla_id', $letras->id)->whereIn('nombre', ['M', 'L'])->pluck('id')->all(),
+        'colores' => Color::query()->where('nombre', 'Negro')->pluck('id')->all(),
+    ]);
+    $variante = Producto::query()->where('modelo_id', $modelo->id)->orderBy('id')->firstOrFail();
+    cargarStock($admin, $sucursal, $variante, '5');
+    confirmarVenta($admin, crearPedido($admin, $sucursal, [['producto_id' => $variante->id, 'cantidad' => '2']]), ['metodo' => 'efectivo']);
+    $antes = instantaneaNegocio();
+
+    // Apagar no toca productos, stock ni ventas; los modelos y las listas quedan guardados.
+    expect($accion->ejecutar($admin, $empresa, Rubro::General, []))->toBeTrue()
+        ->and(instantaneaNegocio())->toBe($antes)
+        ->and(Modelo::query()->count())->toBe(1)
+        ->and(Color::query()->count())->toBe(10);
+
+    // Sin la capacidad, cada combinación es un producto suelto con su nombre completo y se sigue vendiendo; las
+    // pantallas de modelos y de tallas y colores responden 404.
+    Livewire::test(Productos::class)
+        ->assertSee('Polera Básica · M · Negro')->assertSee('Polera Básica · L · Negro')
+        ->assertDontSeeHtml('data-test="fila-modelo-'.$modelo->id.'"')->assertDontSee('Nuevo modelo');
+    $this->get(route('productos.modelos.ver', $modelo))->assertNotFound();
+    $this->get(route('configuracion.tallas-colores'))->assertNotFound();
+    confirmarVenta($admin, crearPedido($admin, $sucursal, [['producto_id' => $variante->id, 'cantidad' => '1']]), ['metodo' => 'efectivo']);
+    $antes = instantaneaNegocio();
+
+    // Encender otra vez muestra los modelos de nuevo, con las mismas combinaciones, stock y ventas, sin duplicar listas.
+    expect($accion->ejecutar($admin, $empresa, Rubro::Ropa, [Capacidad::Variantes]))->toBeTrue()
+        ->and(instantaneaNegocio())->toBe($antes)
+        ->and(stockDe($sucursal, $variante))->toBe('2.000')
+        ->and(Color::query()->count())->toBe(10);
+
+    Livewire::test(Productos::class)->assertSeeHtml('data-test="fila-modelo-'.$modelo->id.'"')->assertSee('2 combinaciones');
+    $this->get(route('productos.modelos.ver', $modelo))->assertOk()->assertSee('Polera Básica · M · Negro');
+});

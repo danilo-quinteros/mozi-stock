@@ -67,11 +67,13 @@ final class PedidosPendientes extends HerramientaNegocio
             ->when($sucursal !== null, fn (Builder $q) => $q->where('pe.sucursal_id', $sucursal));
         $lineasPendientes = fn () => DB::table('pedido_items as pi')
             ->join('pedidos as pe', 'pe.id', '=', 'pi.pedido_id')
+            ->join('productos as p', 'p.id', '=', 'pi.producto_id')
             ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'pi.empresa_id')->on('sn.sucursal_id', '=', 'pe.sucursal_id')->on('sn.producto_id', '=', 'pi.producto_id'))
             ->where('pi.empresa_id', $empresaId)
             ->where('pe.estado', 'pendiente')
             ->when($sucursal !== null, fn (Builder $q) => $q->where('pe.sucursal_id', $sucursal));
-        $sinStock = 'SUM(CASE WHEN COALESCE(sn.cantidad, 0) < pi.cantidad THEN 1 ELSE 0 END)';
+        // Un producto sin control de stock nunca falta: se vende sin stock.
+        $sinStock = 'SUM(CASE WHEN p.controla_stock = 1 AND COALESCE(sn.cantidad, 0) < pi.cantidad THEN 1 ELSE 0 END)';
 
         $porPedido = $lineasPendientes()->groupBy('pi.pedido_id')
             ->select(['pi.pedido_id', DB::raw('COUNT(*) AS lineas'), DB::raw("{$sinStock} AS sin_stock")]);
@@ -90,7 +92,7 @@ final class PedidosPendientes extends HerramientaNegocio
             ->get();
 
         $faltantes = $lineasPendientes()
-            ->join('productos as p', 'p.id', '=', 'pi.producto_id')
+            ->where('p.controla_stock', true)
             ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
             ->join('sucursales as s', 's.id', '=', 'pe.sucursal_id')
             ->groupBy('pi.producto_id', 'pe.sucursal_id')

@@ -5,13 +5,17 @@ namespace App\Domain\Ventas\Actions;
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\CajaOperacion;
 use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
+use App\Domain\Despachos\HistorialEntrega;
 use App\Domain\Facturacion\Actions\RegistrarFacturaVenta;
 use App\Domain\Facturacion\DatosFactura;
 use App\Domain\Inventario\LibroStock;
+use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Domain\Ventas\CalculadoraPedido;
 use App\Domain\Ventas\RegistradorCobros;
 use App\Domain\Ventas\ValidadorPago;
+use App\Enums\Capacidad;
+use App\Enums\EstadoEntrega;
 use App\Enums\EstadoPedido;
 use App\Enums\TipoOperacionInventario;
 use App\Models\Pedido;
@@ -41,6 +45,17 @@ use RuntimeException;
  * propietario del 01/11/2026): el efectivo exige un turno abierto de la sucursal que el usuario opere
  * o, solo para el administrador, fuera de caja; lo electrónico y el crédito sin cuota inicial no lo exigen.
  * El POS ya llega con su caja y su turno.
+ *
+ * Estado de entrega (ESPECIFICACION_DESPACHOS.md § 7, ESPECIFICACION_COCINA.md § 7): con la capacidad
+ * «despachos» la venta nace Por despachar, y con «cocina» En cocina, salvo que quien vende marque
+ * «Entregado» ($entregado; nunca se supone). Con «cocina» guarda también el «Nombre o mesa» opcional.
+ * Sin ninguna de las dos nace Entregado, sin quién ni evento, exactamente como antes. Pago, stock y caja
+ * no cambian.
+ *
+ * Productos sin control de stock (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 4.1): sus marcas se leen en una
+ * consulta con bloqueo compartido y sus líneas no van a LibroStock (sin movimiento ni validación de saldo).
+ * La venta conserva siempre su operación de inventario: número V, operacion_inventario_id e idempotencia;
+ * sin líneas con stock, la operación queda como cabecera con total_lineas = 0.
  */
 final class ConfirmarVenta
 {
@@ -51,11 +66,15 @@ final class ConfirmarVenta
         private readonly CajaOperacion $cajas,
         private readonly Auditor $auditor,
         private readonly RegistrarFacturaVenta $facturas,
+        private readonly CapacidadesEmpresa $capacidades,
+        private readonly HistorialEntrega $historial,
     ) {}
 
     /**
      * @param  array{metodo: string|null, en_cuotas: bool, cuota_inicial: string|null, efectivo: string|null, electronico: string|null, clave: string, vencimiento?: string|null, externo?: bool, turno_id?: int|null}  $pago
      * @param  DatosFactura|null  $factura  datos fiscales confirmados por el vendedor; null: modo automático con datos propuestos, o sin factura en modo manual
+     * @param  bool  $entregado  casilla «Entregado» al vender; solo cuenta con la capacidad «despachos» o «cocina»
+     * @param  string|null  $nombreMesa  «Nombre o mesa» (hasta 40 caracteres); solo se guarda con la capacidad «cocina»
      */
     public function ejecutar(
         User $actor,
@@ -64,6 +83,8 @@ final class ConfirmarVenta
         ?DatosFactura $factura = null,
         ?int $cajaId = null,
         ?int $turnoId = null,
+        bool $entregado = false,
+        ?string $nombreMesa = null,
     ): Venta {
         Gate::forUser($actor)->authorize('view', $pedido);
 
@@ -77,13 +98,18 @@ final class ConfirmarVenta
             throw ValidationException::withMessages(['pago_metodo' => __('La confirmación no tiene una clave válida. Recarga la página.')]);
         }
 
-        $cantidades = $this->cantidadesPorProducto($pedido);
+        // Cocina § 5.7: sin la capacidad no existe el campo y lo recibido se ignora.
+        $nombreMesa = $this->capacidades->tiene($pedido->empresa_id, Capacidad::Cocina)
+            ? HistorialEntrega::texto($nombreMesa, 40, 'nombreMesa', __('«Nombre o mesa»'))
+            : null;
+
+        // Filas de saldo solo para los productos que controlan stock; la marca se vuelve a leer con bloqueo.
         $this->libro->asegurarNiveles((int) $actor->empresa_id, array_map(
-            fn (int $productoId) => ['sucursal_id' => $pedido->sucursal_id, 'producto_id' => $productoId], array_keys($cantidades),
+            fn (int $productoId) => ['sucursal_id' => $pedido->sucursal_id, 'producto_id' => $productoId], $this->productosConStock($pedido),
         ));
 
         try {
-            return DB::transaction(fn (): Venta => $this->confirmar($actor, $pedido->id, $pago, $factura, $cajaId, $turnoId), attempts: 3);
+            return DB::transaction(fn (): Venta => $this->confirmar($actor, $pedido->id, $pago, $factura, $cajaId, $turnoId, $entregado, $nombreMesa), attempts: 3);
         } catch (UniqueConstraintViolationException $e) {
             return $this->ventaDe($pedido) ?? throw $e;
         }
@@ -99,6 +125,8 @@ final class ConfirmarVenta
         ?DatosFactura $factura,
         ?int $cajaId = null,
         ?int $turnoId = null,
+        bool $entregado = false,
+        ?string $nombreMesa = null,
     ): Venta {
         $pedido = Pedido::query()->whereKey($pedidoId)->lockForUpdate()->firstOrFail();
 
@@ -122,7 +150,7 @@ final class ConfirmarVenta
             ->where('pedido_items.empresa_id', $pedido->empresa_id)
             ->where('pedido_items.pedido_id', $pedido->id)
             ->orderBy('pedido_items.orden')
-            ->get(['pedido_items.*', 'productos.nombre', 'productos.contenido', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
+            ->get(['pedido_items.*', 'productos.nombre', 'productos.marca', 'productos.contenido', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
 
         if ($items->isEmpty()) {
             throw ValidationException::withMessages(['lineas' => __('El pedido no tiene productos.')]);
@@ -152,8 +180,13 @@ final class ConfirmarVenta
         }
 
         $cambios = [];
+        $controlan = $this->marcasDeControl($pedido->empresa_id, array_values($items->pluck('producto_id')->map(fn ($id) => (int) $id)->unique()->all()));
 
         foreach ($items->groupBy('producto_id') as $productoId => $lineas) {
+            if (! ($controlan[(int) $productoId] ?? true)) {
+                continue; // Sin control de stock: se vende sin movimiento (§ 4.1.2).
+            }
+
             $primer = $lineas->first();
             $nombreItem = Producto::formatoNombreCompleto((string) $primer->nombre, $primer->contenido, $primer->abreviatura);
             $cambios[] = [
@@ -194,14 +227,30 @@ final class ConfirmarVenta
         $venta->vencimiento = $vencimiento === null ? null : Carbon::parse($vencimiento);
         $venta->devuelto = '0.00';
         $venta->reembolsado = '0.00';
+        $flujo = $this->capacidades->flujoEntrega($pedido->empresa_id);
+        $venta->estado_entrega = $flujo !== null && ! $entregado ? EstadoEntrega::inicial($flujo) : EstadoEntrega::Entregado;
+        $venta->nombre_mesa = $flujo === Capacidad::Cocina ? $nombreMesa : null;
+
+        if ($flujo !== null && $entregado) {
+            // El cliente se lleva los productos delante de quien vende: no hace falta despacho (§ 3 regla 1),
+            // ni pasar por cocina (cocina C2).
+            $venta->entregado_por = $actor->id;
+            $venta->entregado_en = $venta->fecha;
+        }
+
         $venta->save();
+
+        if ($flujo !== null) {
+            $this->historial->registrar($venta, null, $venta->estado_entrega, $actor, $venta->fecha);
+        }
 
         DB::table('venta_items')->insert($items->values()->map(fn (object $item) => [
             'empresa_id' => $venta->empresa_id,
             'venta_id' => $venta->id,
             'producto_id' => $item->producto_id,
             'orden' => $item->orden,
-            'descripcion' => $item->nombre,
+            // Con marca, «Paracetamol (Bayer)»: el ticket y la factura (SIAT copia esta descripción) distinguen dos marcas.
+            'descripcion' => Producto::descripcionConMarca((string) $item->nombre, $item->marca),
             'sku' => $item->sku,
             'unidad' => $item->abreviatura,
             'cantidad' => $item->cantidad,
@@ -229,7 +278,8 @@ final class ConfirmarVenta
         $this->auditor->registrar('venta.confirmada', $venta, $actor, $venta->empresa_id, despues: [
             'pedido' => $pedido->codigo(), 'total' => $venta->total, 'cobrado_inicial' => $venta->cobrado_inicial,
             'saldo_pendiente' => $venta->saldo_pendiente, 'metodo' => $cobro['metodo']?->value, 'vencimiento' => $vencimiento,
-        ]);
+        ] + ($flujo !== null ? ['estado_entrega' => $venta->estado_entrega->value] : [])
+          + ($venta->nombre_mesa !== null ? ['nombre_mesa' => $venta->nombre_mesa] : []));
 
         return $venta;
     }
@@ -270,15 +320,39 @@ final class ConfirmarVenta
     }
 
     /**
-     * @return array<int, string> producto_id => cantidad total del pedido
+     * Productos del pedido que controlan stock (lectura sin bloqueo, antes de la transacción).
+     *
+     * @return list<int>
      */
-    private function cantidadesPorProducto(Pedido $pedido): array
+    private function productosConStock(Pedido $pedido): array
     {
-        return DB::table('pedido_items')
-            ->where('empresa_id', $pedido->empresa_id)
-            ->where('pedido_id', $pedido->id)
-            ->pluck('cantidad', 'producto_id')
-            ->map(fn ($cantidad) => (string) $cantidad)
+        return array_values(DB::table('pedido_items')
+            ->join('productos', 'productos.id', '=', 'pedido_items.producto_id')
+            ->where('pedido_items.empresa_id', $pedido->empresa_id)
+            ->where('pedido_items.pedido_id', $pedido->id)
+            ->where('productos.controla_stock', true)
+            ->distinct()
+            ->pluck('pedido_items.producto_id')
+            ->map(fn ($id) => (int) $id)
+            ->all());
+    }
+
+    /**
+     * Marca «Controla stock» de los productos, en una consulta y con bloqueo compartido: GuardarProducto la
+     * cambia con FOR UPDATE, así una venta en curso y un cambio de casilla no se cruzan (§ 4.5).
+     *
+     * @param  list<int>  $productoIds
+     * @return array<int, bool> producto_id => controla stock
+     */
+    private function marcasDeControl(int $empresaId, array $productoIds): array
+    {
+        return DB::table('productos')
+            ->where('empresa_id', $empresaId)
+            ->whereIn('id', $productoIds)
+            ->orderBy('id')
+            ->sharedLock()
+            ->pluck('controla_stock', 'id')
+            ->mapWithKeys(fn ($controla, $id) => [(int) $id => (bool) $controla])
             ->all();
     }
 

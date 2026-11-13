@@ -31,7 +31,7 @@ class Detalle extends Component
     public function render(): View
     {
         $compra = Compra::query()
-            ->with(['items', 'sucursal:id,nombre', 'proveedor:id,nombre,documento,telefono', 'usuario:id,name', 'operacion', 'cuentaPagar'])
+            ->with(['items.lote', 'sucursal:id,nombre', 'proveedor:id,nombre,documento,telefono', 'usuario:id,name', 'operacion', 'cuentaPagar'])
             ->findOrFail($this->compraId);
 
         return view('livewire.compras.detalle', ['compra' => $compra])->title($compra->codigo());

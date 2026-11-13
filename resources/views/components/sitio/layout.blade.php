@@ -15,7 +15,8 @@
 @if (filled($sitioAjustes->sitio_verificacion_google))
 <meta name="google-site-verification" content="{{ $sitioAjustes->sitio_verificacion_google }}">
 @endif
-<meta name="theme-color" content="#151411">
+<meta name="theme-color" content="#df8341">
+<meta name="msapplication-TileColor" content="#df8341">
 <meta name="author" content="MoziStudios">
 <meta name="geo.region" content="BO">
 <meta name="geo.placename" content="Bolivia">
@@ -42,9 +43,9 @@
 <meta name="twitter:image" content="{{ $seo->ogImagen }}">
 <meta name="twitter:image:alt" content="{{ $seo->ogTitulo }}">
 
-<link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
-<link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
-<link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+<link rel="icon" href="{{ asset('img/sitio/logo-mozistock.png') }}" type="image/png">
+<link rel="apple-touch-icon" href="{{ asset('img/sitio/logo-mozistock.png') }}">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&amp;display=swap">

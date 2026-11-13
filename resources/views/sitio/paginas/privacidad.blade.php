@@ -25,7 +25,7 @@
                 <h2>3. Para qué la usamos</h2>
                 <ul>
                     <li>Prestar el servicio: mostrar tu información, calcular reportes y emitir facturas con el SIAT cuando corresponde.</li>
-                    <li>Responder las consultas del asistente de IA Mozi sobre tu propio negocio.</li>
+                    <li>Responder las consultas del agente de IA Mozi sobre tu propio negocio.</li>
                     <li>Gestionar tu suscripción, revisar tus pagos y enviarte avisos sobre el servicio.</li>
                     <li>Proteger el sistema, prevenir accesos indebidos y auditar operaciones de dinero y stock.</li>
                 </ul>

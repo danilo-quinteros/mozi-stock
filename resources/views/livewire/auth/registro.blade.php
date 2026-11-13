@@ -110,7 +110,11 @@
                         <span class="registro-radio" aria-hidden="true"></span>
                         <span class="registro-plan-texto">
                             <b>{{ $opcion['nombre'] }}</b>
-                            <small>{{ $opcion['siat'] ? __('Inventario, ventas, caja, reportes y facturación electrónica SIAT.') : __('Inventario, ventas, caja, créditos y reportes, sin facturación SIAT.') }}</small>
+                            <small>{{ match (true) {
+                                $opcion['ia'] => __('Todo lo anterior, con facturación SIAT y Mozi, tu agente de IA.'),
+                                $opcion['siat'] => __('Inventario, ventas, caja, reportes y facturación electrónica SIAT.'),
+                                default => __('Inventario, ventas, caja, créditos y reportes, sin facturación SIAT.'),
+                            } }}</small>
                         </span>
                         <span class="registro-plan-precio">Bs {{ $opcion['entero'] }}@if ($opcion['centavos'] !== '00'),{{ $opcion['centavos'] }}@endif<small>{{ __('al mes, después de la prueba') }}</small></span>
                     </label>

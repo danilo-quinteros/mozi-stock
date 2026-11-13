@@ -5,6 +5,7 @@ use App\Domain\Suscripciones\Actions\EnviarComprobantePago;
 use App\Domain\Suscripciones\Actions\RevisarComprobantePago;
 use App\Livewire\Admin\Suscripciones;
 use App\Livewire\Empresa\MiSuscripcion;
+use App\Models\Auditoria;
 use App\Models\CambioPlan;
 use App\Models\Empresa;
 use App\Models\Plan;
@@ -102,6 +103,23 @@ test('the superadmin can create a third subscription plan', function () {
         ->and($tercerPlan->titulo)->toBe('Plan Enterprise Multi-Sucursal')
         ->and($tercerPlan->precio_mensual)->toBe('500.00')
         ->and($tercerPlan->siat_habilitado)->toBeTrue();
+});
+
+test('the superadmin marks which plan includes the AI agent and it is audited', function () {
+    $plan = Plan::query()->where('codigo', 'siat')->sole();
+
+    Livewire::actingAs($this->superadmin)->test(Suscripciones::class)
+        ->set('pestana', 'planes')
+        ->call('editarPlan', $plan->id)
+        ->assertSet('planIa', false)
+        ->set('planIa', true)
+        ->call('guardarPlan')
+        ->assertHasNoErrors()
+        ->assertSee('Agente IA');
+
+    expect($plan->fresh()->agente_ia)->toBeTrue()
+        ->and(Auditoria::query()->where('accion', 'plan.actualizado')->latest('id')->first()?->despues)
+        ->toMatchArray(['agente_ia' => true]);
 });
 
 test('the company administrator can upgrade plan with proration, paying only the remaining difference', function () {

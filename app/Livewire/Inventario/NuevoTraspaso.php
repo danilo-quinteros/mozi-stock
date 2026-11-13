@@ -24,6 +24,12 @@ class NuevoTraspaso extends Component
 
     public ?string $sucursal_destino_id = null;
 
+    /** Tallas y colores (V2): la cuadrícula muestra el stock vendible del origen, como la tabla (sin vencidas). */
+    protected function stockVendibleEnSelector(): bool
+    {
+        return true;
+    }
+
     public string $nota = '';
 
     public bool $confirmando = false;
@@ -78,7 +84,7 @@ class NuevoTraspaso extends Component
     public function render(): View
     {
         $origenId = $this->sucursal_id === null ? null : (int) $this->sucursal_id;
-        $datos = $this->datosDeLineas($origenId);
+        $datos = $this->datosDeLineas($origenId, vendible: true);
         $filas = [];
         $unidades = '0';
 
@@ -100,6 +106,8 @@ class NuevoTraspaso extends Component
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
             'filas' => $filas,
             'unidades' => $unidades,
+            // Lotes y vencimientos (§ 5.3): lo vencido no se traspasa; se avisa bajo el disponible.
+            'vencidas' => $datos['vencidas'],
         ]);
     }
 

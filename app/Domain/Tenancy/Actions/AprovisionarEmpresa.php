@@ -4,9 +4,11 @@ namespace App\Domain\Tenancy\Actions;
 
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\Actions\CrearCajaPrincipal;
+use App\Domain\Catalogo\ListasSugeridas;
 use App\Enums\Capacidad;
 use App\Enums\Rol;
 use App\Enums\Rubro;
+use App\Models\Categoria;
 use App\Models\CategoriaEgreso;
 use App\Models\Empresa;
 use App\Models\Sucursal;
@@ -27,6 +29,7 @@ final class AprovisionarEmpresa
     public function __construct(
         private readonly Auditor $auditor,
         private readonly CrearCajaPrincipal $crearCajaPrincipal,
+        private readonly ListasSugeridas $listas,
     ) {}
 
     /**
@@ -54,6 +57,12 @@ final class AprovisionarEmpresa
 
         foreach (CategoriaEgreso::BASE as $base) {
             $categoria = new CategoriaEgreso($base);
+            $categoria->empresa_id = $empresa->id;
+            $categoria->save();
+        }
+
+        foreach ($rubro->categoriasSugeridas() as $nombre) {
+            $categoria = new Categoria(['nombre' => $nombre]);
             $categoria->empresa_id = $empresa->id;
             $categoria->save();
         }
@@ -88,8 +97,10 @@ final class AprovisionarEmpresa
             ], $capacidades));
         }
 
-        // Datos iniciales por rubro (p. ej. tallas y colores sugeridos en ropa) se agregan aquí en la etapa
-        // de su módulo (V1); hoy ninguna capacidad tiene tablas propias.
+        // Datos iniciales por rubro: la lista sugerida de tallas y colores (ropa), editable después (tallas § 3.1).
+        if (in_array(Capacidad::Variantes, $rubro->capacidades(), true)) {
+            $this->listas->crearSiVacias($empresa->id);
+        }
 
         $this->crearCajaPrincipal->ejecutar($actor, $matriz);
 

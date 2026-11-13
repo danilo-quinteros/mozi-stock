@@ -15,6 +15,12 @@ enum TipoOperacionInventario: string
     // Reingreso de productos devueltos de una venta: comparte el correlativo DEV.
     case Devolucion = 'devolucion';
 
+    /**
+     * Serie de los ajustes que solo mueven saldos por lote sin cambiar el total (regularización, inicio y fin del
+     * control por lote): no aparecen en el historial de existencias, así que no dejan huecos en la serie AJU.
+     */
+    public const SERIE_LOTES = 'LOT';
+
     public function etiqueta(): string
     {
         return match ($this) {
@@ -68,9 +74,26 @@ enum TipoOperacionInventario: string
                 'merma' => __('Merma'),
                 'producto_danado' => __('Producto dañado'),
                 'devolucion_proveedor' => __('Devolución a proveedor'),
+                // Lotes y vencimientos § 5.4: la baja de lo vencido; en automático sale primero lo vencido.
+                'vencido' => __('Vencido'),
             ],
             default => [],
         };
+    }
+
+    /**
+     * Motivos que pone el sistema en operaciones de ajuste que solo mueven saldos por lote (lotes § 9 y rubros
+     * § 5.2): no se eligen en la pantalla.
+     *
+     * @return array<string, string>
+     */
+    public static function motivosLotes(): array
+    {
+        return [
+            'regularizacion_lote' => __('Regularización de lote'),
+            'inicio_control_lotes' => __('Inicio del control por lote'),
+            'fin_control_lotes' => __('Fin del control por lote'),
+        ];
     }
 
     public static function etiquetaMotivo(?string $motivo): ?string
@@ -81,6 +104,6 @@ enum TipoOperacionInventario: string
             }
         }
 
-        return null;
+        return self::motivosLotes()[$motivo ?? ''] ?? null;
     }
 }

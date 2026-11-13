@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureNotImpersonating;
 use App\Http\Middleware\EnsureSaasMode;
 use App\Http\Middleware\EnsureSuperadmin;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SepararDominios;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Cada petición web (incluido Livewire) revalida usuario y empresa activos.
         // El idioma de la interfaz sale de la preferencia del usuario o de la sesión.
         $middleware->web(append: [EnsureAccountIsActive::class, SetLocale::class, SecurityHeaders::class]);
+        // Global (antes del enrutado y de auth): la página va al dominio principal y el sistema al de APP_URL.
+        $middleware->append(SepararDominios::class);
         $middleware->alias([
             'empresa' => EnsureCompanyUser::class,
             'superadmin' => EnsureSuperadmin::class,
