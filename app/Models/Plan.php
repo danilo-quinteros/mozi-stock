@@ -20,12 +20,18 @@ use Illuminate\Support\Carbon;
  * @property string $precio_mensual
  * @property bool $siat_habilitado
  * @property bool $agente_ia
+ * @property int|null $sucursales_incluidas null = sin límite
+ * @property int|null $usuarios_incluidos null = sin límite
+ * @property string $precio_sucursal_extra
+ * @property string $precio_paquete_usuarios
+ * @property int $usuarios_por_paquete
  * @property bool $activo
  * @property int $orden
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['codigo', 'titulo', 'descripcion', 'precio_mensual', 'siat_habilitado', 'agente_ia', 'activo', 'orden'])]
+#[Fillable(['codigo', 'titulo', 'descripcion', 'precio_mensual', 'siat_habilitado', 'agente_ia', 'activo', 'orden',
+    'sucursales_incluidas', 'usuarios_incluidos', 'precio_sucursal_extra', 'precio_paquete_usuarios', 'usuarios_por_paquete'])]
 class Plan extends Model
 {
     /** @use HasFactory<PlanFactory> */
@@ -47,6 +53,11 @@ class Plan extends Model
             'agente_ia' => 'boolean',
             'activo' => 'boolean',
             'orden' => 'integer',
+            'sucursales_incluidas' => 'integer',
+            'usuarios_incluidos' => 'integer',
+            'precio_sucursal_extra' => 'decimal:2',
+            'precio_paquete_usuarios' => 'decimal:2',
+            'usuarios_por_paquete' => 'integer',
         ];
     }
 

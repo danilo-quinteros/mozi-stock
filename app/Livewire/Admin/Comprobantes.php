@@ -116,7 +116,7 @@ class Comprobantes extends Component
             'revisando' => $revisando,
             'suscripcion' => $suscripcion,
             'hoy' => CalendarioSuscripcion::hoy(),
-            'proyectado' => $revisando?->estado === EstadoPagoSaas::Pendiente ? $suscripcion?->vencimientoTras($revisando->meses) : null,
+            'proyectado' => $revisando?->estado === EstadoPagoSaas::Pendiente && ! $revisando->esExtras() ? $suscripcion?->vencimientoTras((int) $revisando->meses) : null,
             'importeTexto' => $revisando === null ? null : Decimal::bs((string) $revisando->importe),
         ]);
     }

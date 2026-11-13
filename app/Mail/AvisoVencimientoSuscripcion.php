@@ -56,7 +56,8 @@ class AvisoVencimientoSuscripcion extends Mailable
                 $dias === -1 => __('Tu suscripción venció ayer'),
                 default => __('Tu suscripción venció hace :dias días', ['dias' => abs($dias)]),
             },
-            'monto' => Decimal::bs((string) $this->suscripcion->precio_mensual),
+            // Plan + extras: lo mismo que verá en Mi suscripción al pagar.
+            'monto' => Decimal::bs($this->suscripcion->precioRenovacion()),
             'receptor' => $this->ajustes->receptor_nombre ?: 'MoziStudios',
             'enlace' => route('suscripcion'),
         ]);

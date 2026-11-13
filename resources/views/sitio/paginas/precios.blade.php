@@ -76,6 +76,7 @@
                 ['¿Cómo pago la mensualidad?', 'Con QR desde la sección Suscripción del sistema. Subes tu comprobante y lo revisamos.'],
                 ['¿Puedo cambiar de plan?', 'Sí, cuando quieras. Si subes de plan, pagas solo la diferencia por los días que faltan de tu mes.'],
                 ['¿Qué diferencia hay entre los planes?', 'El plan Inventario tiene inventario, ventas, créditos, compras, caja y reportes. Inventario + SIAT suma la facturación en línea. SIAT + Agente IA suma además a Mozi, el agente de IA que analiza tu negocio.'],
+                ['¿Y si tengo más sucursales o más personas?', 'Sumas sucursales o paquetes de usuarios a tu plan desde Mi suscripción, cuando quieras. Tu mensualidad es el plan más tus extras. Si los agregas a mitad del mes pagas solo la parte que falta; para muchas sucursales tenemos el plan Empresa con precio especial.'],
                 ['¿Qué pasa si me atraso con el pago?', 'Te enviamos recordatorios antes y después del vencimiento. Tu cuenta no se bloquea de forma automática: siempre conversamos contigo primero.'],
             ]" />
         </div>

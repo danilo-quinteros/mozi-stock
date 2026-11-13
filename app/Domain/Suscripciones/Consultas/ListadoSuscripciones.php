@@ -29,7 +29,11 @@ final class ListadoSuscripciones
             ->leftJoin('planes', 'planes.id', '=', 'suscripciones.plan_id')
             ->select('empresas.id', 'empresas.nombre', 'empresas.email', 'empresas.activa',
                 'suscripciones.id as suscripcion_id', 'suscripciones.precio_mensual', 'suscripciones.vencimiento',
-                'planes.titulo as plan_titulo')
+                'planes.titulo as plan_titulo', 'suscripciones.sucursales_extra', 'suscripciones.paquetes_usuarios')
+            // Mensualidad de hoy = plan + extras (como CalculadoraExtras::desglose; DECIMAL en SQL, sin float).
+            ->selectRaw('suscripciones.precio_mensual'
+                .' + CASE WHEN planes.sucursales_incluidas IS NULL THEN 0 ELSE suscripciones.sucursales_extra * planes.precio_sucursal_extra END'
+                .' + CASE WHEN planes.usuarios_incluidos IS NULL THEN 0 ELSE suscripciones.paquetes_usuarios * planes.precio_paquete_usuarios END as mensualidad')
             ->selectSub((clone $pendientes)->selectRaw('count(*)'), 'en_revision')
             ->when($termino !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('empresas.nombre', 'like', $patron)->orWhere('empresas.email', 'like', $patron)))

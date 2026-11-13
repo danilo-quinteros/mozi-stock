@@ -43,6 +43,11 @@
         ],
     };
     $mostrarPago = $estado !== EstadoSuscripcion::AlDia || $formulario;
+    $pagaExtras = $modoPago === 'extras' && ($extras['cobra_hoy'] ?? false);
+    if ($pagaExtras) {
+        $vista['tarjeta'] = __('Paga tus extras');
+        $vista['subtitulo'] = __('Escanea el QR y envía el comprobante: tus extras se activan cuando MoziStudios lo apruebe.');
+    }
     $zona = config('mozistock.business_timezone');
 @endphp
 <div>
@@ -107,14 +112,125 @@
             </div>
             <div class="sub-fact">
                 <label>{{ __('Mensualidad') }}</label>
-                <b>{{ Decimal::bs((string) $suscripcion->precio_mensual) }}</b>
-                @if ($suscripcion->plan_siguiente_id && $suscripcion->planSiguiente)
-                    <small style="display:block;color:var(--brand-bright);margin-top:2px">{{ __('Próxima renovación: :precio', ['precio' => Decimal::bs((string) $suscripcion->planSiguiente->precio_mensual)]) }}</small>
+                <b>{{ Decimal::bs($extras['actual']['total']) }}</b>
+                @if (Decimal::comparar($precioRenovacion, $extras['actual']['total'], 2) !== 0)
+                    <small style="display:block;color:var(--brand-bright);margin-top:2px">{{ __('Próxima renovación: :precio', ['precio' => Decimal::bs($precioRenovacion)]) }}</small>
+                @elseif (Decimal::comparar($extras['actual']['extras'], '0', 2) > 0)
+                    <small style="display:block;color:var(--faint);margin-top:2px">{{ __('Plan :plan + extras :extras', ['plan' => Decimal::bs($extras['actual']['plan']), 'extras' => Decimal::bs($extras['actual']['extras'])]) }}</small>
                 @endif
             </div>
             <div class="sub-fact"><label>{{ $vista['fecha'] }}</label><b>{{ $suscripcion->vencimiento->format('d/m/Y') }}</b></div>
             <div class="sub-fact"><label>{{ __('Acceso al sistema') }}</label><b class="sub-access">{{ __('● Habilitado') }}</b></div>
         </div>
+
+
+        {{-- Inline: un bloque @php después de @php(...) confunde al compilador de Blade. --}}
+        @php([$plan, $nuevo, $limites, $uso, $bloqueado, $dif] = [$extras['plan'], $extras['nuevo'], $extras['limites'], $extras['uso'], $extras['en_revision'], $extras['diferencia']])
+        <section class="sub-card sub-extras" aria-labelledby="sub-extras-titulo" data-test="extras">
+            <h3 class="sub-card-title" id="sub-extras-titulo">{{ __('Lo que pagas cada mes') }}</h3>
+            <p class="sub-card-subtitle">
+                @if ($plan)
+                    {{ __('Tu plan incluye :sucursales y :usuarios. ¿Necesitas más? Súmalos aquí.', [
+                        'sucursales' => $plan->sucursales_incluidas === null ? __('sucursales sin límite') : trans_choice(':count sucursal|:count sucursales', $plan->sucursales_incluidas),
+                        'usuarios' => $plan->usuarios_incluidos === null ? __('usuarios sin límite') : trans_choice(':count usuario|:count usuarios', $plan->usuarios_incluidos),
+                    ]) }}
+                @else
+                    {{ __('MoziStudios configuró tu mensualidad a mano. Para sumar sucursales o usuarios, escríbenos.') }}
+                @endif
+            </p>
+
+            <div class="sub-bill">
+                <div class="sub-bill-row">
+                    <div class="sub-bill-what"><b>{{ $plan?->titulo ?? __('Plan configurado') }}</b><small>{{ __('Precio del plan') }}</small></div>
+                    <b class="sub-bill-amount">{{ Decimal::bs($nuevo['plan']) }}</b>
+                </div>
+                @if ($plan && $plan->sucursales_incluidas !== null)
+                    <div class="sub-bill-row">
+                        <div class="sub-bill-what"><b>{{ __('Sucursales extra') }}</b><small>{{ __(':precio cada una, por mes', ['precio' => Decimal::bs($nuevo['precio_sucursal'])]) }}</small></div>
+                        <div class="sub-stepper" role="group" aria-label="{{ __('Sucursales extra') }}">
+                            <button type="button" wire:click="restar('sucursales')" @disabled($bloqueado || $sucursalesExtra === 0) aria-label="{{ __('Quitar una sucursal extra') }}"><x-icon name="minus" /></button>
+                            <output aria-live="polite" data-test="sucursales-extra">{{ $sucursalesExtra }}</output>
+                            <button type="button" wire:click="sumar('sucursales')" @disabled($bloqueado) aria-label="{{ __('Agregar una sucursal extra') }}"><x-icon name="plus" /></button>
+                        </div>
+                        <b class="sub-bill-amount">{{ Decimal::bs($nuevo['subtotal_sucursales']) }}</b>
+                    </div>
+                @endif
+                @if ($plan && $plan->usuarios_incluidos !== null)
+                    <div class="sub-bill-row">
+                        <div class="sub-bill-what"><b>{{ __('Paquetes de :n usuarios', ['n' => $plan->usuarios_por_paquete]) }}</b><small>{{ __(':precio cada paquete, por mes', ['precio' => Decimal::bs($nuevo['precio_paquete'])]) }}</small></div>
+                        <div class="sub-stepper" role="group" aria-label="{{ __('Paquetes de usuarios') }}">
+                            <button type="button" wire:click="restar('usuarios')" @disabled($bloqueado || $paquetesUsuarios === 0) aria-label="{{ __('Quitar un paquete de usuarios') }}"><x-icon name="minus" /></button>
+                            <output aria-live="polite" data-test="paquetes-usuarios">{{ $paquetesUsuarios }}</output>
+                            <button type="button" wire:click="sumar('usuarios')" @disabled($bloqueado) aria-label="{{ __('Agregar un paquete de usuarios') }}"><x-icon name="plus" /></button>
+                        </div>
+                        <b class="sub-bill-amount">{{ Decimal::bs($nuevo['subtotal_paquetes']) }}</b>
+                    </div>
+                @endif
+                <div class="sub-bill-total">
+                    <span>{{ $extras['cambiado'] ? __('Nuevo total por mes') : __('Total por mes') }}</span>
+                    <b data-test="total-mensual">{{ Decimal::bs($nuevo['total']) }}</b>
+                </div>
+            </div>
+
+            @if ($limites['sucursales'] !== null || $limites['usuarios'] !== null)
+                <p class="sub-usage">
+                    {{ __('Hoy usas') }}
+                    @if ($limites['sucursales'] !== null)<b>{{ __(':uso de :limite sucursales', ['uso' => $uso['sucursales'], 'limite' => $limites['sucursales']]) }}</b>@endif
+                    @if ($limites['sucursales'] !== null && $limites['usuarios'] !== null) {{ __('y') }} @endif
+                    @if ($limites['usuarios'] !== null)<b>{{ __(':uso de :limite usuarios', ['uso' => $uso['usuarios'], 'limite' => $limites['usuarios']]) }}</b>@endif.
+                </p>
+            @endif
+
+            @error('extras')<div class="notice sub-extras-error" role="alert"><x-icon name="info" /><div><p>{{ $message }}</p></div></div>@enderror
+
+            @if ($bloqueado)
+                <p class="sub-usage">{{ __('Tienes un comprobante en revisión. Podrás cambiar tus extras cuando MoziStudios responda.') }}</p>
+            @elseif ($extras['cambiado'])
+                <div class="sub-extras-confirm" data-test="confirmar-extras">
+                    @if ($extras['cobra_hoy'])
+                        <p>
+                            {{ __('Para activarlo hoy pagas') }} <b>{{ Decimal::bs($dif['importe']) }}</b>:
+                            {{ $dif['meses_completos'] > 0
+                                ? __('la diferencia por :meses y :dias hasta tu vencimiento del :fecha.', ['meses' => trans_choice(':count mes|:count meses', $dif['meses_completos']), 'dias' => trans_choice(':count día|:count días', $dif['dias_restantes']), 'fecha' => $suscripcion->vencimiento->format('d/m/Y')])
+                                : __('la parte proporcional de los :dias que faltan para tu vencimiento del :fecha.', ['dias' => trans_choice(':count día|:count días', $dif['dias_restantes']), 'fecha' => $suscripcion->vencimiento->format('d/m/Y')]) }}
+                            {{ __('Desde tu próximo pago, tu mensualidad será') }} <b>{{ Decimal::bs($nuevo['total']) }}</b>.
+                        </p>
+                        <div class="sub-extras-actions">
+                            <button type="button" class="btn ghost sm" wire:click="deshacerExtras">{{ __('Deshacer') }}</button>
+                            <button type="button" class="btn primary sm" wire:click="pagarExtras"><x-icon name="qr" /> {{ __('Pagar :importe y activar', ['importe' => Decimal::bs($dif['importe'])]) }}</button>
+                        </div>
+                    @else
+                        <p>
+                            @if ($dif['motivo_gratis'] === 'prueba')
+                                {{ __('Estás en tu prueba gratis: se activa ya, sin costo.') }}
+                            @elseif ($dif['motivo_gratis'] === 'vencida')
+                                {{ __('Se activa ya y tu próximo pago incluye la nueva mensualidad.') }}
+                            @elseif ($extras['quita'])
+                                {{ __('Se quita ya. Lo que ya pagaste de este período no se devuelve.') }}
+                            @endif
+                            {{ __('Desde tu próximo pago, tu mensualidad será') }} <b>{{ Decimal::bs($nuevo['total']) }}</b>.
+                        </p>
+                        <div class="sub-extras-actions">
+                            <button type="button" class="btn ghost sm" wire:click="deshacerExtras">{{ __('Deshacer') }}</button>
+                            <button type="button" class="btn primary sm" wire:click="guardarExtras" wire:loading.attr="disabled" wire:target="guardarExtras"><x-icon name="check" /> {{ __('Guardar cambios') }}</button>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            <div class="sub-empresa">
+                <span class="sub-empresa-icon" aria-hidden="true"><x-icon name="building" /></span>
+                <div class="grow">
+                    <b>{{ __('Plan Empresa') }}</b>
+                    <p>{{ __('¿Muchas sucursales o una cadena de tiendas? Te armamos un precio especial.') }}</p>
+                </div>
+                @if ($extras['whatsapp'])
+                    <a class="btn soft sm" href="{{ $extras['whatsapp'] }}" target="_blank" rel="noopener">{{ __('Escríbenos por WhatsApp') }}</a>
+                @else
+                    <span class="sub-empresa-pronto">{{ $extras['correo'] ? __('Escríbenos a :correo', ['correo' => $extras['correo']]) : __('Muy pronto por WhatsApp') }}</span>
+                @endif
+            </div>
+        </section>
 
         <div class="sub-layout">
             <section class="sub-card">
@@ -122,7 +238,7 @@
                 <p class="sub-card-subtitle">{{ $vista['subtitulo'] }}</p>
 
                 @if ($enRevision)
-                    <div class="notice"><x-icon name="info" /><div><b>{{ __('Comprobante :codigo en revisión', ['codigo' => $enRevision->codigo()]) }}</b><p>{{ __('Enviado el :format por :importe (:meses :meses2). Podrás enviar otro cuando MoziStudios responda.', ['format' => $enRevision->created_at->timezone($zona)->format('d/m/Y H:i'), 'importe' => Decimal::bs((string) $enRevision->importe), 'meses' => $enRevision->meses, 'meses2' => $enRevision->meses === 1 ? 'mes' : 'meses']) }}</p></div></div>
+                    <div class="notice"><x-icon name="info" /><div><b>{{ __('Comprobante :codigo en revisión', ['codigo' => $enRevision->codigo()]) }}</b><p>{{ __('Enviado el :format por :importe (:concepto). Podrás enviar otro cuando MoziStudios responda.', ['format' => $enRevision->created_at->timezone($zona)->format('d/m/Y H:i'), 'importe' => Decimal::bs((string) $enRevision->importe), 'concepto' => $enRevision->concepto()]) }}</p></div></div>
                 @elseif (! $mostrarPago)
                     <div class="sub-payment-prompt">
                         <div><b>{{ __('No tienes pagos vencidos') }}</b><p>{{ __('Si deseas, puedes adelantar tu siguiente mensualidad.') }}</p></div>
@@ -139,11 +255,31 @@
                             </div>
                         @endif
                         <form wire:submit="enviar">
-                            <div class="sub-payment-amount">{{ __('Importe a pagar') }}<strong aria-live="polite">{{ Decimal::bs(Decimal::multiplicar($precioRenovacion, (string) $mesesElegidos, 2)) }}</strong></div>
+                            @if ($pagaExtras)
+                                <div class="sub-payment-amount">{{ __('Pagas hoy por tus extras') }}<strong aria-live="polite" data-test="importe-extras">{{ Decimal::bs($extras['diferencia']['importe']) }}</strong></div>
+                            @else
+                                <div class="sub-payment-amount">{{ __('Importe a pagar') }}<strong aria-live="polite">{{ Decimal::bs(Decimal::multiplicar($precioRenovacion, (string) $mesesElegidos, 2)) }}</strong></div>
+                                @php($renovacion = $suscripcion->desgloseRenovacion())
+                                @if (Decimal::comparar($renovacion['extras'], '0', 2) > 0)
+                                    <p class="sub-payment-detail">{{ __('Cada mes: plan :plan + extras :extras = :total', ['plan' => Decimal::bs($renovacion['plan']), 'extras' => Decimal::bs($renovacion['extras']), 'total' => Decimal::bs($renovacion['total'])]) }}</p>
+                                @endif
+                            @endif
                             <div class="sub-steps">
                                 <div class="sub-step"><span class="sub-step-num">1</span><span>{{ __('Escanea el QR:receptor_nombre con la aplicación de tu banco y paga exactamente este importe.', ['receptor_nombre' => $ajustes->receptor_nombre ? ' de '.$ajustes->receptor_nombre : ' oficial']) }}</span></div>
                                 <div class="sub-step"><span class="sub-step-num">2</span><span>{{ __('Adjunta el comprobante para que MoziStudios pueda verificarlo.') }}</span></div>
                             </div>
+                            @if ($pagaExtras)
+                                <p class="subtle" style="margin:8px 0 14px">
+                                    {{ __('Tu plan quedará con :extras. Tu vencimiento (:fecha) no cambia.', [
+                                        'extras' => implode(' y ', array_filter([
+                                            $sucursalesExtra > 0 ? trans_choice(':count sucursal extra|:count sucursales extra', $sucursalesExtra) : null,
+                                            $paquetesUsuarios > 0 ? trans_choice(':count paquete de usuarios|:count paquetes de usuarios', $paquetesUsuarios) : null,
+                                        ])),
+                                        'fecha' => $suscripcion->vencimiento->format('d/m/Y'),
+                                    ]) }}
+                                    <button type="button" class="link" wire:click="$set('modoPago', 'renovacion')">{{ __('Pagar la mensualidad en su lugar') }}</button>
+                                </p>
+                            @else
                             <x-campo etiqueta="Meses que pagas" campo="meses">
                                 <select id="meses" class="select" wire:model.live="meses">
                                     @foreach (CalendarioSuscripcion::MESES_PAGABLES as $m)
@@ -152,6 +288,7 @@
                                 </select>
                             </x-campo>
                             <p class="subtle" style="margin:8px 0 14px">{{ __('Si se aprueba, el vencimiento pasa del :format al', ['format' => $suscripcion->vencimiento->format('d/m/Y')]) }} <b>{{ $vencimientoTras->format('d/m/Y') }}</b>@if ($vencimientoTras->lessThan($hoy)) {{ __('(seguirá vencida: hay meses anteriores sin pagar)') }}@endif.</p>
+                            @endif
                             <div class="sub-file">
                                 <div class="sub-file-text">
                                     <strong>{{ $archivo ? __('Archivo seleccionado') : __('Comprobante de pago') }}</strong>
@@ -176,7 +313,7 @@
                             </x-campo>
                             <div style="height:12px"></div>
                             <button class="btn primary sub-btn-full" type="submit" wire:loading.attr="disabled" wire:target="enviar,archivo"><x-icon name="upload" /> {{ __('Enviar comprobante para revisión') }}</button>
-                            <p class="sub-feedback">{{ __('El pago se acreditará cuando MoziStudios apruebe el comprobante; enviarlo no cambia tu vencimiento.') }}</p>
+                            <p class="sub-feedback">{{ $pagaExtras ? __('Los extras se activan cuando MoziStudios apruebe el comprobante.') : __('El pago se acreditará cuando MoziStudios apruebe el comprobante; enviarlo no cambia tu vencimiento.') }}</p>
                         </form>
                     </div>
                 @endif
@@ -190,7 +327,7 @@
                         @forelse ($pagos as $pago)
                             <div class="sub-history-row" wire:key="pago-{{ $pago->id }}">
                                 <div>
-                                    <b>{{ $pago->vencimiento_nuevo ? $pago->vencimiento_anterior?->format('d/m/Y').' → '.$pago->vencimiento_nuevo->format('d/m/Y') : $pago->meses.' '.($pago->meses === 1 ? 'mes' : 'meses') }}</b>
+                                    <b>{{ $pago->esExtras() ? $pago->concepto() : ($pago->vencimiento_nuevo ? $pago->vencimiento_anterior?->format('d/m/Y').' → '.$pago->vencimiento_nuevo->format('d/m/Y') : $pago->concepto()) }}</b>
                                     <small>{{ __(':codigo · enviado :format ·', ['codigo' => $pago->codigo(), 'format' => $pago->created_at->timezone($zona)->format('d/m/Y')]) }} <a class="link" href="{{ route('suscripcion.comprobante', $pago->id) }}" target="_blank" rel="noopener">{{ $pago->esPdf() ? 'PDF' : __('Ver archivo') }}</a></small>
                                     @if ($pago->motivo_rechazo)<small>{{ $pago->motivo_rechazo }}</small>@endif
                                 </div>

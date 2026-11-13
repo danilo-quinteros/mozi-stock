@@ -84,7 +84,11 @@
                                 <td><b>{{ $fila->nombre }}</b><small style="display:block;color:var(--faint);margin-top:4px">{{ $fila->email ?? __('Sin correo de contacto') }}</small></td>
                                 <td><span class="badge info" style="white-space:nowrap">{{ $fila->plan_titulo ?? __('Plan estándar') }}</span></td>
                                 @if ($vence)
-                                    <td>{{ Decimal::bs((string) $fila->precio_mensual) }}</td>
+                                    <td>{{ Decimal::bs((string) $fila->mensualidad) }}
+                                        @if ((int) $fila->sucursales_extra + (int) $fila->paquetes_usuarios > 0)
+                                            <small style="display:block;color:var(--faint);margin-top:4px">{{ __('Incluye extras: +:s suc. · +:p paq.', ['s' => (int) $fila->sucursales_extra, 'p' => (int) $fila->paquetes_usuarios]) }}</small>
+                                        @endif
+                                    </td>
                                     <td>{{ $vence->format('d/m/Y') }}</td>
                                     <td>
                                         @if ($ultimo)
@@ -177,7 +181,9 @@
                             <div style="margin: 12px 0;">
                                 <span class="stat-label">{{ __('Precio mensual') }}</span>
                                 <div class="stat-value" style="font-size:26px;margin:4px 0 8px">{{ Decimal::bs((string) $p->precio_mensual) }}<small style="font-size:12px;color:var(--faint)"> / mes</small></div>
-                                <p class="lead" style="font-size:12px;line-height:1.6;margin:0 0 14px">{{ $p->descripcion }}</p>
+                                <p class="lead" style="font-size:12px;line-height:1.6;margin:0 0 10px">{{ $p->descripcion }}</p>
+                                <div class="list-line"><span>{{ __('Incluye') }}</span><b>{{ $p->sucursales_incluidas === null ? __('Sucursales sin límite') : trans_choice(':count sucursal|:count sucursales', $p->sucursales_incluidas) }} · {{ $p->usuarios_incluidos === null ? __('usuarios sin límite') : trans_choice(':count usuario|:count usuarios', $p->usuarios_incluidos) }}</b></div>
+                                <div class="list-line"><span>{{ __('Extras') }}</span><b>{{ __('Sucursal :s · :n usuarios :p', ['s' => Decimal::bs((string) $p->precio_sucursal_extra), 'n' => $p->usuarios_por_paquete, 'p' => Decimal::bs((string) $p->precio_paquete_usuarios)]) }}</b></div>
                             </div>
                         </div>
                         <div>
@@ -220,6 +226,26 @@
                     <x-campo etiqueta="Precio mensual (Bs)" campo="planPrecio">
                         <input class="input" type="text" inputmode="decimal" wire:model="planPrecio" placeholder="{{ __('150.00') }}" required>
                     </x-campo>
+                    <div class="fields two">
+                        <x-campo etiqueta="Sucursales incluidas" campo="planSucursales">
+                            <input class="input" type="number" min="1" max="9999" wire:model="planSucursales" placeholder="{{ __('Sin límite') }}">
+                        </x-campo>
+                        <x-campo etiqueta="Usuarios incluidos" campo="planUsuarios">
+                            <input class="input" type="number" min="1" max="9999" wire:model="planUsuarios" placeholder="{{ __('Sin límite') }}">
+                        </x-campo>
+                    </div>
+                    <div class="fields three">
+                        <x-campo etiqueta="Sucursal extra (Bs/mes)" campo="planPrecioSucursal">
+                            <input class="input" type="text" inputmode="decimal" wire:model="planPrecioSucursal" required>
+                        </x-campo>
+                        <x-campo etiqueta="Paquete de usuarios (Bs/mes)" campo="planPrecioPaquete">
+                            <input class="input" type="text" inputmode="decimal" wire:model="planPrecioPaquete" required>
+                        </x-campo>
+                        <x-campo etiqueta="Usuarios por paquete" campo="planUsuariosPaquete">
+                            <input class="input" type="number" min="1" max="100" wire:model="planUsuariosPaquete" required>
+                        </x-campo>
+                    </div>
+                    <p class="subtle" style="margin:0">{{ __('Deja vacías las sucursales o los usuarios para no poner límite (por ejemplo, un plan Empresa negociado). Cambiar el precio de los extras cambia la próxima mensualidad de quienes ya los tienen.') }}</p>
                     <div style="margin: 4px 0;">
                         <label class="row" style="cursor:pointer">
                             <input type="checkbox" class="checkbox" wire:model="planSiat">

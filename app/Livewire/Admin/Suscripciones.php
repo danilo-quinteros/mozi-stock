@@ -54,6 +54,17 @@ class Suscripciones extends Component
 
     public bool $planIa = false;
 
+    // Qué incluye el plan (vacío = sin límite) y precio de los extras.
+    public string $planSucursales = '1';
+
+    public string $planUsuarios = '3';
+
+    public string $planPrecioSucursal = '120';
+
+    public string $planPrecioPaquete = '50';
+
+    public string $planUsuariosPaquete = '5';
+
     public function mount(): void
     {
         $this->authorize('configurar', Suscripcion::class);
@@ -84,6 +95,7 @@ class Suscripciones extends Component
         $this->planPrecio = '';
         $this->planSiat = false;
         $this->planIa = false;
+        $this->reset('planSucursales', 'planUsuarios', 'planPrecioSucursal', 'planPrecioPaquete', 'planUsuariosPaquete');
         $this->modalPlanAbierto = true;
     }
 
@@ -98,6 +110,11 @@ class Suscripciones extends Component
         $this->planPrecio = Decimal::simple((string) $plan->precio_mensual);
         $this->planSiat = $plan->siat_habilitado;
         $this->planIa = $plan->agente_ia;
+        $this->planSucursales = (string) ($plan->sucursales_incluidas ?? '');
+        $this->planUsuarios = (string) ($plan->usuarios_incluidos ?? '');
+        $this->planPrecioSucursal = Decimal::simple((string) $plan->precio_sucursal_extra);
+        $this->planPrecioPaquete = Decimal::simple((string) $plan->precio_paquete_usuarios);
+        $this->planUsuariosPaquete = (string) $plan->usuarios_por_paquete;
         $this->modalPlanAbierto = true;
     }
 
@@ -105,7 +122,8 @@ class Suscripciones extends Component
     {
         $this->modalPlanAbierto = false;
         $this->resetValidation();
-        $this->reset('planEditandoId', 'planTitulo', 'planDescripcion', 'planPrecio', 'planSiat', 'planIa');
+        $this->reset('planEditandoId', 'planTitulo', 'planDescripcion', 'planPrecio', 'planSiat', 'planIa',
+            'planSucursales', 'planUsuarios', 'planPrecioSucursal', 'planPrecioPaquete', 'planUsuariosPaquete');
     }
 
     public function guardarPlan(GuardarPlan $accion): void
@@ -118,15 +136,27 @@ class Suscripciones extends Component
             'planPrecio' => ['required', 'regex:/^\d{1,15}([.,]\d{1,2})?$/'],
             'planSiat' => ['boolean'],
             'planIa' => ['boolean'],
+            'planSucursales' => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'planUsuarios' => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'planPrecioSucursal' => ['required', 'regex:/^\d{1,15}([.,]\d{1,2})?$/'],
+            'planPrecioPaquete' => ['required', 'regex:/^\d{1,15}([.,]\d{1,2})?$/'],
+            'planUsuariosPaquete' => ['required', 'integer', 'min:1', 'max:100'],
         ], [
             'planTitulo.required' => __('Indica el título del plan.'),
             'planDescripcion.required' => __('Indica la descripción del plan.'),
             'planPrecio.required' => __('Indica el precio mensual.'),
             'planPrecio.regex' => __('El precio mensual admite hasta 2 decimales.'),
+            'planPrecioSucursal.regex' => __('El precio admite hasta 2 decimales.'),
+            'planPrecioPaquete.regex' => __('El precio admite hasta 2 decimales.'),
         ], [
             'planTitulo' => __('título'),
             'planDescripcion' => __('descripción'),
             'planPrecio' => __('precio mensual'),
+            'planSucursales' => __('sucursales incluidas'),
+            'planUsuarios' => __('usuarios incluidos'),
+            'planPrecioSucursal' => __('precio por sucursal extra'),
+            'planPrecioPaquete' => __('precio por paquete de usuarios'),
+            'planUsuariosPaquete' => __('usuarios por paquete'),
         ]);
 
         $plan = $accion->ejecutar($this->actor(), [
@@ -135,6 +165,11 @@ class Suscripciones extends Component
             'precio_mensual' => $this->planPrecio,
             'siat_habilitado' => $this->planSiat,
             'agente_ia' => $this->planIa,
+            'sucursales_incluidas' => $this->planSucursales,
+            'usuarios_incluidos' => $this->planUsuarios,
+            'precio_sucursal_extra' => $this->planPrecioSucursal,
+            'precio_paquete_usuarios' => $this->planPrecioPaquete,
+            'usuarios_por_paquete' => $this->planUsuariosPaquete,
         ], $this->planEditandoId);
 
         $this->cerrarModalPlan();

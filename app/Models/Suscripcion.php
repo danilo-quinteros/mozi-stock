@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\AgenteMozi\AccesoPorPlan;
+use App\Domain\Suscripciones\CalculadoraExtras;
 use App\Domain\Suscripciones\CalendarioSuscripcion;
 use App\Enums\EstadoSuscripcion;
 use App\Models\Concerns\BelongsToEmpresa;
@@ -20,7 +21,9 @@ use Illuminate\Support\Carbon;
  * @property int $empresa_id
  * @property int|null $plan_id
  * @property int|null $plan_siguiente_id
- * @property string $precio_mensual
+ * @property string $precio_mensual precio del plan, sin extras
+ * @property int $sucursales_extra
+ * @property int $paquetes_usuarios
  * @property int $dia_vencimiento
  * @property CarbonImmutable $vencimiento
  * @property CarbonImmutable|null $prueba_hasta
@@ -32,6 +35,9 @@ class Suscripcion extends Model
     use BelongsToEmpresa;
 
     protected $table = 'suscripciones';
+
+    /** @var array<string, int> */
+    protected $attributes = ['sucursales_extra' => 0, 'paquetes_usuarios' => 0];
 
     protected static function booted(): void
     {
@@ -45,6 +51,8 @@ class Suscripcion extends Model
             'plan_id' => 'integer',
             'plan_siguiente_id' => 'integer',
             'precio_mensual' => 'decimal:2',
+            'sucursales_extra' => 'integer',
+            'paquetes_usuarios' => 'integer',
             'dia_vencimiento' => 'integer',
             'vencimiento' => 'date',
             'prueba_hasta' => 'date',
@@ -99,17 +107,42 @@ class Suscripcion extends Model
         return CalendarioSuscripcion::avanzar($this->vencimiento, $this->dia_vencimiento, $meses);
     }
 
+    /** Plan con el que se renueva: el programado (downgrade) o el actual. */
+    public function planRenovacion(): ?Plan
+    {
+        return $this->plan_siguiente_id !== null && $this->planSiguiente !== null ? $this->planSiguiente : $this->plan;
+    }
+
     /**
-     * Precio que se cobrará en la próxima renovación.
-     * Si hay un cambio de plan programado (downgrade), se aplica el precio reducido del nuevo plan.
+     * Mensualidad de hoy: plan + extras vigentes.
+     *
+     * @return array{plan: string, sucursales: int, precio_sucursal: string, subtotal_sucursales: string, paquetes: int, precio_paquete: string, subtotal_paquetes: string, extras: string, total: string}
+     */
+    public function desgloseActual(): array
+    {
+        return CalculadoraExtras::desglose((string) $this->precio_mensual, $this->plan, $this->sucursales_extra, $this->paquetes_usuarios);
+    }
+
+    /**
+     * Lo que se cobra en la próxima renovación: precio del plan (el reducido si hay un cambio
+     * programado) más los extras con los precios de ese plan.
+     *
+     * @return array{plan: string, sucursales: int, precio_sucursal: string, subtotal_sucursales: string, paquetes: int, precio_paquete: string, subtotal_paquetes: string, extras: string, total: string}
+     */
+    public function desgloseRenovacion(): array
+    {
+        $programado = $this->plan_siguiente_id !== null && $this->planSiguiente !== null;
+        $precioPlan = $programado ? (string) $this->planSiguiente->precio_mensual : (string) $this->precio_mensual;
+
+        return CalculadoraExtras::desglose($precioPlan, $this->planRenovacion(), $this->sucursales_extra, $this->paquetes_usuarios);
+    }
+
+    /**
+     * Precio mensual que se cobrará en la próxima renovación (plan + extras).
      */
     public function precioRenovacion(): string
     {
-        if ($this->plan_siguiente_id !== null && $this->planSiguiente !== null) {
-            return (string) $this->planSiguiente->precio_mensual;
-        }
-
-        return (string) $this->precio_mensual;
+        return $this->desgloseRenovacion()['total'];
     }
 
     /**

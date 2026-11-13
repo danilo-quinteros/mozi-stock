@@ -578,15 +578,31 @@ h2 { font-size: clamp(2rem, 3.8vw, 2.9rem); line-height: 1.08; letter-spacing: -
 .plans.is-3 .plan { padding: clamp(22px, 2.4vw, 28px); }
 .plans.is-3 .plan h3 { font-size: 21px; }
 .plan-ia-ico { width: 22px; height: 22px; color: var(--info); }
-.plans.is-3 + .plan-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1180px; margin-inline: auto; }
-.plans.is-3 + .plan-notes .note { max-width: none; }
+.plans.is-3 ~ .plan-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1180px; margin-inline: auto; }
+.plans.is-3 ~ .plan-notes .note { max-width: none; }
 @media (max-width: 1020px) {
     .plans.is-3 { grid-template-columns: minmax(0, 1fr); gap: 28px; max-width: 520px; }
-    .plans.is-3 + .plan-notes { grid-template-columns: minmax(0, 1fr); max-width: 520px; }
+    .plans.is-3 ~ .plan-notes { grid-template-columns: minmax(0, 1fr); max-width: 520px; }
 }
 .plan-notes { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
 .note { display: flex; align-items: center; gap: 12px; max-width: 440px; padding: 13px 18px; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
 .note .ico { color: var(--accent); }
+
+/* Qué incluye cada plan y franja de extras bajo las tarjetas (sucursales, usuarios y plan Empresa). */
+.plan-cupo { display: flex; align-items: center; gap: 10px; margin: -6px 0 0; padding: 11px 14px; border-radius: 14px; background: var(--accent-soft); color: var(--text); font-size: 14px; line-height: 1.45; }
+.plan-cupo .ico { flex-shrink: 0; color: var(--accent); }
+.plan-cupo b { color: var(--strong); }
+.plan-extras { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; max-width: 900px; margin: 22px auto 0; padding: 18px 22px; border: 1px solid var(--accent-border); border-radius: 20px; background: var(--panel); }
+.plan-extras-items { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; color: var(--muted); font-size: 14.5px; }
+.plan-extras-items > b { color: var(--strong); font-size: 15.5px; }
+.plan-extras-items span { display: inline-flex; align-items: center; gap: 8px; }
+.plan-extras-items .ico { color: var(--accent); }
+.plan-extras-items strong { color: var(--strong); }
+.plan-extras-empresa { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; color: var(--muted); font-size: 14.5px; }
+.plan-extras-empresa strong { color: var(--strong); }
+.plans.is-3 ~ .plan-extras { max-width: 1180px; }
+@media (max-width: 1020px) { .plans.is-3 ~ .plan-extras { max-width: 520px; } }
+@media (max-width: 640px) { .plan-extras { padding: 16px; } .plan-extras-empresa .btn { width: 100%; justify-content: center; } }
 
 /* Preguntas */
 .faq { display: grid; gap: 10px; max-width: 760px; margin: 0 auto; }

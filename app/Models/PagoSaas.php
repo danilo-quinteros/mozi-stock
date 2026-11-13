@@ -18,8 +18,14 @@ use LogicException;
  * @property int $id
  * @property int $empresa_id
  * @property int $suscripcion_id
- * @property int $meses
- * @property string $precio_mensual
+ * @property string $tipo renovacion | extras
+ * @property int|null $meses null en un comprobante de extras
+ * @property string $precio_mensual plan + extras
+ * @property string|null $precio_plan
+ * @property int|null $sucursales_extra
+ * @property string|null $precio_sucursal_extra
+ * @property int|null $paquetes_usuarios
+ * @property string|null $precio_paquete_usuarios
  * @property string $importe
  * @property string|null $nota
  * @property string $archivo_path
@@ -50,6 +56,11 @@ class PagoSaas extends Model
         return [
             'meses' => 'integer',
             'precio_mensual' => 'decimal:2',
+            'precio_plan' => 'decimal:2',
+            'sucursales_extra' => 'integer',
+            'precio_sucursal_extra' => 'decimal:2',
+            'paquetes_usuarios' => 'integer',
+            'precio_paquete_usuarios' => 'decimal:2',
             'importe' => 'decimal:2',
             'archivo_bytes' => 'integer',
             'estado' => EstadoPagoSaas::class,
@@ -62,6 +73,28 @@ class PagoSaas extends Model
     protected static function booted(): void
     {
         static::deleting(fn () => throw new LogicException('Un comprobante de pago no se elimina.'));
+    }
+
+    public const TIPO_RENOVACION = 'renovacion';
+
+    public const TIPO_EXTRAS = 'extras';
+
+    public function esExtras(): bool
+    {
+        return $this->tipo === self::TIPO_EXTRAS;
+    }
+
+    /** «Extras: 2 sucursales · 1 paquete de usuarios» o «3 meses». */
+    public function concepto(): string
+    {
+        if (! $this->esExtras()) {
+            return trans_choice(':count mes|:count meses', (int) $this->meses);
+        }
+
+        return __('Extras: :detalle', ['detalle' => implode(' · ', array_filter([
+            $this->sucursales_extra ? trans_choice(':count sucursal extra|:count sucursales extra', $this->sucursales_extra) : null,
+            $this->paquetes_usuarios ? trans_choice(':count paquete de usuarios|:count paquetes de usuarios', $this->paquetes_usuarios) : null,
+        ])) ?: __('sin extras')]);
     }
 
     public function codigo(): string

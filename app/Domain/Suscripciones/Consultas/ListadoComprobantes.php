@@ -23,7 +23,8 @@ final class ListadoComprobantes
             ->join('empresas', 'empresas.id', '=', 'pagos_saas.empresa_id')
             ->join('users as remitentes', 'remitentes.id', '=', 'pagos_saas.enviado_por')
             ->leftJoin('users as revisores', 'revisores.id', '=', 'pagos_saas.revisado_por')
-            ->select('pagos_saas.id', 'pagos_saas.empresa_id', 'empresas.nombre as empresa', 'pagos_saas.created_at', 'pagos_saas.meses',
+            ->select('pagos_saas.id', 'pagos_saas.empresa_id', 'empresas.nombre as empresa', 'pagos_saas.created_at', 'pagos_saas.tipo', 'pagos_saas.meses',
+                'pagos_saas.sucursales_extra', 'pagos_saas.paquetes_usuarios',
                 'pagos_saas.precio_mensual', 'pagos_saas.importe', 'pagos_saas.estado', 'pagos_saas.archivo_mime', 'pagos_saas.nota',
                 'pagos_saas.revisado_en', 'pagos_saas.motivo_rechazo', 'pagos_saas.vencimiento_anterior', 'pagos_saas.vencimiento_nuevo',
                 'remitentes.name as remitente', 'revisores.name as revisor')

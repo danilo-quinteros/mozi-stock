@@ -46,8 +46,12 @@ final class RevisarComprobantePago
                 throw ValidationException::withMessages(['verificado' => __('Este comprobante ya fue rechazado; la empresa debe enviar uno nuevo.')]);
             }
 
+            if ($pago->esExtras()) {
+                return $this->aprobarExtras($actor, $suscripcion, $pago);
+            }
+
             $anterior = $suscripcion->vencimiento;
-            $suscripcion->vencimiento = $suscripcion->vencimientoTras($pago->meses);
+            $suscripcion->vencimiento = $suscripcion->vencimientoTras((int) $pago->meses);
 
             if ($suscripcion->plan_siguiente_id !== null) {
                 $planSiguiente = Plan::query()->find($suscripcion->plan_siguiente_id);
@@ -113,6 +117,33 @@ final class RevisarComprobantePago
 
             return $pago;
         }, attempts: 3);
+    }
+
+    /**
+     * Activa los extras pagados (la cantidad pedida, no una suma: el envío era el único
+     * comprobante en revisión y mientras tanto la empresa no puede cambiar sus extras).
+     * El vencimiento no se mueve.
+     */
+    private function aprobarExtras(User $actor, Suscripcion $suscripcion, PagoSaas $pago): PagoSaas
+    {
+        $antes = ['sucursales_extra' => $suscripcion->sucursales_extra, 'paquetes_usuarios' => $suscripcion->paquetes_usuarios];
+        $suscripcion->sucursales_extra = (int) $pago->sucursales_extra;
+        $suscripcion->paquetes_usuarios = (int) $pago->paquetes_usuarios;
+        $suscripcion->save();
+
+        $pago->estado = EstadoPagoSaas::Aprobado;
+        $pago->revisado_por = $actor->id;
+        $pago->revisado_en = Carbon::now();
+        $pago->vencimiento_anterior = $suscripcion->vencimiento;
+        $pago->vencimiento_nuevo = $suscripcion->vencimiento;
+        $pago->save();
+
+        $this->auditor->registrar('suscripcion.extras_aprobados', $pago, $actor, $pago->empresa_id, $antes, [
+            'sucursales_extra' => $suscripcion->sucursales_extra, 'paquetes_usuarios' => $suscripcion->paquetes_usuarios,
+            'comprobante' => $pago->codigo(), 'importe' => (string) $pago->importe,
+        ]);
+
+        return $pago;
     }
 
     /**

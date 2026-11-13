@@ -4,6 +4,7 @@ namespace App\Domain\Tenancy\Actions;
 
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\Actions\CrearCajaPrincipal;
+use App\Domain\Suscripciones\CupoSuscripcion;
 use App\Enums\Rol;
 use App\Models\Sucursal;
 use App\Models\TurnoCaja;
@@ -23,6 +24,7 @@ final class GuardarSucursal
     public function __construct(
         private readonly Auditor $auditor,
         private readonly CrearCajaPrincipal $crearCajaPrincipal,
+        private readonly CupoSuscripcion $cupo,
     ) {}
 
     /**
@@ -33,6 +35,9 @@ final class GuardarSucursal
         Gate::forUser($actor)->authorize('create', Sucursal::class);
 
         return DB::transaction(function () use ($actor, $datos): Sucursal {
+            // Sucursales del plan + extras (Mi suscripción).
+            $this->cupo->asegurarSucursalNueva((int) $actor->empresa_id);
+
             $sucursal = new Sucursal;
             $sucursal->fill($this->normalizar($datos));
             $sucursal->empresa_id = (int) $actor->empresa_id;
@@ -78,6 +83,10 @@ final class GuardarSucursal
 
             if ($bloqueada->activa === $activa) {
                 return $bloqueada;
+            }
+
+            if ($activa) {
+                $this->cupo->asegurarSucursalNueva($bloqueada->empresa_id, 'sucursal');
             }
 
             if (! $activa && User::query()

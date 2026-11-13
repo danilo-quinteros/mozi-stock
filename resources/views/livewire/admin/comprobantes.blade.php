@@ -55,7 +55,10 @@
                             <td><b>{{ $fila->empresa }}</b><small style="display:block;color:var(--faint);margin-top:4px">CP-{{ str_pad((string) $fila->id, 5, '0', STR_PAD_LEFT) }} · {{ $fila->remitente }}</small></td>
                             <td>{{ \Illuminate\Support\Carbon::parse($fila->created_at)->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }}</td>
                             <td>
-                                @if ($fila->vencimiento_nuevo)
+                                @if ($fila->tipo === 'extras')
+                                    <span class="badge info">{{ __('Extras') }}</span>
+                                    <small style="display:block;color:var(--faint);margin-top:4px">{{ trans_choice(':count sucursal extra|:count sucursales extra', (int) $fila->sucursales_extra) }} · {{ trans_choice(':count paquete de usuarios|:count paquetes de usuarios', (int) $fila->paquetes_usuarios) }}</small>
+                                @elseif ($fila->vencimiento_nuevo)
                                     {{ CalendarioSuscripcion::fecha((string) $fila->vencimiento_anterior)->format('d/m/Y') }} → {{ CalendarioSuscripcion::fecha((string) $fila->vencimiento_nuevo)->format('d/m/Y') }}
                                 @else
                                     {{ $fila->meses }} {{ (int) $fila->meses === 1 ? 'mes' : 'meses' }}
@@ -91,7 +94,16 @@
             <div class="list-line"><span>{{ __('Empresa') }}</span><b>{{ $revisando->empresa->nombre }}</b></div>
             <div class="list-line"><span>{{ __('Enviado por') }}</span><b>{{ $revisando->remitente->name }}</b></div>
             <div class="list-line"><span>{{ __('Fecha de envío') }}</span><b>{{ $revisando->created_at->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }}</b></div>
-            <div class="list-line"><span>{{ __('Meses') }}</span><b>{{ $revisando->meses }} × {{ Decimal::bs((string) $revisando->precio_mensual) }}</b></div>
+            @if ($revisando->esExtras())
+                <div class="list-line"><span>{{ __('Concepto') }}</span><b>{{ __('Extras a mitad del período') }}</b></div>
+                <div class="list-line"><span>{{ __('Extras que se activan') }}</span><b>{{ trans_choice(':count sucursal extra|:count sucursales extra', (int) $revisando->sucursales_extra) }} · {{ trans_choice(':count paquete de usuarios|:count paquetes de usuarios', (int) $revisando->paquetes_usuarios) }}</b></div>
+                <div class="list-line"><span>{{ __('Mensualidad desde el próximo pago') }}</span><b>{{ Decimal::bs((string) $revisando->precio_mensual) }}</b></div>
+            @else
+                <div class="list-line"><span>{{ __('Meses') }}</span><b>{{ $revisando->meses }} × {{ Decimal::bs((string) $revisando->precio_mensual) }}</b></div>
+                @if ($revisando->precio_plan !== null && (int) $revisando->sucursales_extra + (int) $revisando->paquetes_usuarios > 0)
+                    <div class="list-line"><span>{{ __('Mensualidad') }}</span><b>{{ __('Plan :plan + extras :extras', ['plan' => Decimal::bs((string) $revisando->precio_plan), 'extras' => Decimal::bs(Decimal::restar((string) $revisando->precio_mensual, (string) $revisando->precio_plan, 2))]) }}</b></div>
+                @endif
+            @endif
             <div class="list-line"><span>{{ __('Importe esperado') }}</span><b>{{ $importeTexto }}</b></div>
             @if ($revisando->nota)
                 <div class="list-line"><span>{{ __('Nota de la empresa') }}</span><b style="text-align:right;max-width:60%">{{ $revisando->nota }}</b></div>
@@ -99,7 +111,11 @@
             <div class="list-line"><span>{{ __('Archivo adjunto') }}</span><a class="btn sm ghost" href="{{ route('admin.comprobantes.archivo', $revisando->id) }}" target="_blank" rel="noopener">{{ $revisando->esPdf() ? __('Descargar PDF') : __('Ver archivo') }}</a></div>
 
             @if ($revisando->estado === EstadoPagoSaas::Pendiente)
+                @if ($revisando->esExtras())
+                    <div class="list-line"><span>{{ __('Vencimiento') }}</span><b>{{ __(':fecha (no cambia)', ['fecha' => $suscripcion?->vencimiento->format('d/m/Y')]) }}</b></div>
+                @else
                 <div class="list-line"><span>{{ __('Vencimiento') }}</span><b>{{ $suscripcion?->vencimiento->format('d/m/Y') }} → {{ $proyectado?->format('d/m/Y') }}</b></div>
+                @endif
                 @if ($proyectado && $proyectado->lessThan($hoy))
                     <p class="subtle" style="margin:8px 0 0">{{ __('Aun aprobado, seguirá vencida: los meses atrasados se siguen debiendo.') }}</p>
                 @endif
@@ -117,13 +133,13 @@
                     <button type="button" class="btn ghost" wire:click="cerrar">{{ __('Cancelar') }}</button>
                     <button type="button" class="btn ghost" wire:click="rechazar" wire:loading.attr="disabled" wire:target="rechazar,aprobar">{{ $rechazando ? __('Confirmar rechazo') : __('Rechazar') }}</button>
                     @unless ($rechazando)
-                        <button type="button" class="btn primary" wire:click="aprobar" wire:loading.attr="disabled" wire:target="rechazar,aprobar"><x-icon name="check" /> {{ __('Aprobar y renovar') }}</button>
+                        <button type="button" class="btn primary" wire:click="aprobar" wire:loading.attr="disabled" wire:target="rechazar,aprobar"><x-icon name="check" /> {{ $revisando->esExtras() ? __('Aprobar y activar extras') : __('Aprobar y renovar') }}</button>
                     @endunless
                 </div>
             @else
                 <div class="list-line"><span>{{ __('Estado') }}</span><span class="badge {{ $revisando->estado->insignia() }}">{{ $revisando->estado->etiqueta() }}</span></div>
                 <div class="list-line"><span>{{ __('Revisado') }}</span><b>{{ $revisando->revisado_en?->timezone(config('mozistock.business_timezone'))->format('d/m/Y H:i') }} · {{ $revisando->revisor?->name }}</b></div>
-                @if ($revisando->vencimiento_nuevo)
+                @if ($revisando->vencimiento_nuevo && ! $revisando->esExtras())
                     <div class="list-line"><span>{{ __('Vencimiento') }}</span><b>{{ $revisando->vencimiento_anterior?->format('d/m/Y') }} → {{ $revisando->vencimiento_nuevo->format('d/m/Y') }}</b></div>
                 @endif
                 @if ($revisando->motivo_rechazo)

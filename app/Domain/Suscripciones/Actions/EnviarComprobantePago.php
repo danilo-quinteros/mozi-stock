@@ -3,6 +3,7 @@
 namespace App\Domain\Suscripciones\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Suscripciones\CalculadoraExtras;
 use App\Domain\Suscripciones\CalendarioSuscripcion;
 use App\Enums\EstadoPagoSaas;
 use App\Models\PagoSaas;
@@ -20,9 +21,10 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * La empresa envía el comprobante de un pago QR por 1 a 12 meses (decisión § 8.4). El
- * importe lo calcula el servidor (meses × precio vigente) y queda en revisión: no renueva
- * nada hasta que MoziStudios lo apruebe. Un solo comprobante en revisión por empresa.
+ * La empresa envía el comprobante de un pago QR por 1 a 12 meses (decisión § 8.4) o por los
+ * extras que suma a mitad del período. El importe lo calcula el servidor (meses × plan + extras,
+ * o la diferencia de los extras) y queda en revisión: no renueva ni activa nada hasta que
+ * MoziStudios lo apruebe. Un solo comprobante en revisión por empresa.
  * El archivo va al disco privado, en la carpeta de la empresa y con nombre aleatorio.
  */
 final class EnviarComprobantePago
@@ -37,9 +39,59 @@ final class EnviarComprobantePago
     public function __construct(private readonly Auditor $auditor) {}
 
     /**
+     * Renovación: meses × mensualidad (plan + extras). El vencimiento avanza al aprobarse.
+     *
      * @param  array{meses: int|string|null, nota: string|null, clave: string}  $datos
      */
     public function ejecutar(User $actor, array $datos, UploadedFile $archivo): PagoSaas
+    {
+        $meses = filter_var($datos['meses'], FILTER_VALIDATE_INT);
+
+        return $this->registrar($actor, $datos, $archivo, function () use ($meses): void {
+            if ($meses === false || ! in_array($meses, CalendarioSuscripcion::MESES_PAGABLES, true)) {
+                throw ValidationException::withMessages(['meses' => __('Elige 1, 3, 6 o 12 meses.')]);
+            }
+        }, function (Suscripcion $suscripcion, PagoSaas $pago) use ($meses): void {
+            $desglose = $suscripcion->desgloseRenovacion();
+            $pago->tipo = PagoSaas::TIPO_RENOVACION;
+            $pago->meses = (int) $meses;
+            $this->desglose($pago, $desglose);
+            $pago->importe = Decimal::multiplicar($desglose['total'], (string) $meses, Decimal::ESCALA_DINERO);
+        });
+    }
+
+    /**
+     * Extras agregados a mitad del período: se paga hoy la diferencia hasta el vencimiento
+     * (CalculadoraExtras) y se activan cuando MoziStudios aprueba. El vencimiento no cambia.
+     *
+     * @param  array{sucursales_extra: int, paquetes_usuarios: int, nota: string|null, clave: string}  $datos
+     */
+    public function extras(User $actor, array $datos, UploadedFile $archivo): PagoSaas
+    {
+        $sucursales = (int) $datos['sucursales_extra'];
+        $paquetes = (int) $datos['paquetes_usuarios'];
+
+        return $this->registrar($actor, $datos, $archivo, null, function (Suscripcion $suscripcion, PagoSaas $pago) use ($sucursales, $paquetes): void {
+            CambiarExtrasSuscripcion::validar($suscripcion, $sucursales, $paquetes);
+            $diferencia = CalculadoraExtras::diferencia($suscripcion, $sucursales, $paquetes);
+
+            if (Decimal::comparar($diferencia['importe'], '0', 2) <= 0) {
+                throw ValidationException::withMessages(['archivo' => __('Este cambio no tiene costo hoy: guárdalo sin enviar comprobante.')]);
+            }
+
+            $pago->tipo = PagoSaas::TIPO_EXTRAS;
+            $pago->meses = null;
+            $this->desglose($pago, CalculadoraExtras::desglose((string) $suscripcion->precio_mensual, $suscripcion->plan, $sucursales, $paquetes));
+            $pago->importe = $diferencia['importe'];
+        });
+    }
+
+    /**
+     * @param  array{nota: string|null, clave: string}  $datos
+     * @param  (callable(): void)|null  $validarAntes  validación sin bloqueo, antes de guardar el archivo
+     * @param  callable(Suscripcion, PagoSaas): void  $completar  tipo, desglose e importe, con la suscripción bloqueada
+     */
+    private function registrar(User $actor, array $datos, UploadedFile $archivo, ?callable $validarAntes, callable $completar): PagoSaas
     {
         Gate::forUser($actor)->authorize('create', PagoSaas::class);
         $empresaId = (int) $actor->empresa_id;
@@ -52,10 +104,8 @@ final class EnviarComprobantePago
             return $previo;
         }
 
-        $meses = filter_var($datos['meses'], FILTER_VALIDATE_INT);
-
-        if ($meses === false || ! in_array($meses, CalendarioSuscripcion::MESES_PAGABLES, true)) {
-            throw ValidationException::withMessages(['meses' => __('Elige 1, 3, 6 o 12 meses.')]);
+        if ($validarAntes !== null) {
+            $validarAntes();
         }
 
         $nota = trim((string) $datos['nota']);
@@ -85,20 +135,17 @@ final class EnviarComprobantePago
         }
 
         try {
-            return DB::transaction(function () use ($actor, $empresaId, $meses, $nota, $mime, $archivo, $ruta, $datos): PagoSaas {
-                $suscripcion = Suscripcion::query()->lockForUpdate()->firstOrFail();
+            return DB::transaction(function () use ($actor, $empresaId, $nota, $mime, $archivo, $ruta, $datos, $completar): PagoSaas {
+                $suscripcion = Suscripcion::query()->with(['plan', 'planSiguiente'])->lockForUpdate()->firstOrFail();
 
                 if ($this->hayPendiente()) {
                     throw $this->yaEnRevision();
                 }
 
-                $precioRenovacion = $suscripcion->precioRenovacion();
                 $pago = new PagoSaas;
                 $pago->empresa_id = $empresaId;
                 $pago->suscripcion_id = $suscripcion->id;
-                $pago->meses = $meses;
-                $pago->precio_mensual = $precioRenovacion;
-                $pago->importe = Decimal::multiplicar($precioRenovacion, (string) $meses, Decimal::ESCALA_DINERO);
+                $completar($suscripcion, $pago);
                 $pago->nota = $nota === '' ? null : $nota;
                 $pago->archivo_path = $ruta;
                 $pago->archivo_mime = $mime;
@@ -109,7 +156,8 @@ final class EnviarComprobantePago
                 $pago->save();
 
                 $this->auditor->registrar('suscripcion.comprobante_enviado', $pago, $actor, $empresaId, despues: [
-                    'comprobante' => $pago->codigo(), 'meses' => $meses, 'importe' => $pago->importe,
+                    'comprobante' => $pago->codigo(), 'tipo' => $pago->tipo, 'meses' => $pago->meses, 'importe' => $pago->importe,
+                    'sucursales_extra' => $pago->sucursales_extra, 'paquetes_usuarios' => $pago->paquetes_usuarios,
                 ]);
 
                 return $pago;
@@ -124,6 +172,19 @@ final class EnviarComprobantePago
 
             throw $e;
         }
+    }
+
+    /**
+     * @param  array{plan: string, sucursales: int, precio_sucursal: string, paquetes: int, precio_paquete: string, total: string}  $desglose
+     */
+    private function desglose(PagoSaas $pago, array $desglose): void
+    {
+        $pago->precio_mensual = $desglose['total'];
+        $pago->precio_plan = $desglose['plan'];
+        $pago->sucursales_extra = $desglose['sucursales'];
+        $pago->precio_sucursal_extra = $desglose['precio_sucursal'];
+        $pago->paquetes_usuarios = $desglose['paquetes'];
+        $pago->precio_paquete_usuarios = $desglose['precio_paquete'];
     }
 
     /**

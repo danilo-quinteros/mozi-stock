@@ -9,6 +9,7 @@ use App\Enums\EstadoPagoSaas;
 use App\Models\PagoSaas;
 use App\Models\Suscripcion;
 use App\Support\Csv;
+use App\Support\Decimal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
@@ -30,7 +31,7 @@ class SuscripcionesCsvController extends Controller
             function () use ($filas, $hoy): iterable {
                 foreach ($filas as $f) {
                     $estado = $f->vencimiento === null ? __('Sin plan') : CalendarioSuscripcion::estado(CalendarioSuscripcion::fecha((string) $f->vencimiento), $hoy)->etiqueta();
-                    yield [$f->nombre, $f->email ?? '', $f->precio_mensual === null ? '' : (string) $f->precio_mensual,
+                    yield [$f->nombre, $f->email ?? '', $f->mensualidad === null ? '' : Decimal::redondear((string) $f->mensualidad, 2),
                         $f->vencimiento === null ? '' : CalendarioSuscripcion::fecha((string) $f->vencimiento)->format('d/m/Y'),
                         $estado, (int) $f->en_revision > 0 ? __('Sí') : __('No'), $f->activa ? __('Activa') : __('Inactiva')];
                 }
@@ -43,11 +44,11 @@ class SuscripcionesCsvController extends Controller
         $filas = ListadoComprobantes::consulta((string) $request->query('q', ''), (string) $request->query('estado', ''))->lazy(500);
         $zona = (string) config('mozistock.business_timezone');
 
-        return Csv::descargar('comprobantes-saas.csv', [__('Comprobante'), __('Empresa'), __('Enviado'), __('Envió'), __('Meses'), __('Precio mensual'), __('Importe'), __('Estado'), __('Revisado'), __('Revisó'), __('Vencimiento anterior'), __('Vencimiento nuevo'), __('Motivo de rechazo')],
+        return Csv::descargar('comprobantes-saas.csv', [__('Comprobante'), __('Empresa'), __('Enviado'), __('Envió'), __('Concepto'), __('Meses'), __('Precio mensual'), __('Importe'), __('Estado'), __('Revisado'), __('Revisó'), __('Vencimiento anterior'), __('Vencimiento nuevo'), __('Motivo de rechazo')],
             function () use ($filas, $zona): iterable {
                 foreach ($filas as $f) {
                     yield ['CP-'.str_pad((string) $f->id, 5, '0', STR_PAD_LEFT), $f->empresa, Carbon::parse($f->created_at)->timezone($zona)->format('d/m/Y H:i'),
-                        $f->remitente, (int) $f->meses, (string) $f->precio_mensual, (string) $f->importe, EstadoPagoSaas::from($f->estado)->etiqueta(),
+                        $f->remitente, $f->tipo === PagoSaas::TIPO_EXTRAS ? __('Extras') : __('Mensualidad'), $f->meses === null ? '' : (int) $f->meses, (string) $f->precio_mensual, (string) $f->importe, EstadoPagoSaas::from($f->estado)->etiqueta(),
                         $f->revisado_en === null ? '' : Carbon::parse($f->revisado_en)->timezone($zona)->format('d/m/Y H:i'), $f->revisor ?? '',
                         $f->vencimiento_anterior === null ? '' : CalendarioSuscripcion::fecha((string) $f->vencimiento_anterior)->format('d/m/Y'),
                         $f->vencimiento_nuevo === null ? '' : CalendarioSuscripcion::fecha((string) $f->vencimiento_nuevo)->format('d/m/Y'),

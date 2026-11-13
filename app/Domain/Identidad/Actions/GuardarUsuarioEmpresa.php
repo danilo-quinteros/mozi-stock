@@ -3,6 +3,7 @@
 namespace App\Domain\Identidad\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Domain\Suscripciones\CupoSuscripcion;
 use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Enums\Capacidad;
 use App\Enums\Rol;
@@ -30,6 +31,7 @@ final class GuardarUsuarioEmpresa
     public function __construct(
         private readonly Auditor $auditor,
         private readonly CapacidadesEmpresa $capacidades,
+        private readonly CupoSuscripcion $cupo,
     ) {}
 
     /**
@@ -40,6 +42,11 @@ final class GuardarUsuarioEmpresa
         Gate::forUser($actor)->authorize('create', User::class);
 
         return DB::transaction(function () use ($actor, $datos): User {
+            // Usuarios del plan + paquetes (Mi suscripción). Un usuario creado inactivo no ocupa lugar.
+            if ($datos['activo']) {
+                $this->cupo->asegurarUsuarioNuevo((int) $actor->empresa_id);
+            }
+
             $usuario = new User;
             $usuario->empresa_id = $actor->empresa_id;
             $this->aplicar($actor, $usuario, $datos);
@@ -69,6 +76,10 @@ final class GuardarUsuarioEmpresa
         }
 
         return DB::transaction(function () use ($actor, $usuario, $datos): User {
+            if ($datos['activo'] && ! $usuario->activo) {
+                $this->cupo->asegurarUsuarioNuevo((int) $usuario->empresa_id);
+            }
+
             $antes = $this->resumen($usuario);
             $this->aplicar($actor, $usuario, $datos);
             $cambioPassword = filled($datos['password'] ?? null);
