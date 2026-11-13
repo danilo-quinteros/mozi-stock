@@ -5,11 +5,14 @@
 # No borra archivos del servidor: lo eliminado del repositorio queda allí hasta borrarlo a mano.
 deployment:
   tasks:
-    - export DEPLOYPATH=$HOME/mozistock/
+    # Un clon cuya carpeta termina en -pruebas despliega en ~/mozistock-pruebas; cualquier otro, en producción.
+    - case "$PWD" in *-pruebas) export DEPLOYPATH=$HOME/mozistock-pruebas/ ;; *) export DEPLOYPATH=$HOME/mozistock/ ;; esac
     - export PHP=/opt/cpanel/ea-php85/root/usr/bin/php
     # --chmod: carpetas 755 y archivos 644. Sin esto rsync copia los permisos del clon (700) y Apache da 403.
     - /bin/rsync -a --chmod=D755,F644 --exclude='.git' --exclude='.cpanel.yml' --exclude='.env' --exclude='/storage/' --exclude='/vendor/' --exclude='/bootstrap/cache/' --exclude='/public/.htaccess' ./ $DEPLOYPATH
     # Bluehost no trae Composer: se usa ~/composer.phar si existe; si no, se conserva el vendor actual.
+    # Carpetas que Laravel escribe (en una instalación nueva no existen: storage no se copia).
+    - mkdir -p ${DEPLOYPATH}storage/app/private ${DEPLOYPATH}storage/framework/cache/data ${DEPLOYPATH}storage/framework/sessions ${DEPLOYPATH}storage/framework/views ${DEPLOYPATH}storage/logs ${DEPLOYPATH}bootstrap/cache
     - cd $DEPLOYPATH && if [ -f $HOME/composer.phar ]; then $PHP $HOME/composer.phar install --no-dev --optimize-autoloader --no-interaction; else echo "Sin composer.phar, se conserva vendor"; fi
     - cd $DEPLOYPATH && $PHP artisan migrate --force
     - cd $DEPLOYPATH && $PHP artisan optimize:clear
