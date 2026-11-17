@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RestriccionCheck;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -124,7 +125,7 @@ return new class extends Migration
             DB::statement('ALTER TABLE envasados ADD CONSTRAINT envasados_check CHECK (granel_teorico > 0 AND granel_real >= granel_teorico AND granel_costo_unitario >= 0 AND costo_total >= 0)');
             DB::statement('ALTER TABLE envasado_items ADD CONSTRAINT envasado_items_check CHECK (unidades > 0 AND granel_por_unidad > 0 AND costo_unitario >= 0 AND costo_total >= 0)');
             DB::statement('ALTER TABLE envasado_consumos ADD CONSTRAINT envasado_consumos_check CHECK (cantidad_teorica > 0 AND cantidad_real >= cantidad_teorica AND costo_unitario >= 0)');
-            DB::statement('ALTER TABLE operaciones_inventario DROP CONSTRAINT operaciones_tipo_check');
+            RestriccionCheck::quitar('operaciones_inventario', 'operaciones_tipo_check');
             DB::statement("ALTER TABLE operaciones_inventario ADD CONSTRAINT operaciones_tipo_check CHECK (tipo IN ('entrada', 'salida', 'ajuste', 'traspaso', 'venta', 'compra', 'devolucion', 'produccion', 'envasado'))");
         }
     }
@@ -137,8 +138,8 @@ return new class extends Migration
         Schema::dropIfExists('presentacion_envases');
 
         if ($this->esMysql()) {
-            DB::statement('ALTER TABLE productos DROP CONSTRAINT productos_granel_check');
-            DB::statement('ALTER TABLE operaciones_inventario DROP CONSTRAINT operaciones_tipo_check');
+            RestriccionCheck::quitar('productos', 'productos_granel_check');
+            RestriccionCheck::quitar('operaciones_inventario', 'operaciones_tipo_check');
             DB::statement("ALTER TABLE operaciones_inventario ADD CONSTRAINT operaciones_tipo_check CHECK (tipo IN ('entrada', 'salida', 'ajuste', 'traspaso', 'venta', 'compra', 'devolucion', 'produccion'))");
         }
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RestriccionCheck;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -15,7 +16,7 @@ return new class extends Migration
             return;
         }
 
-        DB::statement('ALTER TABLE empresa_capacidades DROP CONSTRAINT empresa_capacidades_capacidad_check');
+        RestriccionCheck::quitar('empresa_capacidades', 'empresa_capacidades_capacidad_check');
         DB::statement("ALTER TABLE empresa_capacidades ADD CONSTRAINT empresa_capacidades_capacidad_check CHECK (capacidad IN ('variantes', 'lotes_vencimientos', 'despachos', 'cocina', 'produccion'))");
     }
 
@@ -26,7 +27,7 @@ return new class extends Migration
         }
 
         DB::table('empresa_capacidades')->where('capacidad', 'produccion')->delete();
-        DB::statement('ALTER TABLE empresa_capacidades DROP CONSTRAINT empresa_capacidades_capacidad_check');
+        RestriccionCheck::quitar('empresa_capacidades', 'empresa_capacidades_capacidad_check');
         DB::statement("ALTER TABLE empresa_capacidades ADD CONSTRAINT empresa_capacidades_capacidad_check CHECK (capacidad IN ('variantes', 'lotes_vencimientos', 'despachos', 'cocina'))");
     }
 

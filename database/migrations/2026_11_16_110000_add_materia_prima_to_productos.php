@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RestriccionCheck;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +36,7 @@ return new class extends Migration
     public function down(): void
     {
         if ($this->esMysql()) {
-            DB::statement('ALTER TABLE productos DROP CONSTRAINT productos_clase_check');
+            RestriccionCheck::quitar('productos', 'productos_clase_check');
         }
 
         Schema::table('productos', function (Blueprint $table) {

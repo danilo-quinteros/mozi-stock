@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RestriccionCheck;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -78,7 +79,7 @@ return new class extends Migration
         Schema::dropIfExists('recetas');
 
         if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-            DB::statement('ALTER TABLE productos DROP CONSTRAINT productos_vida_util_check');
+            RestriccionCheck::quitar('productos', 'productos_vida_util_check');
         }
 
         Schema::table('productos', function (Blueprint $table) {

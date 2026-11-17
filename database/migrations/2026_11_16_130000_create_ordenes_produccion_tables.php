@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RestriccionCheck;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -112,7 +113,7 @@ return new class extends Migration
                 cantidad_receta > 0 AND cantidad_teorica > 0
                 AND (cantidad_real IS NULL OR cantidad_real >= 0) AND (costo_unitario IS NULL OR costo_unitario >= 0)
             )');
-            DB::statement('ALTER TABLE operaciones_inventario DROP CONSTRAINT operaciones_tipo_check');
+            RestriccionCheck::quitar('operaciones_inventario', 'operaciones_tipo_check');
             DB::statement("ALTER TABLE operaciones_inventario ADD CONSTRAINT operaciones_tipo_check CHECK (tipo IN ('entrada', 'salida', 'ajuste', 'traspaso', 'venta', 'compra', 'devolucion', 'produccion'))");
         }
     }
@@ -123,7 +124,7 @@ return new class extends Migration
         Schema::dropIfExists('ordenes_produccion');
 
         if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-            DB::statement('ALTER TABLE operaciones_inventario DROP CONSTRAINT operaciones_tipo_check');
+            RestriccionCheck::quitar('operaciones_inventario', 'operaciones_tipo_check');
             DB::statement("ALTER TABLE operaciones_inventario ADD CONSTRAINT operaciones_tipo_check CHECK (tipo IN ('entrada', 'salida', 'ajuste', 'traspaso', 'venta', 'compra', 'devolucion'))");
         }
     }
