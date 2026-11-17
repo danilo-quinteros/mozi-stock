@@ -5,7 +5,7 @@
             'Sobre MoziStock' => [
                 ['¿Qué es MoziStock?', 'Es un sistema web de inventario, ventas, cobros, caja, reportes y facturación SIAT para negocios de Bolivia, con un agente de inteligencia artificial llamado Mozi.'],
                 ['¿Tengo que instalar algo?', 'No. Entras desde el navegador de tu celular, tablet o computadora con conexión a internet.'],
-                ['¿Para qué negocios sirve?', 'Para negocios que venden productos: ferreterías, farmacias, tiendas de ropa y calzado, minimarkets, distribuidoras, librerías, repuestos y más.'],
+                ['¿Para qué negocios sirve?', 'Para negocios que venden o fabrican productos: ferreterías, farmacias, tiendas de ropa y calzado, minimarkets, distribuidoras, fábricas y laboratorios, librerías, repuestos y más.'],
                 ['¿Sirve si tengo varias sucursales?', 'Sí. Cada sucursal tiene su stock y su caja, puedes traspasar productos entre ellas y cada vendedor trabaja solo en su sucursal.'],
                 ['¿Es difícil de usar?', 'No. Tiene pocos menús, formularios simples y una guía que te lleva paso a paso: productos, inventario inicial y primera venta.'],
             ],

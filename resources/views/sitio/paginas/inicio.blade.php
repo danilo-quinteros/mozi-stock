@@ -87,13 +87,14 @@
     {{-- 2 · Para quién --}}
     <section class="fit" aria-labelledby="fit-title">
         <div class="wrap">
-            <h2 class="fit-title" id="fit-title">Hecho para negocios que venden productos</h2>
+            <h2 class="fit-title" id="fit-title">Hecho para negocios que venden o fabrican productos</h2>
             <ul class="fit-list">
                 <li><a href="{{ route('sitio.rubro-ferreterias') }}">Ferreterías</a></li>
                 <li><a href="{{ route('sitio.rubro-farmacias') }}">Farmacias</a></li>
                 <li><a href="{{ route('sitio.rubro-ropa-calzado') }}">Ropa y calzado</a></li>
                 <li><a href="{{ route('sitio.rubro-minimarkets') }}">Minimarkets y tiendas</a></li>
                 <li><a href="{{ route('sitio.rubro-distribuidoras') }}">Distribuidoras</a></li>
+                <li><a href="{{ route('sitio.rubro-fabricas') }}">Fábricas y laboratorios</a></li>
             </ul>
         </div>
     </section>
@@ -104,7 +105,7 @@
             <header class="section-head">
                 <p class="eyebrow">Funcionalidades</p>
                 <h2 id="modulos-title">Todo tu negocio en un solo sistema</h2>
-                <p class="lead">Inventario, ventas, cobros, caja, reportes, facturación SIAT y un agente de inteligencia artificial que conoce tu negocio.</p>
+                <p class="lead">Inventario, ventas, cobros, caja, reportes, producción, facturación SIAT y un agente de inteligencia artificial que conoce tu negocio.</p>
             </header>
 
             <div class="modules">
@@ -204,6 +205,23 @@
                         <span class="bubble bot"><i></i><i></i><i></i></span>
                     </div>
                     <a class="module-link" href="{{ route('sitio.agente-ia') }}">Conocer a Mozi<x-sitio.i n="arrow" /></a>
+                </article>
+
+                {{-- Producción (rubro Fábricas y laboratorios): ocupa toda la fila, como cierre de los módulos. --}}
+                <article class="module module-produccion reveal" data-test="modulo-produccion">
+                    <div class="produccion-copy">
+                        <div class="module-top"><span class="module-icon"><x-sitio.i n="flask" /></span><h3>Producción y envasado</h3></div>
+                        <p class="flags"><span class="flag">Fábricas y laboratorios</span></p>
+                        <p>¿Fabricas tus productos? Registra tus recetas, emite órdenes de producción que descuentan la materia prima con su lote y envasa lo producido en presentaciones con su botella, tapa y etiqueta. Sabes cuánto te cuesta cada lote que fabricas.</p>
+                        <ul class="tags" aria-label="Incluye"><li>Recetas</li><li>Órdenes de producción</li><li>Envasado</li><li>Costo por lote</li></ul>
+                        <a class="module-link" href="{{ route('sitio.rubro-fabricas') }}">Ver fábricas y laboratorios<x-sitio.i n="arrow" /></a>
+                    </div>
+                    <div class="demo" aria-hidden="true">
+                        <div class="demo-row"><span><b>Orden OP-0015</b><small>Suavizante floral · 200 L</small></span><em class="badge ok">Finalizada</em></div>
+                        <div class="demo-row"><span>Obtenido</span><strong>196 L · 98 %</strong></div>
+                        <div class="demo-row"><span>Envasado</span><strong>120 × 1 L · 15 × 5 L</strong></div>
+                        <div class="demo-foot"><span>Costo por litro</span><b class="accent">Bs 4,95</b></div>
+                    </div>
                 </article>
             </div>
         </div>

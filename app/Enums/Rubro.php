@@ -15,6 +15,8 @@ enum Rubro: string
     case Farmacia = 'farmacia';
     case Distribuidora = 'distribuidora';
     case Restaurante = 'restaurante';
+    /** Fábricas y laboratorios (decisión del propietario, 17/11/2026): enciende Producción (ESPECIFICACION_PRODUCCION.md § 8). */
+    case Fabrica = 'fabrica';
 
     public function etiqueta(): string
     {
@@ -24,6 +26,7 @@ enum Rubro: string
             self::Farmacia => __('Farmacia'),
             self::Distribuidora => __('Distribuidora'),
             self::Restaurante => __('Restaurante'),
+            self::Fabrica => __('Fábricas y laboratorios'),
         };
     }
 
@@ -42,6 +45,7 @@ enum Rubro: string
             self::Farmacia => __('Farmacias, boticas y veterinarias con medicamentos.'),
             self::Distribuidora => __('Mayoristas que entregan pedidos.'),
             self::Restaurante => __('Restaurantes, cafeterías y comida rápida.'),
+            self::Fabrica => __('Elaboran sus productos con recetas y materias primas, y los envasan.'),
         };
     }
 
@@ -58,19 +62,22 @@ enum Rubro: string
             self::Farmacia => [Capacidad::LotesVencimientos],
             self::Distribuidora => [Capacidad::Despachos],
             self::Restaurante => [Capacidad::Cocina],
+            // Producción necesita Lotes y vencimientos (Capacidad::requeridas): el rubro trae las dos.
+            self::Fabrica => [Capacidad::Produccion, Capacidad::LotesVencimientos],
         };
     }
 
     /**
      * Categorías de productos base que se precargan al registrar una empresa con este rubro.
-     * Si devuelve un arreglo vacío (como en General / Tienda), no se crea ninguna categoría.
+     * Si devuelve un arreglo vacío (como en General / Tienda), no se crea ninguna categoría. Fábricas y laboratorios
+     * tampoco crea: cada fábrica elabora cosas distintas (alimentos, cosméticos, limpieza…).
      *
      * @return list<string>
      */
     public function categoriasSugeridas(): array
     {
         return match ($this) {
-            self::General => [],
+            self::General, self::Fabrica => [],
             self::Ropa => [
                 'Ropa de hombre',
                 'Ropa de mujer',

@@ -2,7 +2,7 @@
     <x-sitio.hero :pagina="$pagina"
         etiqueta="Por rubro"
         titulo="Un sistema de ventas e inventario para tu rubro en <span class='hl'>Bolivia</span>"
-        lead="Cada negocio vende distinto. Mira cómo MoziStock se adapta a ferreterías, farmacias, tiendas de ropa y calzado, minimarkets y distribuidoras, con los mismos módulos y la facturación SIAT incluida en el plan completo." />
+        lead="Cada negocio vende distinto. Mira cómo MoziStock se adapta a ferreterías, farmacias, tiendas de ropa y calzado, minimarkets, distribuidoras y fábricas, con los mismos módulos y la facturación SIAT incluida en el plan completo." />
 
     <section class="section" style="padding-top:0" aria-labelledby="ru-lista">
         <div class="wrap">
@@ -17,7 +17,8 @@
                         <a class="module-link" href="{{ route($destino->nombreRuta()) }}">Ver {{ mb_strtolower($destino->nombre) }}<x-sitio.i n="arrow" /></a>
                     </article>
                 @endforeach
-                <article class="feature reveal" style="--d:160ms">
+                {{-- Ocupa toda la fila: con seis rubros, no queda sola en una fila nueva. --}}
+                <article class="feature feature-wide reveal">
                     <span class="module-icon"><x-sitio.i n="store" /></span>
                     <h3>¿Tu rubro no está en la lista?</h3>
                     <p>Librerías, repuestos, bazares, tiendas de celulares, agropecuarias… Si vendes productos, MoziStock te sirve. Cuéntanos de tu negocio y te mostramos cómo.</p>

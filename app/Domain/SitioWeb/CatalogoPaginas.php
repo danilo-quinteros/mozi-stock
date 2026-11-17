@@ -139,7 +139,7 @@ final class CatalogoPaginas
             // Rubros
             new Pagina('rubros', 'rubros', 'Rubros', 'rubro',
                 'Sistema de ventas e inventario por rubro en Bolivia | MoziStock',
-                'MoziStock se adapta a ferreterías, farmacias, tiendas de ropa y calzado, minimarkets y distribuidoras de Bolivia. Mira cómo funciona en tu rubro.',
+                'MoziStock se adapta a ferreterías, farmacias, tiendas de ropa y calzado, minimarkets, distribuidoras y fábricas de Bolivia. Mira cómo funciona en tu rubro.',
                 'Hola, quiero saber si MoziStock sirve para mi negocio.',
                 tipo: 'CollectionPage'),
             new Pagina('rubro-ferreterias', 'rubros/ferreterias', 'Ferreterías', 'rubro',
@@ -149,7 +149,7 @@ final class CatalogoPaginas
                 padre: 'rubros', prioridad: '0.7'),
             new Pagina('rubro-farmacias', 'rubros/farmacias', 'Farmacias', 'rubro',
                 'Sistema para farmacias en Bolivia | MoziStock',
-                'Venta rápida con código de barras, alertas de stock bajo por sucursal, caja por turno y facturación SIAT para farmacias y boticas de Bolivia.',
+                'Control por lote y vencimiento, venta rápida con código de barras, alertas de stock bajo por sucursal y facturación SIAT para farmacias y boticas de Bolivia.',
                 'Hola, tengo una farmacia y quiero información sobre MoziStock.',
                 padre: 'rubros', prioridad: '0.7'),
             new Pagina('rubro-ropa-calzado', 'rubros/tiendas-de-ropa-y-calzado', 'Tiendas de ropa y calzado', 'rubro',
@@ -166,6 +166,11 @@ final class CatalogoPaginas
                 'Sistema para distribuidoras y mayoristas en Bolivia | MoziStock',
                 'Pedidos y cotizaciones, precios mayoristas, ventas a crédito con plan de cuotas, cobranza a clientes y stock por almacén para distribuidoras.',
                 'Hola, tengo una distribuidora y quiero información sobre MoziStock.',
+                padre: 'rubros', prioridad: '0.7'),
+            new Pagina('rubro-fabricas', 'rubros/fabricas-y-laboratorios', 'Fábricas y laboratorios', 'rubro',
+                'Sistema para fábricas y laboratorios en Bolivia | MoziStock',
+                'Recetas con versiones, órdenes de producción, materia prima con lote y vencimiento, envasado en presentaciones y el costo real de cada lote que fabricas.',
+                'Hola, tengo una fábrica o laboratorio y quiero información sobre MoziStock.',
                 padre: 'rubros', prioridad: '0.7'),
 
             // Comercial y confianza

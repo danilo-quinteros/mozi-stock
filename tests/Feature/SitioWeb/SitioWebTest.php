@@ -220,3 +220,37 @@ test('the social image route only serves files from the site folder', function (
     $this->get('/sitio/imagenes/..%2F..%2F.env')->assertNotFound();
     $this->get('/sitio/imagenes/'.str_repeat('a', 40).'.png')->assertNotFound();
 });
+
+test('Fábricas y laboratorios has its page in the Rubros menu, the footer, the rubros page and the home page', function () {
+    $url = route('sitio.rubro-fabricas');
+    $enlace = 'href="'.$url.'"';
+
+    expect($url)->toEndWith('/rubros/fabricas-y-laboratorios');
+
+    $pagina = $this->get($url)->assertOk()->getContent();
+    $menu = Str::between($pagina, 'id="dd-rubros"', 'Ver todos los rubros');
+    $pie = Str::after($pagina, '<footer class="site-footer">');
+
+    expect($pagina)->toContain('Sistema para fábricas y laboratorios en')
+        ->toContain('Órdenes de producción')->toContain('Envasado')
+        ->and($menu)->toContain($enlace)->toContain('Fábricas y laboratorios')
+        ->and($pie)->toContain($enlace);
+
+    $rubros = $this->get(route('sitio.rubros'))->assertOk()->getContent();
+    expect(Str::after($rubros, '</header>'))->toContain($enlace)->toContain('Sistema para fábricas y laboratorios');
+
+    // Inicio: en «Hecho para negocios que venden o fabrican productos» y como módulo «Producción y envasado».
+    $inicio = $this->get(route('home'))->assertOk()->getContent();
+    $modulo = Str::between($inicio, 'data-test="modulo-produccion"', '</article>');
+
+    expect(Str::between($inicio, 'class="fit-list"', '</ul>'))->toContain($enlace)
+        ->and($modulo)->toContain('Producción y envasado')->toContain($enlace);
+});
+
+test('the pharmacy page offers lot and expiry control instead of saying it is not included', function () {
+    $html = $this->get(route('sitio.rubro-farmacias'))->assertOk()->getContent();
+
+    expect($html)->toContain('Lotes y vencimientos')
+        ->toContain('El sistema no deja vender un producto vencido')
+        ->not->toContain('no está incluido');
+});

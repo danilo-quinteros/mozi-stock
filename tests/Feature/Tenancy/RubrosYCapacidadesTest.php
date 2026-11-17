@@ -137,6 +137,42 @@ test('the public sign-up stores each rubro with exactly its capabilities', funct
         ->toBe($rubro->categoriasSugeridas());
 })->with(fn () => array_map(fn (Rubro $r): array => [$r], Rubro::cases()));
 
+test('Fábricas y laboratorios is offered at sign-up and the new company sees Producción in the menu', function () {
+    Notification::fake();
+
+    Livewire::test(Registro::class)
+        ->set('name', 'Persona de Prueba')->set('email', 'fabrica@ejemplo.com')->set('password', 'clave-segura-123')
+        ->call('avanzar')
+        ->assertSee('Fábricas y laboratorios')
+        ->assertSee('Elaboran sus productos con recetas y materias primas, y los envasan.')
+        ->assertSeeHtml('data-test="rubro-fabrica"');
+
+    registrarNegocio('fabrica', 'fabrica@ejemplo.com');
+
+    $admin = User::query()->where('email', 'fabrica@ejemplo.com')->sole();
+    $empresa = Empresa::query()->findOrFail($admin->empresa_id);
+
+    // Producción necesita Lotes y vencimientos: el rubro enciende las dos desde el primer ingreso.
+    expect($empresa->rubro)->toBe(Rubro::Fabrica)
+        ->and(capacidadesEnBase($empresa))->toBe(['lotes_vencimientos', 'produccion'])
+        ->and(Gate::forUser($admin)->allows('usar-produccion'))->toBeTrue();
+
+    $admin->forceFill(['email_verified_at' => now()])->save();
+    $menu = $this->actingAs($admin)->get(route('pedidos.index'))->assertOk()->getContent();
+
+    expect($menu)->toContain('href="'.route('produccion.ordenes').'"')
+        ->toContain('href="'.route('produccion.envasados').'"')
+        ->toContain('href="'.route('produccion.recetas').'"')
+        ->toContain('href="'.route('produccion.materias').'"')
+        ->toContain('href="'.route('inventario.vencimientos').'"');
+    $this->get(route('produccion.ordenes'))->assertOk();
+
+    // En Funciones del negocio, elegir el rubro marca las mismas dos funciones.
+    [, $otroAdmin] = empresaConAdministrador();
+    Livewire::actingAs($otroAdmin)->test(FuncionesNegocio::class)
+        ->set('rubro', 'fabrica')->assertSet('capacidades', ['produccion', 'lotes_vencimientos']);
+});
+
 test('the «Tu negocio» step does not continue without a valid rubro', function () {
     $prueba = Livewire::test(Registro::class)
         ->set('name', 'Persona de Prueba')->set('email', 'sin-rubro@ejemplo.com')->set('password', 'clave-segura-123')

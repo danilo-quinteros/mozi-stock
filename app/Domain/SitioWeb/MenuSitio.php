@@ -33,10 +33,11 @@ final class MenuSitio
     {
         return [
             'rubro-ferreterias' => ['icono' => 'tool', 'resumen' => 'Miles de productos y precios por volumen.'],
-            'rubro-farmacias' => ['icono' => 'pill', 'resumen' => 'Venta rápida y control de stock por sucursal.'],
+            'rubro-farmacias' => ['icono' => 'pill', 'resumen' => 'Lotes, vencimientos y venta rápida.'],
             'rubro-ropa-calzado' => ['icono' => 'shirt', 'resumen' => 'Modelos, tallas, devoluciones y créditos.'],
             'rubro-minimarkets' => ['icono' => 'basket', 'resumen' => 'Cobro ágil y caja cuadrada cada turno.'],
             'rubro-distribuidoras' => ['icono' => 'truck', 'resumen' => 'Pedidos, mayoristas y cobranza.'],
+            'rubro-fabricas' => ['icono' => 'flask', 'resumen' => 'Recetas, producción y envasado.'],
         ];
     }
 }

@@ -12,7 +12,7 @@ enum Capacidad: string
     case LotesVencimientos = 'lotes_vencimientos';
     case Despachos = 'despachos';
     case Cocina = 'cocina';
-    // ESPECIFICACION_PRODUCCION.md § 8: no la trae ningún rubro; se activa a mano.
+    // ESPECIFICACION_PRODUCCION.md § 8: la trae el rubro Fábricas y laboratorios; cualquier otro la activa a mano.
     case Produccion = 'produccion';
 
     public function etiqueta(): string
