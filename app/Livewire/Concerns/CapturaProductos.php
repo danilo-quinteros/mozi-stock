@@ -511,6 +511,7 @@ trait CapturaProductos
 
         $disponibles = Producto::query()->where('activo', true)->whereIn('clase', $this->clasesCaptura())
             ->where('controla_stock', true)->whereIn('id', $ids)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $this->prepararLineasNuevas(array_values(array_diff($disponibles, array_column($this->lineas, 'id'))));
         $agregados = 0;
 
         foreach ($ids as $id) {
@@ -590,6 +591,15 @@ trait CapturaProductos
     {
         return ['id' => $productoId, 'cantidad' => '1'];
     }
+
+    /**
+     * Se llama antes de crear varias líneas de una vez (marcados del panel, cuadrícula de variantes) para que la
+     * pantalla consulte en bloque lo que nuevaLinea() necesita, en vez de una consulta por línea. Compras precarga
+     * el último costo; las demás pantallas no necesitan nada.
+     *
+     * @param  list<int>  $productoIds
+     */
+    protected function prepararLineasNuevas(array $productoIds): void {}
 
     /**
      * Identifica una fila: su uid si la pantalla lo usa (compras), si no el id del producto.

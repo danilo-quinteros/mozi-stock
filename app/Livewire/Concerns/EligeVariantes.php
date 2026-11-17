@@ -194,6 +194,8 @@ trait EligeVariantes
             throw ValidationException::withMessages($errores);
         }
 
+        $this->prepararLineasNuevas(array_values(array_diff(array_keys($cantidades), array_column($this->lineas, 'id'))));
+
         foreach ($cantidades as $productoId => $cantidad) {
             $this->agregarCantidad($productoId, $cantidad, $costo);
         }

@@ -204,6 +204,30 @@ test('purchases: the grid becomes one normal line per combination with the share
         ->and($compra->total)->toBe('184.50');
 });
 
+test('purchases: with the shared cost blank, each combination starts with the cost of its last purchase', function () {
+    $proveedor = new Proveedor(['nombre' => 'Textiles Andinos']);
+    $proveedor->empresa_id = $this->empresa->id;
+    $proveedor->save();
+
+    Livewire::test(NuevaCompra::class)
+        ->set('sucursal_id', (string) $this->matriz->id)
+        ->set('proveedor_id', (string) $proveedor->id)
+        ->call('agregarProducto', $this->mNegro->id)
+        ->set('lineas.0.costo', '30,50')
+        ->call('revisar')->call('confirmar');
+
+    $pantalla = Livewire::test(NuevaCompra::class)
+        ->set('sucursal_id', (string) $this->matriz->id)
+        ->call('abrirSelector', $this->modelo->id)
+        ->set('selectorCantidades.'.svClave($this->mNegro), '2')
+        ->set('selectorCantidades.'.svClave($this->lNegro), '1')
+        ->call('agregarCuadricula')
+        ->assertHasNoErrors();
+
+    expect(collect($pantalla->get('lineas'))->pluck('costo', 'id')->all())
+        ->toBe([$this->mNegro->id => '30.50', $this->lNegro->id => '']);
+});
+
 test('adjustments and transfers: the grid validates every quantity and shows the stock of the branch', function () {
     cargarStock($this->admin, $this->matriz, $this->mNegro, '4');
 

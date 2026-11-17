@@ -90,7 +90,56 @@ class NuevaCompra extends Component
      */
     protected function nuevaLinea(int $productoId): array
     {
-        return ['id' => $productoId, 'cantidad' => '1', 'costo' => '', 'uid' => 'l'.Str::lower(Str::random(10)), 'lote' => '', 'vencimiento' => '', 'precio' => ''];
+        return ['id' => $productoId, 'cantidad' => '1', 'costo' => $this->ultimoCosto($productoId), 'uid' => 'l'.Str::lower(Str::random(10)), 'lote' => '', 'vencimiento' => '', 'precio' => ''];
+    }
+
+    /**
+     * Últimos costos ya consultados en esta petición (producto_id => costo, o null si nunca se compró).
+     *
+     * @var array<int, string|null>
+     */
+    protected array $ultimosCostos = [];
+
+    /**
+     * La línea nueva empieza con el costo unitario de la última compra del producto en la empresa (la línea de compra
+     * registrada más reciente, de cualquier proveedor); se puede cambiar en la línea. Sin compras anteriores queda
+     * vacío. Es solo una sugerencia: RegistrarCompra valida el costo escrito.
+     */
+    private function ultimoCosto(int $productoId): string
+    {
+        // nuevaLinea(0) solo se usa para saber qué columnas tiene la línea (EligeVariantes::selectorPideCosto).
+        if ($productoId <= 0) {
+            return '';
+        }
+
+        $this->prepararLineasNuevas([$productoId]);
+
+        return $this->ultimosCostos[$productoId] ?? '';
+    }
+
+    /**
+     * Consulta de una vez el último costo de los productos que se van a agregar (marcados en el panel, combinaciones
+     * de la cuadrícula): dos consultas en total, por el índice (empresa_id, producto_id) de compra_items.
+     *
+     * @param  list<int>  $productoIds
+     */
+    protected function prepararLineasNuevas(array $productoIds): void
+    {
+        $faltan = array_values(array_diff(array_unique($productoIds), array_keys($this->ultimosCostos)));
+
+        if ($faltan === []) {
+            return;
+        }
+
+        $empresaId = (int) Auth::user()?->empresa_id;
+        $ultimas = DB::table('compra_items')->where('empresa_id', $empresaId)->whereIn('producto_id', $faltan)
+            ->groupBy('producto_id')->selectRaw('MAX(id) as id')->pluck('id')->all();
+        $costos = $ultimas === [] ? collect() : DB::table('compra_items')->where('empresa_id', $empresaId)->whereIn('id', $ultimas)
+            ->pluck('costo_unitario', 'producto_id');
+
+        foreach ($faltan as $id) {
+            $this->ultimosCostos[$id] = isset($costos[$id]) ? (string) $costos[$id] : null;
+        }
     }
 
     /**
