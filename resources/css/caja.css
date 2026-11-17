@@ -36,6 +36,17 @@
 .top-caja-container,.top-caja-pill{min-width:0;max-width:100%}
 .top-caja-pill>*{flex-shrink:0}
 .top-caja-pill>.top-caja-nombre{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Toda la píldora es el enlace a Caja y arqueo: el área del nombre (.top-caja-enlace::after) se estira sobre ella; los
+   botones y «+N» van encima para seguir siendo clicables sin navegar. El ::after no lo recorta el overflow del nombre
+   porque su bloque contenedor es la píldora. */
+.top-caja-pill{position:relative}
+.top-caja-enlace{text-decoration:none}
+.top-caja-enlace:not(.subtle){color:inherit}
+.top-caja-enlace::after{content:"";position:absolute;inset:0;border-radius:999px}
+.top-caja-enlace:hover{text-decoration:underline;text-underline-offset:3px}
+.top-caja-enlace:focus-visible{outline:none}
+.top-caja-pill:has(.top-caja-enlace:focus-visible){outline:2px solid var(--brand-bright);outline-offset:2px}
+.top-caja-pill>button,.top-caja-pill>a:not(.top-caja-enlace){position:relative;z-index:1}
 @media(max-width:760px){.top-caja{margin:0 6px}}
 @media(max-width:420px){.top-caja-estado{display:none}}
 .caja-nombre{font-weight:760;color:var(--text-strong);font-size:14px;margin-bottom:3px}

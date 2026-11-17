@@ -214,6 +214,11 @@ class ControlCajaTopbar extends Component
         return view('livewire.caja.control-caja-topbar', [
             'visible' => true,
             'caja' => $caja,
+            // La píldora lleva a Caja y arqueo filtrado por esta sucursal y caja. El vendedor ve solo «Mi caja», que
+            // no usa filtros, así que va a la ruta sin parámetros. Arqueo vuelve a validar los ids contra la empresa.
+            'enlaceCaja' => $caja === null ? null : ($actor->esAdministrador()
+                ? route('caja', ['sucursal' => $caja->sucursal_id, 'caja' => $caja->id])
+                : route('caja')),
             'turno' => $turno,
             'otrosTurnos' => $misTurnos->reject(fn (TurnoCaja $t): bool => $t->id === $turno?->id)->values(),
             'misTurnos' => $misTurnos,

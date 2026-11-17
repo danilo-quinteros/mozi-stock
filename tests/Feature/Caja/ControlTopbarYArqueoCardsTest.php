@@ -89,6 +89,40 @@ test('control caja topbar muestra estado cerrado y permite abrir y cerrar turno'
     expect(TurnoCaja::query()->where('caja_id', $this->caja1->id)->whereNotNull('fecha_cierre')->count())->toBe(1);
 });
 
+test('la píldora de la barra lleva a Caja y arqueo con la sucursal y la caja actuales, sin estorbar a sus botones', function () {
+    $this->actingAs($this->admin);
+    $enlace = 'href="'.e(route('caja', ['sucursal' => $this->sucursal1->id, 'caja' => $this->caja1->id])).'"';
+
+    // Cerrada: el nombre es el enlace y «Abrir caja» sigue siendo un botón aparte.
+    $barra = Livewire::test(ControlCajaTopbar::class)
+        ->assertSeeHtml($enlace)
+        ->assertSeeHtml('data-test="top-caja-enlace"')
+        ->assertSeeHtml('wire:click="abrirModalApertura"')
+        ->call('abrirModalApertura')
+        ->assertSet('modalAperturaAbierto', true)
+        ->set('fondoInicial', '100.00')
+        ->call('ejecutarApertura');
+
+    // Abierta: el mismo enlace, y «Cerrar caja» abre el cierre sin navegar.
+    $barra->assertSeeHtml($enlace)
+        ->assertSeeHtml('wire:click="abrirModalCierre"')
+        ->call('abrirModalCierre')
+        ->assertSet('modalCierreAbierto', true)
+        ->assertNoRedirect();
+
+    // Caja y arqueo abre filtrado por esa sucursal y caja.
+    Livewire::withQueryParams(['sucursal' => (string) $this->sucursal1->id, 'caja' => (string) $this->caja1->id])
+        ->test(Arqueo::class)
+        ->assertSet('sucursal', (string) $this->sucursal1->id)
+        ->assertSet('caja', (string) $this->caja1->id);
+
+    // El vendedor ve «Mi caja», que no usa filtros: su enlace va a /caja sin parámetros.
+    $vendedor = User::factory()->vendedor($this->sucursal1)->create(['caja_id' => $this->caja1->id]);
+    Livewire::actingAs($vendedor)->test(ControlCajaTopbar::class)
+        ->assertSeeHtml('href="'.e(route('caja')).'"')
+        ->assertDontSeeHtml('caja?sucursal=');
+});
+
 test('arqueo del administrador muestra la caja abierta, exige motivo en el faltante y guarda el resultado', function () {
     $this->actingAs($this->admin);
     $this->travelTo(CarbonImmutable::parse('2026-10-22 09:00', 'America/La_Paz'));
