@@ -43,8 +43,9 @@
 <meta name="twitter:image" content="{{ $seo->ogImagen }}">
 <meta name="twitter:image:alt" content="{{ $seo->ogTitulo }}">
 
-<link rel="icon" href="{{ asset('img/sitio/logo-mozistock.png') }}" type="image/png">
-<link rel="apple-touch-icon" href="{{ asset('img/sitio/logo-mozistock.png') }}">
+<link rel="icon" href="{{ asset('favicon.ico') }}?v=2" sizes="any">
+<link rel="icon" href="{{ asset('favicon.svg') }}?v=2" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}?v=2">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

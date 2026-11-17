@@ -149,9 +149,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
     transform: rotate(-4deg);
     flex-shrink: 0;
 }
-.brand-mark span { display: block; height: 13px; background: #29180e; border-radius: 3px 3px 1px 1px; }
-.brand-mark span:nth-child(2) { height: 18px; transform: skewY(-23deg); }
-.brand-mark span:nth-child(3) { height: 14px; }
+/* Tres barras en forma de M: laterales iguales y altas, la del medio más baja. */
+.brand-mark span { display: block; height: 18px; background: #29180e; border-radius: 3px 3px 1px 1px; }
+.brand-mark span:nth-child(2) { height: 11px; }
 .brand-text b { display: block; font-size: 20px; line-height: 1; font-weight: 820; letter-spacing: -.055em; color: var(--strong); }
 .brand-text small { display: block; margin-top: 5px; font-size: 9.5px; line-height: 1; font-weight: 650; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
 
@@ -371,9 +371,8 @@ h1 {
 .mock-side i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--faint); }
 .mock-side i.on { color: var(--accent); background: var(--accent-soft); }
 .brand-mark.sm { width: 30px; height: 30px; padding: 7px; border-radius: 10px; grid-template-columns: repeat(3, 4px); gap: 2px; margin-bottom: 8px; }
-.brand-mark.sm span { height: 10px; }
-.brand-mark.sm span:nth-child(2) { height: 14px; }
-.brand-mark.sm span:nth-child(3) { height: 11px; }
+.brand-mark.sm span { height: 14px; }
+.brand-mark.sm span:nth-child(2) { height: 9px; }
 .mock-main { min-width: 0; padding: 16px; }
 .mock-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .mock-eyebrow { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--accent); font-size: 9px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }

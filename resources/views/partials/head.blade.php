@@ -9,8 +9,9 @@
 <meta name="mozistock-validacion" data-mas="{{ __('(y :n más por revisar)') }}" data-ver="{{ __('Ir al campo') }}"
     @if (isset($errors) && $errors->any()) data-primero="{{ $errors->first() }}" data-total="{{ count($errors->all()) }}" @endif>
 <title>{{ isset($title) ? __($title).' · ' : '' }}{{ config('app.name') }}</title>
-<link rel="icon" href="{{ asset('img/sitio/logo-mozistock.png') }}" type="image/png">
-<link rel="apple-touch-icon" href="{{ asset('img/sitio/logo-mozistock.png') }}">
+<link rel="icon" href="{{ asset('favicon.ico') }}?v=2" sizes="any">
+<link rel="icon" href="{{ asset('favicon.svg') }}?v=2" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}?v=2">
 <script>
     try {
         const theme = localStorage.getItem('mozistock-theme') === 'light' ? 'light' : 'dark';
