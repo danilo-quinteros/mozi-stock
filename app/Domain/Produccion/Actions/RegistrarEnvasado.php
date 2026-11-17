@@ -465,6 +465,6 @@ final class RegistrarEnvasado
 
     private function nombre(Producto $producto): string
     {
-        return Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->unidad->abreviatura);
+        return $producto->nombre;
     }
 }

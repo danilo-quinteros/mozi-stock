@@ -702,7 +702,7 @@ class ProductoFormulario extends Component
             'materiasEnvase' => Producto::query()->with('unidad:id,abreviatura')
                 ->where('clase', Producto::CLASE_MATERIA_PRIMA)
                 ->where(fn ($q) => $q->where('activo', true)->orWhereIn('id', $elegidas))
-                ->orderBy('nombre')->limit(500)->get(['id', 'nombre', 'sku', 'unidad_medida_id']),
+                ->orderBy('nombre')->limit(500)->get(['id', 'nombre', 'contenido', 'sku', 'unidad_medida_id']),
         ];
     }
 

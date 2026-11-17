@@ -161,13 +161,13 @@ test('purchases: the grid becomes one normal line per combination with the share
     $pantalla = Livewire::test(NuevaCompra::class)
         ->set('sucursal_id', (string) $this->matriz->id)
         ->set('proveedor_id', (string) $proveedor->id)
-        // Elegir el modelo entre las sugerencias abre la cuadrícula y cierra la lista de sugerencias.
+        // Escribir abre el panel «Agregar productos» con el modelo; elegirlo abre la cuadrícula y vacía la búsqueda.
         ->set('busqueda', 'Polera')
-        ->assertSeeHtml('wire:key="sugerencia-modelo-'.$this->modelo->id.'"')
+        ->assertSeeHtml('wire:key="listado-modelo-'.$this->modelo->id.'"')
         ->call('abrirSelector', $this->modelo->id)
         ->assertSet('selectorModeloId', $this->modelo->id)
         ->assertSet('busqueda', '')
-        ->assertDontSeeHtml('wire:key="sugerencia-modelo-'.$this->modelo->id.'"')
+        ->assertDontSeeHtml('wire:key="listado-modelo-'.$this->modelo->id.'"')
         ->assertSee('Costo unitario para todas (Bs)')
         ->set('selectorCantidades.'.svClave($this->mNegro), '3')
         ->set('selectorCantidades.'.svClave($this->lNegro), '2')

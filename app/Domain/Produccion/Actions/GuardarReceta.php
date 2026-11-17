@@ -208,7 +208,7 @@ final class GuardarReceta
         /** @var Collection<int, Producto> $materias */
         $materias = Producto::query()->whereIn('productos.id', array_unique($ids))
             ->join('unidades_medida as um', 'um.id', '=', 'productos.unidad_medida_id')
-            ->get(['productos.id', 'productos.nombre', 'productos.clase', 'productos.activo', 'productos.tipo_venta', 'um.admite_decimales', 'um.abreviatura'])
+            ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.unidad_medida_id', 'productos.clase', 'productos.activo', 'productos.tipo_venta', 'um.admite_decimales', 'um.abreviatura'])
             ->keyBy('id');
         $errores = [];
         $lineas = [];

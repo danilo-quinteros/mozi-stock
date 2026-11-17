@@ -1,9 +1,8 @@
 @use('App\Support\Decimal')
 @use('App\Domain\Inventario\DatosLote')
-@use('App\Models\Producto')
 {{-- Detalle de un envasado (ESPECIFICACION_PRODUCCION.md § 7). --}}
 @php
-    $nombre = fn ($p) => Producto::formatoNombreCompleto($p->nombre, $p->contenido, $p->unidad->abreviatura);
+    $nombre = fn ($p) => $p->nombre;
     $granel = $envasado->granel;
     $unidadGranel = $granel->unidad->abreviatura;
     $mermaGranel = Decimal::restar((string) $envasado->granel_real, (string) $envasado->granel_teorico);

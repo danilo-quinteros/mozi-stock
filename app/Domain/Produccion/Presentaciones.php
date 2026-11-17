@@ -193,7 +193,7 @@ final class Presentaciones
         $materias = Producto::query()->with('unidad:id,abreviatura,admite_decimales')
             ->where('empresa_id', $empresaId)->where('clase', Producto::CLASE_MATERIA_PRIMA)
             ->whereIn('id', array_values(array_unique(array_column($filas, 'id'))))
-            ->get(['id', 'nombre', 'tipo_venta', 'unidad_medida_id'])->keyBy('id');
+            ->get(['id', 'nombre', 'contenido', 'tipo_venta', 'unidad_medida_id'])->keyBy('id');
         $envases = [];
         $vistos = [];
 

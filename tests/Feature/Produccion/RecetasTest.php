@@ -313,3 +313,17 @@ test('the product form no longer has shelf life (removed 16/11/2026) and the col
     expect($this->suavizante->fresh()->precio_consumidor)->toBe('20.00')
         ->and(Schema::hasColumn('productos', 'vida_util_dias'))->toBeFalse();
 });
+
+test('P2: the recipe form offers the «Agregar productos» panel with raw materials only and no low-stock tab', function () {
+    Livewire::test(RecetaFormulario::class)
+        ->call('elegirProducto', $this->suavizante->id)
+        ->call('abrirListado')
+        ->assertSet('listadoAbierto', true)
+        ->assertSeeHtml('data-test="listado-masivo"')
+        ->assertSeeHtml('Todos<small>3</small>')
+        ->assertDontSeeHtml('data-test="tab-stock-bajo"')
+        ->assertSeeInOrder(['Agua desmineralizada', 'Botella 1 L', 'Fragancia floral'])
+        ->call('agregarMarcados', [$this->agua->id, $this->suavizante->id, $this->botella->id])
+        ->assertReturned(2)
+        ->assertSet('lineas', [['id' => $this->agua->id, 'cantidad' => '1'], ['id' => $this->botella->id, 'cantidad' => '1']]);
+});

@@ -60,7 +60,7 @@ final class FinalizarOrden
         $lineas = LineasOrden::deOrden($empresaId, $orden->id);
         $reales = $this->consumos($datos['consumos'] ?? null, $lineas);
         $lote = $this->lote($empresaId, $orden, $producto, $datos['vencimiento'] ?? null);
-        $nombre = Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->unidad->abreviatura);
+        $nombre = $producto->nombre;
 
         // Filas de saldo y el lote nuevo del producto, antes y fuera de la transacción (como LibroStock::registrar).
         $this->stock->asegurarNiveles($empresaId, [

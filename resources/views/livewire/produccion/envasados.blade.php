@@ -1,5 +1,4 @@
 @use('App\Support\Decimal')
-@use('App\Models\Producto')
 {{-- Producción → Envasado (ESPECIFICACION_PRODUCCION.md § 7). --}}
 <div>
     <div class="page-head">
@@ -43,7 +42,7 @@
                             </td>
                             <td data-label="{{ __('Presentaciones') }}">
                                 @foreach ($envasado->items as $item)
-                                    <span style="display:block">{{ Producto::formatoNombreCompleto($item->producto->nombre, $item->producto->contenido, $item->producto->unidad->abreviatura) }} × {{ Decimal::formatear((string) $item->unidades) }}</span>
+                                    <span style="display:block">{{ $item->producto->nombre }} × {{ Decimal::formatear((string) $item->unidades) }}</span>
                                 @endforeach
                             </td>
                             <td data-label="{{ __('Sucursal') }}">{{ $envasado->sucursal->nombre }}</td>

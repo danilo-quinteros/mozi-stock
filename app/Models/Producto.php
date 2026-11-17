@@ -205,6 +205,22 @@ class Producto extends Model
         return trim($nombreLimpio.' '.$cant.($abrev !== '' ? ' '.$abrev : ''));
     }
 
+    /**
+     * El nombre comercial completo en SQL («Desengrasante de cocina 650 ml»), igual que el accessor `nombre` y
+     * formatoNombreCompleto(): con contenido mayor que 0 agrega la cantidad sin ceros sobrantes y la abreviatura de la
+     * unidad. Para listados con DB::table, que no pasan por el modelo. $p es el alias de productos y $um el de
+     * unidades_medida (si la unidad falta, queda solo la cantidad).
+     *
+     * @param  literal-string  $p
+     * @param  literal-string  $um
+     * @return literal-string
+     */
+    public static function sqlNombreCompleto(string $p = 'p', string $um = 'um'): string
+    {
+        return "CASE WHEN {$p}.contenido IS NOT NULL AND {$p}.contenido > 0 THEN CONCAT_WS(' ', {$p}.nombre, "
+            ."TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM {$p}.contenido)), NULLIF({$um}.abreviatura, '')) ELSE {$p}.nombre END";
+    }
+
     public const MAX_MARCA = 60;
 
     /**

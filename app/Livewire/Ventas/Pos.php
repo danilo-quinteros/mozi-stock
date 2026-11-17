@@ -297,6 +297,12 @@ class Pos extends Component
      * Agrega una unidad si la sucursal tiene stock para ella, o sin límite si el producto no controla
      * stock. ConfirmarVenta lo vuelve a validar con bloqueo.
      */
+    /** Nombre comercial completo para los avisos («Desengrasante de cocina 650 ml»); null si no es de la empresa. */
+    private function nombreProducto(int $id): ?string
+    {
+        return Producto::query()->with('unidad:id,abreviatura')->find($id, ['id', 'nombre', 'contenido', 'unidad_medida_id'])?->nombre;
+    }
+
     public function agregarProducto(int $id): bool
     {
         $enCarrito = collect($this->lineas)->firstWhere('id', $id)['cantidad'] ?? '0';
@@ -304,7 +310,7 @@ class Pos extends Component
         $stock = $this->stockDe($id);
 
         if ($stock !== null && Decimal::comparar($stock, $deseada) < 0) {
-            $nombre = Producto::query()->whereKey($id)->value('nombre');
+            $nombre = $this->nombreProducto($id);
             $this->mensajeCaptura = $nombre === null ? __('El producto no está disponible.')
                 : __('No hay más existencias de :producto en esta sucursal.', ['producto' => $nombre]);
 
@@ -313,7 +319,7 @@ class Pos extends Component
 
         $agregado = $this->agregarAlCarrito($id);
         if ($agregado) {
-            $nombre = Producto::query()->whereKey($id)->value('nombre') ?? __('Producto');
+            $nombre = $this->nombreProducto($id) ?? __('Producto');
             $this->avisar(__(':producto agregado al carrito.', ['producto' => $nombre]), 'success');
             $this->dispatch('pos-producto-agregado');
         }

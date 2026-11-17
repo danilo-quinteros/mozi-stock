@@ -111,7 +111,7 @@ trait RegularizaLotes
         $producto = Producto::query()->with('unidad:id,abreviatura')->find($this->regProductoId);
 
         return [
-            'producto' => $producto === null ? '' : Producto::formatoNombreCompleto($producto->nombre, $producto->contenido, $producto->unidad->abreviatura),
+            'producto' => $producto === null ? '' : $producto->nombre,
             'sucursal' => (string) Sucursal::query()->whereKey($this->regSucursalId)->value('nombre'),
             'disponible' => $this->saldoSinFecha(),
             'vencidos' => array_values(array_filter(array_map(function (array $linea): ?string {

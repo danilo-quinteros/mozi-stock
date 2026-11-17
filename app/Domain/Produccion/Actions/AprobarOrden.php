@@ -9,6 +9,7 @@ use App\Domain\Tenancy\ResolverSucursal;
 use App\Enums\EstadoOrdenProduccion;
 use App\Enums\TipoOperacionInventario;
 use App\Models\OrdenProduccion;
+use App\Models\Producto;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,9 @@ final class AprobarOrden
      */
     public static function nota(OrdenProduccion $orden): string
     {
-        $producto = DB::table('productos')->where('empresa_id', $orden->empresa_id)->where('id', $orden->producto_id)->value('nombre');
+        $producto = DB::table('productos as p')->leftJoin('unidades_medida as um', 'um.id', '=', 'p.unidad_medida_id')
+            ->where('p.empresa_id', $orden->empresa_id)->where('p.id', $orden->producto_id)
+            ->selectRaw(Producto::sqlNombreCompleto().' as nombre')->value('nombre');
 
         return mb_substr(__('Orden :codigo · :producto', ['codigo' => $orden->codigo(), 'producto' => (string) $producto]), 0, 250);
     }

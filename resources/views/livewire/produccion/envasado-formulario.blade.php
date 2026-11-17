@@ -1,9 +1,8 @@
 @use('App\Support\Decimal')
 @use('App\Domain\Inventario\DatosLote')
-@use('App\Models\Producto')
 {{-- Nuevo envasado (ESPECIFICACION_PRODUCCION.md § 7.2). --}}
 @php
-    $nombre = fn ($p) => Producto::formatoNombreCompleto($p->nombre, $p->contenido, $p->unidad->abreviatura);
+    $nombre = fn ($p) => $p->nombre;
     $merma = function (string $teorico, string $usado): ?string {
         $real = Decimal::normalizar(trim($usado), Decimal::ESCALA_CANTIDAD);
 

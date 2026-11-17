@@ -1200,3 +1200,13 @@ test('L2 the transfer screen shows only sellable stock and says how many expired
         ->call('agregarProducto', $this->amoxi->id)
         ->assertSee('3 vencidas no se traspasan.');
 });
+
+test('the lot page names the product with its size once, not twice', function () {
+    $jarabe = productoDe($this->empresa, ['nombre' => 'Jarabe pediátrico', 'contenido' => '120', 'controla_vencimiento' => true]);
+    $abreviatura = $jarabe->unidad->abreviatura;
+    lotesComprar($this->admin, $this->matriz, [lineaLote($jarabe, '4', 'J1', '10/06/2027')]);
+
+    Livewire::test(TrazabilidadLote::class, ['lote' => loteDe($jarabe, 'J1')])
+        ->assertSee("Jarabe pediátrico 120 {$abreviatura}")
+        ->assertDontSee("120 {$abreviatura} 120");
+});

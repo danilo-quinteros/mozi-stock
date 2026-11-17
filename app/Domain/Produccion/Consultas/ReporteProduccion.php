@@ -48,10 +48,10 @@ final class ReporteProduccion
     public static function porProducto(int $empresaId, Periodo $periodo, ?int $sucursalId = null, string $buscar = ''): Builder
     {
         return self::conProducto($empresaId, $periodo, $sucursalId, $buscar)
-            ->groupBy('p.id', 'p.nombre', 'p.sku', 'um.abreviatura')
+            ->groupBy('p.id', 'p.nombre', 'p.contenido', 'p.sku', 'um.abreviatura')
             ->orderBy('p.nombre')
             ->orderBy('p.id')
-            ->select(['p.id', 'p.nombre', 'p.sku', 'um.abreviatura as unidad'])
+            ->select(['p.id', DB::raw(Producto::sqlNombreCompleto().' as nombre'), 'p.sku', 'um.abreviatura as unidad'])
             ->selectRaw('COUNT(*) AS ordenes, SUM(o.cantidad_planificada) AS planificada, SUM(o.cantidad_obtenida) AS obtenida, SUM(o.costo_total) AS costo_total');
     }
 
@@ -65,7 +65,7 @@ final class ReporteProduccion
             ->orderByDesc('o.finalizada_en')
             ->orderByDesc('o.id')
             ->select(['o.id', 'o.numero', 'o.finalizada_en', 'o.cantidad_planificada as planificada', 'o.cantidad_obtenida as obtenida',
-                'o.costo_total', 'o.costo_unitario', 'p.nombre', 'p.sku', 'um.abreviatura as unidad', 's.nombre as sucursal']);
+                'o.costo_total', 'o.costo_unitario', DB::raw(Producto::sqlNombreCompleto().' as nombre'), 'p.sku', 'um.abreviatura as unidad', 's.nombre as sucursal']);
     }
 
     /**
@@ -81,10 +81,10 @@ final class ReporteProduccion
             ->join('productos as p', fn ($j) => $j->on('p.id', '=', 'i.producto_id')->whereColumn('p.empresa_id', 'i.empresa_id'))
             ->leftJoin('unidades_medida as um', 'um.id', '=', 'p.unidad_medida_id')
             ->when($termino !== '', fn (Builder $q) => Producto::filtrarPorTexto($q, $termino, 'p', 'um'))
-            ->groupBy('p.id', 'p.nombre', 'p.sku', 'um.abreviatura')
+            ->groupBy('p.id', 'p.nombre', 'p.contenido', 'p.sku', 'um.abreviatura')
             ->orderBy('p.nombre')
             ->orderBy('p.id')
-            ->select(['p.id', 'p.nombre', 'p.sku', 'um.abreviatura as unidad'])
+            ->select(['p.id', DB::raw(Producto::sqlNombreCompleto().' as nombre'), 'p.sku', 'um.abreviatura as unidad'])
             ->selectRaw('COUNT(DISTINCT o.id) AS ordenes, SUM(i.cantidad_teorica) AS teorica, SUM(i.cantidad_real) AS usada')
             ->selectRaw('SUM(i.cantidad_real * i.costo_unitario) AS costo');
     }

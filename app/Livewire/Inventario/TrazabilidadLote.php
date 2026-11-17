@@ -8,7 +8,6 @@ use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\RegularizaLotes;
 use App\Models\Lote;
 use App\Models\OperacionInventario;
-use App\Models\Producto;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -54,7 +53,7 @@ class TrazabilidadLote extends Component
                 'regularizacion' => $lote->es_regularizacion, 'cantidad' => '0', 'vencido' => DatosLote::vencido($vencimiento),
                 'sin_stock' => $stock === [],
             ],
-            'producto' => Producto::formatoNombreCompleto($lote->producto->nombre, $lote->producto->contenido, $lote->producto->unidad->abreviatura),
+            'producto' => $lote->producto->nombre,
             'stock' => $stock,
             'movimientos' => Consulta::movimientos($empresaId, $lote->id)->paginate(30),
             'puedeRegularizar' => $lote->es_regularizacion && $lote->producto->controla_vencimiento

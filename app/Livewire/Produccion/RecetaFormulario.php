@@ -140,7 +140,7 @@ class RecetaFormulario extends Component
             'version' => $this->versionEditada,
         ]);
 
-        $nombre = Producto::query()->whereKey($this->productoId)->value('nombre');
+        $nombre = Producto::query()->with('unidad:id,abreviatura')->find($this->productoId, ['id', 'nombre', 'contenido', 'unidad_medida_id'])?->nombre;
         session()->flash('aviso', $receta->version === $this->versionEditada
             ? __('Sin cambios: la receta de :producto sigue en la versión :version.', ['producto' => $nombre, 'version' => $receta->version])
             : __('Receta de :producto guardada: versión :version.', ['producto' => $nombre, 'version' => $receta->version]));

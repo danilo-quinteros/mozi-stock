@@ -2,6 +2,7 @@
 
 namespace App\Domain\Inventario\Consultas;
 
+use App\Models\Producto;
 use App\Support\CollationConexion;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +28,7 @@ final class HistorialMovimientos
         return DB::table('movimientos_stock as m')
             ->join('operaciones_inventario as o', 'o.id', '=', 'm.operacion_id')
             ->join('productos as p', 'p.id', '=', 'm.producto_id')
+            ->leftJoin('unidades_medida as um', 'um.id', '=', 'p.unidad_medida_id')
             ->join('sucursales as s', 's.id', '=', 'o.sucursal_id')
             ->leftJoin('sucursales as d', 'd.id', '=', 'o.sucursal_destino_id')
             ->join('users as u', 'u.id', '=', 'o.usuario_id')
@@ -38,9 +40,9 @@ final class HistorialMovimientos
             ->when($sucursalId !== null, fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('m.sucursal_id', $sucursalId)
                 ->orWhere('o.sucursal_destino_id', $sucursalId)))
-            ->when($termino !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
-                ->where('p.nombre', 'like', $patron)
-                ->orWhere('p.sku', 'like', $patron)
+            // El producto se busca como en los buscadores: nombre como se muestra («Desengrasante de cocina 650 ml»),
+            // marca, SKU o código de barras.
+            ->when($termino !== '', fn (Builder $q) => $q->where(fn (Builder $q) => Producto::filtrarPorTexto($q, $termino, 'p', 'um')
                 ->orWhere('u.name', 'like', $patron)
                 ->orWhere('o.nota', 'like', $patron)
                 // Collation explícita: en producción el CONCAT quedaba utf8mb4_bin sin collation y el LIKE fallaba.
@@ -49,7 +51,7 @@ final class HistorialMovimientos
             ->select([
                 'm.id', 'm.created_at', 'm.cantidad', 'm.saldo_anterior', 'm.saldo_posterior',
                 'o.serie', 'o.numero', 'o.tipo', 'o.motivo', 'o.nota',
-                'p.nombre as producto', 'p.sku',
+                DB::raw(Producto::sqlNombreCompleto().' as producto'), 'p.sku',
                 's.nombre as sucursal', 'd.nombre as destino', 'u.name as usuario',
             ]);
     }
