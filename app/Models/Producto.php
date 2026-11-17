@@ -211,6 +211,10 @@ class Producto extends Model
      * barras exacto, contenido o el nombre completo con la marca («Paracetamol 500 mg Bayer»). $p es el alias de la
      * tabla productos y $um el de unidades_medida, que la consulta debe tener unida.
      *
+     * `contenido` es DECIMAL: dentro de CONCAT_WS se convierte con CAST(... AS CHAR) para que tome la collation de la
+     * conexión. Sin eso, el MySQL de producción lo pasa a texto como utf8mb4_bin, la mezcla con nombre (utf8mb4_unicode_ci) queda sin
+     * collation y el LIKE falla con «Illegal mix of collations» (pasó en producción; MariaDB local no lo reproduce).
+     *
      * @template TBuilder of \Illuminate\Database\Eloquent\Builder<*>|\Illuminate\Database\Query\Builder
      *
      * @param  TBuilder  $consulta
@@ -225,7 +229,7 @@ class Producto extends Model
             ->orWhere("{$p}.sku", 'like', $patron)
             ->orWhere("{$p}.codigo_barras", $termino)
             ->orWhere("{$p}.contenido", 'like', $patron)
-            ->orWhereRaw("CONCAT_WS(' ', {$p}.nombre, {$p}.contenido, {$um}.abreviatura) LIKE ?", [$patron])
+            ->orWhereRaw("CONCAT_WS(' ', {$p}.nombre, CAST({$p}.contenido AS CHAR), {$um}.abreviatura) LIKE ?", [$patron])
             ->orWhereRaw("CONCAT_WS(' ', {$p}.nombre, {$p}.marca) LIKE ?", [$patron]));
     }
 

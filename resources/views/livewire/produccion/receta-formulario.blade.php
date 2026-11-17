@@ -96,7 +96,7 @@
                                     <td data-label="{{ __('Quitar') }}"><button class="icon-action" type="button" wire:click="quitarLinea({{ Js::from($materia->id) }})" aria-label="{{ __('Quitar :nombre', ['nombre' => $materia->nombre]) }}" title="{{ __('Quitar') }}"><x-icon name="x" size="sm" /></button></td>
                                 </tr>
                             @empty
-                                <tr><td colspan="4"><div class="rapid-empty"><span aria-hidden="true"><x-icon name="scan" size="lg" /></span><b>{{ __('Todavía no hay materias primas') }}</b><p>{{ __('Busca una materia prima o escanea su código y escribe cuánto lleva la cantidad base.') }}</p></div></td></tr>
+                                <tr class="rapid-empty-row"><td colspan="4"><div class="rapid-empty"><span aria-hidden="true"><x-icon name="scan" size="lg" /></span><b>{{ __('Todavía no hay materias primas') }}</b><p>{{ __('Busca una materia prima o escanea su código y escribe cuánto lleva la cantidad base.') }}</p></div></td></tr>
                             @endforelse
                         </tbody>
                     </table>

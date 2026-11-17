@@ -41,7 +41,8 @@ final class HistorialMovimientos
                 ->orWhere('p.sku', 'like', $patron)
                 ->orWhere('u.name', 'like', $patron)
                 ->orWhere('o.nota', 'like', $patron)
-                ->orWhereRaw("CONCAT(o.serie, '-', LPAD(o.numero, 5, '0')) like ?", [$patron])))
+                // CAST: el número toma la collation de la conexión; en el MySQL de producción pasaría como utf8mb4_bin y el LIKE fallaría.
+                ->orWhereRaw("CONCAT(o.serie, '-', LPAD(CAST(o.numero AS CHAR), 5, '0')) like ?", [$patron])))
             ->orderByDesc('m.id')
             ->select([
                 'm.id', 'm.created_at', 'm.cantidad', 'm.saldo_anterior', 'm.saldo_posterior',

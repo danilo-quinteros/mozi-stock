@@ -94,7 +94,7 @@
                         <td data-label="{{ __('Quitar') }}"><button class="icon-action" type="button" wire:click="quitarLinea({{ Js::from($clave) }})" aria-label="{{ __('Quitar :nombre', ['nombre' => $producto->nombre]) }}" title="{{ __('Quitar') }}"><x-icon name="x" size="sm" /></button></td>
                     </tr>
                 @empty
-                    <tr><td colspan="7"><div class="rapid-empty"><span aria-hidden="true"><x-icon name="scan" size="lg" /></span><b>{{ __('Tu lista está lista para llenarse') }}</b><p>{{ __('Busca un producto o escanea su código y continúa con el siguiente.') }}</p></div></td></tr>
+                    <tr class="rapid-empty-row"><td colspan="7"><div class="rapid-empty"><span aria-hidden="true"><x-icon name="scan" size="lg" /></span><b>{{ __('Tu lista está lista para llenarse') }}</b><p>{{ __('Busca un producto o escanea su código y continúa con el siguiente.') }}</p></div></td></tr>
                 @endforelse
             </tbody>
         </table>
