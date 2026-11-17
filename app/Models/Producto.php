@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToEmpresa;
+use App\Support\CollationConexion;
 use App\Support\Decimal;
 use Database\Factories\ProductoFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -211,9 +212,8 @@ class Producto extends Model
      * barras exacto, contenido o el nombre completo con la marca («Paracetamol 500 mg Bayer»). $p es el alias de la
      * tabla productos y $um el de unidades_medida, que la consulta debe tener unida.
      *
-     * `contenido` es DECIMAL: dentro de CONCAT_WS se convierte con CAST(... AS CHAR) para que tome la collation de la
-     * conexión. Sin eso, el MySQL de producción lo pasa a texto como utf8mb4_bin, la mezcla con nombre (utf8mb4_unicode_ci) queda sin
-     * collation y el LIKE falla con «Illegal mix of collations» (pasó en producción; MariaDB local no lo reproduce).
+     * Los CONCAT_WS llevan la collation de la conexión explícita (CollationConexion): en producción la mezcla de
+     * columnas quedaba como utf8mb4_bin sin collation y el LIKE fallaba con «Illegal mix of collations».
      *
      * @template TBuilder of \Illuminate\Database\Eloquent\Builder<*>|\Illuminate\Database\Query\Builder
      *
@@ -223,14 +223,15 @@ class Producto extends Model
     public static function filtrarPorTexto($consulta, string $termino, string $p = 'productos', string $um = 'um')
     {
         $patron = '%'.addcslashes($termino, '\\%_').'%';
+        $collate = CollationConexion::sufijo($consulta->getConnection()->getName());
 
         return $consulta->where(fn ($q) => $q->where("{$p}.nombre", 'like', $patron)
             ->orWhere("{$p}.marca", 'like', $patron)
             ->orWhere("{$p}.sku", 'like', $patron)
             ->orWhere("{$p}.codigo_barras", $termino)
             ->orWhere("{$p}.contenido", 'like', $patron)
-            ->orWhereRaw("CONCAT_WS(' ', {$p}.nombre, CAST({$p}.contenido AS CHAR), {$um}.abreviatura) LIKE ?", [$patron])
-            ->orWhereRaw("CONCAT_WS(' ', {$p}.nombre, {$p}.marca) LIKE ?", [$patron]));
+            ->orWhereRaw("(CONCAT_WS(' ', {$p}.nombre, CAST({$p}.contenido AS CHAR), {$um}.abreviatura){$collate}) LIKE ?", [$patron])
+            ->orWhereRaw("(CONCAT_WS(' ', {$p}.nombre, {$p}.marca){$collate}) LIKE ?", [$patron]));
     }
 
     /** Marca escrita por el usuario: sin espacios sobrantes; vacía = sin marca. */

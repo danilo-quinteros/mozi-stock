@@ -2,6 +2,7 @@
 
 namespace App\Domain\Inventario\Consultas;
 
+use App\Support\CollationConexion;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +22,7 @@ final class HistorialMovimientos
         $patron = '%'.addcslashes($termino, '\\%_').'%';
         $tipo = $filtros['tipo'] ?? '';
         $sucursalId = $filtros['sucursal_id'] ?? null;
+        $collate = CollationConexion::sufijo();
 
         return DB::table('movimientos_stock as m')
             ->join('operaciones_inventario as o', 'o.id', '=', 'm.operacion_id')
@@ -41,8 +43,8 @@ final class HistorialMovimientos
                 ->orWhere('p.sku', 'like', $patron)
                 ->orWhere('u.name', 'like', $patron)
                 ->orWhere('o.nota', 'like', $patron)
-                // CAST: el número toma la collation de la conexión; en el MySQL de producción pasaría como utf8mb4_bin y el LIKE fallaría.
-                ->orWhereRaw("CONCAT(o.serie, '-', LPAD(CAST(o.numero AS CHAR), 5, '0')) like ?", [$patron])))
+                // Collation explícita: en producción el CONCAT quedaba utf8mb4_bin sin collation y el LIKE fallaba.
+                ->orWhereRaw("(CONCAT(o.serie, '-', LPAD(CAST(o.numero AS CHAR), 5, '0')){$collate}) like ?", [$patron])))
             ->orderByDesc('m.id')
             ->select([
                 'm.id', 'm.created_at', 'm.cantidad', 'm.saldo_anterior', 'm.saldo_posterior',
