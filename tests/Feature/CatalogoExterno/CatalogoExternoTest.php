@@ -300,9 +300,9 @@ test('empresa revendedora inicia con catalogo vacio y puede agregar productos in
         ->assertSee('Detergente líquido')
         ->assertSee('Disponible')
         // 3. Agregar el primer producto individualmente
-        ->call('agregarProducto', $p1->id)
+        ->call('abrirAgregarCyclone', $p1->id)->set('cyclonePrecio', '10')->set('cycloneStock', '0')->call('agregarProductoCyclone')
         ->assertHasNoErrors()
-        ->assertSee('Producto agregado a tu catálogo.');
+        ->assertSee('agregado a tu catálogo a Bs');
 
     expect(Producto::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->count())->toBe(1);
 
@@ -343,7 +343,7 @@ test('dejar de vender producto sin stock lo elimina limpiamente, pero con stock 
 
     // Revendedor agrega el producto
     $comp = Livewire::test(Productos::class)
-        ->call('agregarProducto', $pCentral->id);
+        ->call('abrirAgregarCyclone', $pCentral->id)->set('cyclonePrecio', '10')->set('cycloneStock', '0')->call('agregarProductoCyclone');
 
     $producto = Producto::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->first();
     expect($producto)->not->toBeNull()
@@ -357,7 +357,7 @@ test('dejar de vender producto sin stock lo elimina limpiamente, pero con stock 
     expect(Producto::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->count())->toBe(0);
 
     // Volver a agregarlo
-    $comp->call('agregarProducto', $pCentral->id);
+    $comp->call('abrirAgregarCyclone', $pCentral->id)->set('cyclonePrecio', '10')->set('cycloneStock', '0')->call('agregarProductoCyclone');
     $producto = Producto::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->first();
 
     // Registrar stock en la sucursal
@@ -388,7 +388,7 @@ test('dejar de vender producto sin stock lo elimina limpiamente, pero con stock 
         ->and(stockDe($this->sucursal, $productoInactivo))->toBe('15.000');
 
     // CASO 3: Re-agregar el producto reactiva el producto sin duplicarlo ni alterar su stock
-    $comp->call('agregarProducto', $pCentral->id)
+    $comp->call('abrirAgregarCyclone', $pCentral->id)->set('cyclonePrecio', '10')->set('cycloneStock', '0')->call('agregarProductoCyclone')
         ->assertHasNoErrors();
 
     $productoReactivado = $producto->fresh();

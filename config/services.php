@@ -33,6 +33,14 @@ return [
     'cyclone' => [
         'base_url' => env('CYCLONE_API_BASE_URL', 'https://cyclonelimpieza.com/sistema/api/v1'),
         'token' => env('CYCLONE_API_TOKEN'),
+        // Proveedor de compras que se registra en cada empresa vinculada como distribuidora de Cyclone.
+        'proveedor' => [
+            'nombre' => 'Cyclone',
+            'documento' => '7687402012',
+            'ciudad' => 'Santa Cruz de la Sierra',
+            'telefono' => '77092733',
+            'correo' => 'ventas@cyclonelimpieza.com',
+        ],
     ],
 
     'slack' => [

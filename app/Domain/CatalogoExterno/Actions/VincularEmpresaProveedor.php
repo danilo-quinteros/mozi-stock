@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\Gate;
 
 final class VincularEmpresaProveedor
 {
-    public function __construct(private readonly Auditor $auditor) {}
+    public function __construct(
+        private readonly Auditor $auditor,
+        private readonly RegistrarProveedorDeCompras $proveedorDeCompras,
+    ) {}
 
     public function ejecutar(User $actor, Empresa $empresa, ProveedorExterno $proveedor, bool $activo): EmpresaProveedorExterno
     {
@@ -40,6 +43,9 @@ final class VincularEmpresaProveedor
                 $vinculo->save();
             }
 
+            // Al activar, el proveedor externo queda también como proveedor de compras de la empresa.
+            $proveedorCompras = $activo ? $this->proveedorDeCompras->ejecutar($empresa, $proveedor) : null;
+
             $accion = $activo ? 'empresa.proveedor_externo_vinculado' : 'empresa.proveedor_externo_desvinculado';
             $this->auditor->registrar(
                 $accion,
@@ -47,7 +53,7 @@ final class VincularEmpresaProveedor
                 $actor,
                 $empresa->id,
                 $antes,
-                ['activo' => $activo, 'proveedor' => $proveedor->codigo]
+                ['activo' => $activo, 'proveedor' => $proveedor->codigo] + ($proveedorCompras !== null ? ['proveedor_compras_id' => $proveedorCompras->id] : [])
             );
 
             return $vinculo;

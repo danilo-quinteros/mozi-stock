@@ -346,7 +346,7 @@
                                                 {{ __('Dejar de vender') }}
                                             </button>
                                         @else
-                                            <button type="button" class="btn sm soft" style="font-weight:600;border-radius:8px;padding:6px 14px" wire:click="agregarProducto({{ $item->id }})" wire:loading.attr="disabled">
+                                            <button type="button" class="btn sm soft" style="font-weight:600;border-radius:8px;padding:6px 14px" wire:click="abrirAgregarCyclone({{ $item->id }})" wire:loading.attr="disabled">
                                                 {{ __('Agregar') }}
                                             </button>
                                         @endif
@@ -501,6 +501,39 @@
                     {{ __('Confirmar y procesar') }}
                 </button>
             </div>
+        </x-modal>
+    @endif
+
+    @if ($agregandoCycloneId)
+        <x-modal titulo="Agregar a mi catálogo" :descripcion="$cycloneNombre" cerrar="cancelarAgregarCyclone">
+            <form wire:submit="agregarProductoCyclone" novalidate>
+                <div class="fields">
+                    <x-campo etiqueta="Precio de venta (Bs) *" campo="cyclonePrecio">
+                        <input id="cyclonePrecio" class="input" type="text" inputmode="decimal" wire:model="cyclonePrecio" placeholder="{{ __('Ej. 25.50') }}" autocomplete="off" autofocus>
+                    </x-campo>
+                    <x-campo etiqueta="Stock inicial *" campo="cycloneStock">
+                        <input id="cycloneStock" class="input" type="text" inputmode="{{ $cycloneMedida ? 'decimal' : 'numeric' }}" wire:model="cycloneStock" placeholder="{{ __('0 si aún no tienes') }}" autocomplete="off">
+                    </x-campo>
+                    @if ($sucursales->count() > 1)
+                        <x-campo etiqueta="Sucursal del stock" campo="cycloneSucursal">
+                            <select id="cycloneSucursal" class="select" wire:model="cycloneSucursal">
+                                @foreach ($sucursales as $sucursal)
+                                    <option value="{{ $sucursal->id }}">{{ $sucursal->nombre }}</option>
+                                @endforeach
+                            </select>
+                        </x-campo>
+                    @elseif ($errors->has('cycloneSucursal'))
+                        <p class="auth-error" role="alert">{{ $errors->first('cycloneSucursal') }}</p>
+                    @endif
+                </div>
+                <p class="subtle" style="margin-top:12px;font-size:12px;line-height:1.6">
+                    {{ __('Si pones stock, se registra como entrada «Inventario inicial» en el historial. Con 0 el producto queda en tu catálogo y el stock entra después con una compra o un ajuste.') }}
+                </p>
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" wire:click="cancelarAgregarCyclone">{{ __('Cancelar') }}</button>
+                    <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="agregarProductoCyclone"><x-icon name="check" /> {{ __('Agregar') }}</button>
+                </div>
+            </form>
         </x-modal>
     @endif
 

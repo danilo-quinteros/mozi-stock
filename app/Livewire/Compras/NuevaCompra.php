@@ -55,9 +55,6 @@ class NuevaCompra extends Component
 
     public bool $confirmando = false;
 
-    /** Margen (%) sobre el costo para sugerir el precio de venta de los productos que aún no tienen precio. */
-    public string $margen = '';
-
     /**
      * Clave de idempotencia de esta pantalla: un doble envío no registra dos compras.
      */
@@ -138,33 +135,6 @@ class NuevaCompra extends Component
         }
 
         return $precios;
-    }
-
-    /**
-     * «Aplicar margen»: llena el precio de venta vacío de los productos sin precio con costo × (1 + margen %),
-     * redondeado a 2 decimales. Es una sugerencia: cada precio se puede corregir antes de confirmar.
-     */
-    public function aplicarMargen(): void
-    {
-        $margen = Decimal::normalizar(trim($this->margen), 2);
-
-        if ($margen === null || Decimal::comparar($margen, '0', 2) < 0 || Decimal::comparar($margen, '1000', 2) > 0) {
-            throw ValidationException::withMessages(['margen' => __('Escribe un margen entre 0 y 1000 %.')]);
-        }
-
-        $this->resetErrorBag('margen');
-        $sinPrecio = $this->productosSinPrecio();
-        $factor = Decimal::sumar('1', Decimal::dividir($margen, '100', 6), 6);
-
-        foreach ($this->lineas as $indice => $linea) {
-            $costo = Decimal::normalizar($linea['costo'] ?? '', Decimal::ESCALA_DINERO);
-
-            if (! isset($sinPrecio[$linea['id']]) || trim($linea['precio'] ?? '') !== '' || $costo === null || Decimal::comparar($costo, '0', 2) <= 0) {
-                continue;
-            }
-
-            $this->lineas[$indice]['precio'] = Decimal::redondear(Decimal::multiplicar($costo, $factor, 6), Decimal::ESCALA_DINERO);
-        }
     }
 
     /**

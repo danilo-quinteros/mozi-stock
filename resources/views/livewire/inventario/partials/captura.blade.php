@@ -19,25 +19,6 @@
         </div>
     </div>
     @php($sinPrecio = $esCompra ? ($sinPrecio ?? []) : [])
-    @if ($sinPrecio !== [])
-        {{-- Compras: productos sin precio de venta (p. ej. recién agregados de Cyclone). El precio es opcional y solo el
-             administrador lo ve; «Aplicar» lo sugiere con el margen sobre el costo. Se guarda al confirmar la compra. --}}
-        <div class="notice mini-note precio-inicial-bar" data-test="precio-inicial">
-            <x-icon name="info" />
-            <div>
-                <b>{{ trans_choice(':count producto no tiene precio de venta.|:count productos no tienen precio de venta.', count($sinPrecio)) }}</b>
-                <p>{{ __('Escribe su precio debajo del nombre o sugiérelo con un margen sobre el costo. Se guarda al confirmar la compra.') }}</p>
-                <div class="precio-inicial-margen">
-                    <label class="lote-campo">
-                        <span>{{ __('Margen sobre el costo (%)') }}</span>
-                        <input class="input" type="text" inputmode="decimal" placeholder="40" wire:model="margen" wire:keydown.enter.prevent="aplicarMargen" aria-label="{{ __('Margen sobre el costo en porcentaje') }}" @error('margen') aria-invalid="true" @enderror>
-                    </label>
-                    <button class="btn soft sm" type="button" wire:click="aplicarMargen">{{ __('Aplicar a los precios vacíos') }}</button>
-                </div>
-                @error('margen')<small class="danger-text">{{ $message }}</small>@enderror
-            </div>
-        </div>
-    @endif
     <div class="table-wrap rapid-table-wrap">
         <table class="rapid-table">
             <thead><tr><th><span class="sr-only">{{ __('Seleccionar') }}</span></th><th>{{ __('Producto') }}</th><th>{{ __('Código') }}</th>

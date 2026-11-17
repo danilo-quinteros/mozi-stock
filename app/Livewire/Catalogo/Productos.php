@@ -8,6 +8,7 @@ use App\Domain\Catalogo\Actions\GuardarProducto;
 use App\Domain\Catalogo\Actions\GuardarUnidadMedida;
 use App\Domain\Catalogo\Actions\MarcarProductosConLote;
 use App\Domain\Catalogo\Consultas\ListadoProductos;
+use App\Domain\CatalogoExterno\Actions\AgregarProductoExterno;
 use App\Domain\CatalogoExterno\Actions\SincronizarEmpresa;
 use App\Domain\Despachos\Consultas\ReservadoPorDespachar;
 use App\Domain\Facturacion\CatalogoEmpresa;
@@ -19,6 +20,7 @@ use App\Models\Categoria;
 use App\Models\EmpresaProveedorExterno;
 use App\Models\Modelo;
 use App\Models\Producto;
+use App\Models\ProductoVinculoExterno;
 use App\Models\ProveedorExterno;
 use App\Models\SiatCatalogo;
 use App\Models\Sucursal;
@@ -29,7 +31,9 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -115,6 +119,30 @@ class Productos extends Component
 
     #[Locked]
     public ?int $confirmandoDejarVenderId = null;
+
+    /** «Agregar» de un producto de Cyclone: id del catálogo central cuyo formulario (precio y stock inicial) está abierto. */
+    #[Locked]
+    public ?int $agregandoCycloneId = null;
+
+    #[Locked]
+    public string $cycloneNombre = '';
+
+    /** El producto se vende por peso o medida (admite stock con decimales). */
+    #[Locked]
+    public bool $cycloneMedida = false;
+
+    /** Precio de venta (consumidor), obligatorio y mayor a 0. */
+    public string $cyclonePrecio = '';
+
+    /** Stock inicial, obligatorio: 0 si todavía no hay unidades. */
+    public string $cycloneStock = '';
+
+    /** Sucursal del stock inicial (solo cuenta con cantidad mayor a 0). */
+    public string $cycloneSucursal = '';
+
+    /** Clave de idempotencia del formulario: repetir el envío no repite la entrada de stock. */
+    #[Locked]
+    public string $cycloneClave = '';
 
     /** @var array{producto_id: int, externo_id: string, nombre: string, stock_total: string, unidad: string, sucursales: array<string, string>}|null */
     public ?array $alertaStockIndividual = null;
@@ -354,16 +382,70 @@ class Productos extends Component
         $this->seleccionarTodosCyclone = false;
     }
 
-    public function agregarProducto(int $catalogoExternoId, SincronizarEmpresa $sincronizador): void
+    /**
+     * «Agregar» abre el formulario con precio de venta y stock inicial (los dos obligatorios). Si el producto se había
+     * dejado de vender, propone su precio actual.
+     */
+    public function abrirAgregarCyclone(int $catalogoExternoId): void
     {
         $actor = $this->actor();
         abort_unless($actor->esAdministrador(), 403);
 
-        $ext = CatalogoExternoProducto::query()->findOrFail($catalogoExternoId);
-        $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
+        $externo = CatalogoExternoProducto::query()->where('disponible', true)->findOrFail($catalogoExternoId);
+        $precioActual = ProductoVinculoExterno::query()
+            ->join('productos as p', fn ($j) => $j->on('p.id', '=', 'producto_vinculos_externos.producto_id')->on('p.empresa_id', '=', 'producto_vinculos_externos.empresa_id'))
+            ->where('producto_vinculos_externos.proveedor_externo_id', $externo->proveedor_externo_id)
+            ->where('producto_vinculos_externos.externo_id', $externo->externo_id)
+            ->value('p.precio_consumidor');
 
-        $sincronizador->ejecutar($actor->empresa, $proveedor, $actor, soloExternoIds: [$ext->externo_id]);
-        $this->avisar(__('Producto agregado a tu catálogo.'));
+        $this->resetValidation(['cyclonePrecio', 'cycloneStock', 'cycloneSucursal']);
+        $this->agregandoCycloneId = $externo->id;
+        $this->cycloneNombre = (string) ($externo->nombre_limpio ?: $externo->nombre_original);
+        $this->cycloneMedida = $externo->tipo_venta === 'medida';
+        $this->cyclonePrecio = $precioActual !== null && Decimal::comparar((string) $precioActual, '0', 2) > 0 ? (string) $precioActual : '';
+        $this->cycloneStock = '';
+        $sucursal = $actor->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
+        $this->cycloneSucursal = $sucursal === null ? '' : (string) $sucursal;
+        $this->cycloneClave = (string) Str::uuid();
+    }
+
+    public function cancelarAgregarCyclone(): void
+    {
+        $this->agregandoCycloneId = null;
+        $this->resetValidation(['cyclonePrecio', 'cycloneStock', 'cycloneSucursal']);
+    }
+
+    public function agregarProductoCyclone(AgregarProductoExterno $accion): void
+    {
+        if ($this->agregandoCycloneId === null) {
+            return;
+        }
+
+        $this->resetValidation(['cyclonePrecio', 'cycloneStock', 'cycloneSucursal']);
+
+        try {
+            $producto = $accion->agregarConPrecioYStock($this->actor(), $this->agregandoCycloneId, $this->cyclonePrecio,
+                $this->cycloneStock, $this->cycloneSucursal === '' ? null : $this->cycloneSucursal, $this->cycloneClave);
+        } catch (ValidationException $e) {
+            // Los errores del dominio se muestran en los campos del formulario.
+            $campos = ['precio' => 'cyclonePrecio', 'stock_inicial' => 'cycloneStock', 'stock_sucursal_id' => 'cycloneSucursal',
+                'stock_lote' => 'cycloneStock', 'precio_consumidor' => 'cyclonePrecio', 'catalogo_externo' => 'cyclonePrecio'];
+            $mensajes = [];
+
+            foreach ($e->errors() as $clave => $lista) {
+                $mensajes[$campos[$clave] ?? 'cycloneStock'] = $lista;
+            }
+
+            throw ValidationException::withMessages($mensajes);
+        }
+
+        $stock = Decimal::normalizar(trim($this->cycloneStock), Decimal::ESCALA_CANTIDAD) ?? '0';
+        $this->agregandoCycloneId = null;
+        $this->avisar(Decimal::comparar($stock, '0') > 0
+            ? __(':producto agregado a tu catálogo a :precio, con stock inicial de :cantidad.', ['producto' => $producto->nombre,
+                'precio' => Decimal::bs((string) $producto->precio_consumidor), 'cantidad' => Decimal::formatear($stock)])
+            : __(':producto agregado a tu catálogo a :precio, sin stock por ahora.', ['producto' => $producto->nombre,
+                'precio' => Decimal::bs((string) $producto->precio_consumidor)]));
     }
 
     public function agregarMarcados(SincronizarEmpresa $sincronizador): void

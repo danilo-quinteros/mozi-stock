@@ -24,7 +24,10 @@ use App\Models\UnidadMedida;
 use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
@@ -176,7 +179,8 @@ test('la compra pone el precio de venta a un producto recién agregado, en la mi
         ->call('agregarDesdeCatalogoExterno', $this->palta->id)
         ->set('lineas.0.cantidad', '24')
         ->set('lineas.0.costo', '12,50')
-        ->assertSee('1 producto no tiene precio de venta.')
+        ->assertDontSee('no tiene precio de venta')
+        ->assertDontSee('Margen sobre el costo')
         ->assertSee('Precio de venta (Bs)')
         ->set('lineas.0.precio', '18,50')
         ->call('revisar')
@@ -195,24 +199,6 @@ test('la compra pone el precio de venta a un producto recién agregado, en la mi
     $pantalla->call('confirmar');
     expect(Compra::query()->count())->toBe(1)
         ->and(Auditoria::query()->where('accion', 'producto.actualizado')->where('entidad_id', $producto->id)->count())->toBe(1);
-});
-
-test('el margen sugiere el precio con decimales exactos y solo llena los vacíos', function () {
-    $pantalla = Livewire::test(NuevaCompra::class)
-        ->call('agregarDesdeCatalogoExterno', $this->palta->id)
-        ->call('agregarDesdeCatalogoExterno', $this->coco->id)
-        ->set('lineas.0.costo', '12,35')
-        ->set('lineas.1.costo', '10')
-        ->set('lineas.1.precio', '15')
-        ->set('margen', '33,3')
-        ->call('aplicarMargen')
-        ->assertHasNoErrors();
-
-    // 12,35 × 1,333 = 16,46255 → 16,46. El precio escrito a mano no cambia.
-    expect($pantalla->get('lineas.0.precio'))->toBe('16.46')
-        ->and($pantalla->get('lineas.1.precio'))->toBe('15');
-
-    $pantalla->set('margen', '-5')->call('aplicarMargen')->assertHasErrors(['margen']);
 });
 
 test('un precio inválido se marca al revisar y no se registra la compra', function () {
@@ -237,7 +223,6 @@ test('nunca cambia un precio ya definido, ni el que otra persona puso entre la p
         ->set('proveedor_id', (string) $this->proveedorCompra->id)
         ->call('agregarProducto', $conPrecio->id)
         ->call('agregarDesdeCatalogoExterno', $this->palta->id)
-        ->assertSee('1 producto no tiene precio de venta.')
         ->set('lineas.0.costo', '5')
         ->set('lineas.0.precio', '99')   // forzado a mano: el producto ya tiene precio, se ignora
         ->set('lineas.1.costo', '10')
@@ -320,4 +305,121 @@ test('el POS pide confirmar antes de vender a Bs 0,00 y solo vende al confirmarl
     // Con todos los precios definidos no pregunta nada.
     Livewire::test(Pos::class)->call('agregarProducto', $conPrecio->id)->call('confirmar')->assertSet('productosPrecioCero', []);
     expect(Venta::query()->count())->toBe(2);
+});
+
+// --- «Agregar» en Productos › Catálogo Cyclone con precio de venta y stock inicial ---------------------------------
+
+function agregarCyclone(CatalogoExternoProducto $externo, string $precio, string $stock): Testable
+{
+    return Livewire::test(Productos::class)->set('pestana', 'cyclone')
+        ->call('abrirAgregarCyclone', $externo->id)
+        ->set('cyclonePrecio', $precio)
+        ->set('cycloneStock', $stock)
+        ->call('agregarProductoCyclone');
+}
+
+test('Agregar exige el stock inicial y avisa que se puede poner 0; sin precio tampoco agrega', function () {
+    agregarCyclone($this->palta, '25', '')
+        ->assertHasErrors(['cycloneStock'])
+        ->assertSee('Si todavía no tienes unidades, puedes poner 0.')
+        ->assertSet('agregandoCycloneId', $this->palta->id);
+
+    agregarCyclone($this->palta, '', '0')->assertHasErrors(['cyclonePrecio'])->assertSee('Escribe el precio de venta.');
+    agregarCyclone($this->palta, '0', '0')->assertHasErrors(['cyclonePrecio']);
+    agregarCyclone($this->palta, '12.345', '0')->assertHasErrors(['cyclonePrecio']);
+    agregarCyclone($this->palta, '10', '-1')->assertHasErrors(['cycloneStock']);
+
+    expect(productoLocalDe($this->empresa->id, $this->palta))->toBeNull();
+});
+
+test('Agregar con stock 0 crea el producto con su precio, auditado y sin movimiento de inventario', function () {
+    agregarCyclone($this->palta, '25.50', '0')
+        ->assertHasNoErrors()
+        ->assertSet('agregandoCycloneId', null)
+        ->assertSee('sin stock por ahora');
+
+    $producto = productoLocalDe($this->empresa->id, $this->palta);
+
+    expect($producto->precio_consumidor)->toBe('25.50')
+        ->and($producto->activo)->toBeTrue()
+        ->and(stockDe($this->sucursal, $producto))->toBe('0.000')
+        ->and(DB::table('operaciones_inventario')->where('empresa_id', $this->empresa->id)->count())->toBe(0)
+        ->and(Auditoria::query()->where('accion', 'producto.actualizado')->where('entidad_id', $producto->id)->exists())->toBeTrue();
+});
+
+test('Agregar con stock registra la entrada «Inventario inicial» en la sucursal elegida, una sola vez', function () {
+    $sucursalNorte = Sucursal::factory()->create(['empresa_id' => $this->empresa->id, 'nombre' => 'Norte']);
+
+    $pantalla = Livewire::test(Productos::class)->set('pestana', 'cyclone')
+        ->call('abrirAgregarCyclone', $this->palta->id)
+        ->set('cyclonePrecio', '30')
+        ->set('cycloneStock', '24')
+        ->set('cycloneSucursal', (string) $sucursalNorte->id);
+    $clave = $pantalla->get('cycloneClave');
+    $pantalla->call('agregarProductoCyclone')->assertHasNoErrors()->assertSee('con stock inicial de 24');
+
+    $producto = productoLocalDe($this->empresa->id, $this->palta);
+    expect(stockDe($sucursalNorte, $producto))->toBe('24.000')
+        ->and(stockDe($this->sucursal, $producto))->toBe('0.000')
+        ->and(DB::table('operaciones_inventario')->where('empresa_id', $this->empresa->id)->where('motivo', 'inventario_inicial')->count())->toBe(1);
+
+    // Doble clic: el segundo envío ya no tiene formulario abierto.
+    $pantalla->call('agregarProductoCyclone');
+    // Reintento con la misma clave contra la acción: no repite la entrada.
+    app(AgregarProductoExterno::class)->agregarConPrecioYStock($this->admin, $this->palta->id, '30', '24', $sucursalNorte->id, $clave);
+
+    expect(stockDe($sucursalNorte, $producto))->toBe('24.000')
+        ->and(DB::table('operaciones_inventario')->where('empresa_id', $this->empresa->id)->count())->toBe(1)
+        ->and(Producto::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->count())->toBe(1);
+});
+
+test('si el stock inicial falla no queda el producto ni el precio a medias', function () {
+    // Producto por unidades: 2.5 no es una cantidad válida.
+    agregarCyclone($this->palta, '30', '2.5')->assertHasErrors(['cycloneStock']);
+
+    expect(productoLocalDe($this->empresa->id, $this->palta))->toBeNull()
+        ->and(DB::table('operaciones_inventario')->where('empresa_id', $this->empresa->id)->count())->toBe(0);
+});
+
+test('Agregar no acepta la sucursal de otra empresa ni lo usa un vendedor o una empresa no vinculada', function () {
+    [$empresaB, $adminB] = empresaConAdministrador();
+    $this->actingAs($adminB);
+    $sucursalB = Sucursal::factory()->create(['empresa_id' => $empresaB->id]);
+    $this->actingAs($this->admin);
+
+    agregarCyclone($this->palta, '30', '5')->assertHasNoErrors();
+    $this->assertDatabaseCount('stock_niveles', 1);
+
+    Livewire::test(Productos::class)->set('pestana', 'cyclone')
+        ->call('abrirAgregarCyclone', $this->coco->id)
+        ->set('cyclonePrecio', '30')->set('cycloneStock', '5')->set('cycloneSucursal', (string) $sucursalB->id)
+        ->call('agregarProductoCyclone')
+        ->assertHasErrors(['cycloneSucursal']);
+    expect(productoLocalDe($this->empresa->id, $this->coco))->toBeNull()
+        ->and(DB::table('stock_niveles')->where('sucursal_id', $sucursalB->id)->count())->toBe(0);
+
+    $this->actingAs(User::factory()->vendedor($this->sucursal)->create());
+    Livewire::test(Productos::class)->call('abrirAgregarCyclone', $this->coco->id)->assertForbidden();
+
+    $this->actingAs($adminB);
+    unidadesBase($empresaB->id);
+    expect(fn () => app(AgregarProductoExterno::class)->agregarConPrecioYStock($adminB, $this->coco->id, '30', '0', null, (string) Str::uuid()))
+        ->toThrow(ValidationException::class)
+        ->and(Producto::withoutGlobalScopes()->where('empresa_id', $empresaB->id)->count())->toBe(0);
+});
+
+test('al reactivar un producto que se dejó de vender, Agregar propone su precio actual', function () {
+    agregarCyclone($this->palta, '18', '3')->assertHasNoErrors();
+    $producto = productoLocalDe($this->empresa->id, $this->palta);
+    $producto->forceFill(['activo' => false])->save();
+
+    Livewire::test(Productos::class)->set('pestana', 'cyclone')
+        ->call('abrirAgregarCyclone', $this->palta->id)
+        ->assertSet('cyclonePrecio', '18.00')
+        ->set('cycloneStock', '0')
+        ->call('agregarProductoCyclone')
+        ->assertHasNoErrors();
+
+    expect($producto->fresh()->activo)->toBeTrue()
+        ->and(stockDe($this->sucursal, $producto))->toBe('3.000');
 });
