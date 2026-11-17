@@ -62,6 +62,15 @@
             </div></div>
         @endif
 
+        @if (($panel['sinPrecio'] ?? 0) > 0)
+            {{-- Solo el administrador (define precios): productos activos con precio 0, como los recién agregados de Cyclone. --}}
+            <div class="notice" style="margin-bottom:18px" data-test="aviso-sin-precio"><x-icon name="tag" /><div>
+                <b>{{ trans_choice(':count producto activo no tiene precio de venta|:count productos activos no tienen precio de venta', $panel['sinPrecio']) }}</b>
+                <p>{{ __('Se venderían a Bs 0,00. Ponles precio en Productos o al registrar su compra.') }}</p>
+                <a class="btn soft sm" style="margin-top:10px" href="{{ route('productos.index', ['precio' => 'sin_precio']) }}">{{ __('Ver productos sin precio') }} <x-icon name="arrow" size="sm" /></a>
+            </div></div>
+        @endif
+
         <div class="grid four inicio-kpis">
             @if ($esVendedor)
                 <article class="card stat"><div class="row between"><span class="stat-label">{{ __('Tus ventas hoy') }}</span><x-icon name="cart" /></div><div class="stat-value">{{ Decimal::bs($panel['actividad']['vendido']) }}</div><div class="stat-foot">{{ trans_choice(':n venta · no es ingreso|:n ventas · no es ingreso', $panel['actividad']['ventas'], ['n' => $panel['actividad']['ventas']]) }}</div></article>

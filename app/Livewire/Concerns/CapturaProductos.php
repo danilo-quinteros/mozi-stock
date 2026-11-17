@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Concerns;
 
+use App\Domain\CatalogoExterno\Actions\AgregarProductoExterno;
+use App\Domain\CatalogoExterno\Consultas\SugerenciasCatalogoExterno;
 use App\Domain\Inventario\Consultas\StockLotes;
 use App\Enums\Capacidad;
 use App\Models\Modelo;
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 
 /**
@@ -35,7 +38,7 @@ trait CapturaProductos
      * vencimiento, lote y vencimiento. Las compras identifican cada fila con `uid` porque un producto puede repetirse
      * (una línea por lote); las demás pantallas la identifican con el id del producto.
      *
-     * @var list<array{id: int, cantidad: string, tipo_precio?: string, descuento_tipo?: string, descuento_valor?: string, costo?: string, uid?: string, lote?: string, vencimiento?: string, lote_id?: string}>
+     * @var list<array{id: int, cantidad: string, tipo_precio?: string, descuento_tipo?: string, descuento_valor?: string, costo?: string, uid?: string, lote?: string, vencimiento?: string, lote_id?: string, precio?: string}>
      */
     public array $lineas = [];
 
@@ -52,6 +55,9 @@ trait CapturaProductos
      * @var array<string, array{productos: Collection<int, Producto>, modelos: Collection<int, Modelo>}>
      */
     protected array $entradasBuscador = [];
+
+    /** Si la empresa revende un proveedor externo; se consulta una vez por petición. */
+    protected ?bool $vinculadaCatalogoExterno = null;
 
     /**
      * @return Collection<int, Producto>
@@ -165,6 +171,62 @@ trait CapturaProductos
     }
 
     /**
+     * Pantallas que ofrecen agregar desde el catálogo de un proveedor externo (Cyclone) lo que todavía no se vende:
+     * compras y ajustes de ingreso, solo para el administrador. Las demás no lo ofrecen.
+     */
+    protected function ofreceCatalogoExterno(): bool
+    {
+        return false;
+    }
+
+    private function catalogoExternoDisponible(): bool
+    {
+        if (! $this->ofreceCatalogoExterno() || ! Gate::allows('create', Producto::class)) {
+            return false;
+        }
+
+        return $this->vinculadaCatalogoExterno ??= SugerenciasCatalogoExterno::empresaVinculada((int) auth()->user()?->empresa_id);
+    }
+
+    /**
+     * Productos del catálogo del proveedor que coinciden y la empresa aún no vende (debajo de los propios).
+     *
+     * @return Collection<int, object{id: int, nombre: string, codigo: string|null, linea: string|null, proveedor: string, inactivo: bool}>
+     */
+    #[Computed]
+    public function sugerenciasExternas(): Collection
+    {
+        return $this->catalogoExternoDisponible()
+            ? SugerenciasCatalogoExterno::buscar((int) auth()->user()?->empresa_id, $this->busqueda)
+            : collect();
+    }
+
+    /**
+     * «Agregar a mi catálogo»: crea el producto (precio 0, sin stock) o reactiva el que se dejó de vender, y lo suma
+     * a la tabla. AgregarProductoExterno vuelve a comprobar permiso y vínculo en el servidor.
+     */
+    public function agregarDesdeCatalogoExterno(int $catalogoExternoId, AgregarProductoExterno $accion): bool
+    {
+        if (! $this->catalogoExternoDisponible()) {
+            $this->mensajeCaptura = __('El producto no está disponible.');
+
+            return false;
+        }
+
+        try {
+            $producto = $accion->ejecutar(auth()->user(), $catalogoExternoId);
+        } catch (ValidationException $e) {
+            $this->mensajeCaptura = (string) collect($e->errors())->flatten()->first();
+
+            return false;
+        }
+
+        unset($this->sugerenciasExternas);
+
+        return $this->agregarProducto($producto->id);
+    }
+
+    /**
      * Enter en el buscador: coincidencia exacta de código de barras o SKU (lector), o
      * única sugerencia por nombre. Devuelve si se agregó un producto.
      */
@@ -201,8 +263,10 @@ trait CapturaProductos
 
         $sugerencias = $sugerencias->concat($entradas['modelos']);
         $sinControl = $sugerencias->isEmpty() ? $this->sinControlQueCoinciden($termino) : collect();
+        $externas = $sugerencias->isEmpty() && $sinControl->isEmpty() ? $this->sugerenciasExternas() : collect();
         $this->mensajeCaptura = match (true) {
             $sinControl->isNotEmpty() => __(':producto no controla stock. Para comprarlo, ajustarlo o traspasarlo, marca «Controla stock» en Productos.', ['producto' => $sinControl->join(', ')]),
+            $externas->isNotEmpty() => __('«:termino» aún no está en tu catálogo, pero sí en el de :proveedor: elige «Agregar a mi catálogo».', ['termino' => $termino, 'proveedor' => $externas->first()->proveedor]),
             $sugerencias->isEmpty() => __('No se encontró «:termino». Revisa el código o crea el producto en Productos.', ['termino' => $termino]),
             default => __('Hay varias coincidencias: elige una de la lista.'),
         };

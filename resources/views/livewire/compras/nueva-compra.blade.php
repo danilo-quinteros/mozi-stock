@@ -116,7 +116,8 @@
                     <tbody>
                         @foreach ($filas as $fila)
                             <tr wire:key="confirmar-{{ $fila['clave'] }}">
-                                <td>{{ Producto::descripcionConMarca($fila['producto']->nombre, $fila['producto']->marca) }}@if ($fila['lote'])<small class="lote-resumen">{{ __('Lote :lote · vence :fecha', ['lote' => $fila['numeroLote'] === '' ? '—' : $fila['numeroLote'], 'fecha' => DatosLote::formatear($fila['vence'])]) }}</small>@endif</td>
+                                <td>{{ Producto::descripcionConMarca($fila['producto']->nombre, $fila['producto']->marca) }}@if ($fila['lote'])<small class="lote-resumen">{{ __('Lote :lote · vence :fecha', ['lote' => $fila['numeroLote'] === '' ? '—' : $fila['numeroLote'], 'fecha' => DatosLote::formatear($fila['vence'])]) }}</small>@endif
+                                    @if (isset($sinPrecio[$fila['producto']->id]) && ($precioVenta = \App\Domain\Catalogo\Actions\AsignarPreciosIniciales::precio($lineas[$fila['indice']]['precio'] ?? '')) !== null)<small class="lote-resumen" data-test="confirmar-precio">{{ __('Precio de venta: :precio', ['precio' => Decimal::bs($precioVenta)]) }}</small>@endif</td>
                                 <td>{{ $fila['cantidad'] === null ? '—' : Decimal::formatear($fila['cantidad']) }}</td>
                                 <td>{{ $fila['costo'] === null ? '—' : Decimal::bs($fila['costo']) }}</td>
                                 <td>{{ $fila['subtotal'] === null ? '—' : Decimal::bs($fila['subtotal']) }}</td>

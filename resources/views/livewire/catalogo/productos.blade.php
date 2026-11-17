@@ -80,6 +80,10 @@
                     <option value="con_stock">{{ __('Con Stock') }}</option>
                     <option value="sin_stock">{{ __('Sin Stock') }}</option>
                 </select>
+                <select class="select" wire:model.live="precio" aria-label="{{ __('Filtrar por precio') }}" data-test="filtro-precio">
+                    <option value="">{{ __('Precio') }}</option>
+                    <option value="sin_precio">{{ __('Sin precio') }}</option>
+                </select>
                 @if ($agrupado)
                     {{-- Tallas y colores § 5: modelos (con sus combinaciones), productos sueltos o todos. --}}
                     <select class="select" wire:model.live="tipo" aria-label="{{ __('Modelos o productos sueltos') }}" data-test="filtro-tipo">
@@ -88,7 +92,7 @@
                         <option value="sueltos">{{ __('Sueltos') }}</option>
                     </select>
                 @endif
-                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id, 'stock' => $filtroStock, 'tipo' => $agrupado ? $tipo : '', 'marca' => $marca])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
+                <a class="btn ghost sm" href="{{ route('productos.exportar', array_filter(['q' => trim($buscar), 'categoria' => $categoria, 'sucursal' => $sucursalVista?->id, 'stock' => $filtroStock, 'precio' => $precio, 'tipo' => $agrupado ? $tipo : '', 'marca' => $marca])) }}"><x-icon name="download" size="sm" /> {{ __('Exportar CSV') }}</a>
             </div>
             @if ($sinLote > 0)
                 {{-- Lotes § 9.2: acción masiva del administrador. --}}
@@ -155,7 +159,7 @@
                                             </div>
                                         </div>
                                     @else
-                                        <div class="empty">{{ $buscar !== '' || $categoria !== '' || $filtroStock !== '' || $tipo !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div>
+                                        <div class="empty">{{ $buscar !== '' || $categoria !== '' || $filtroStock !== '' || $precio !== '' || $tipo !== '' ? __('No hay productos que coincidan con el filtro.') : __('Aún no hay productos registrados.') }}</div>
                                     @endif
                                 </td>
                             </tr>

@@ -102,6 +102,14 @@ class Pos extends Component
 
     public bool $modalCierreAbierto = false;
 
+    /**
+     * Productos de la venta con precio Bs 0,00 (p. ej. recién agregados de Cyclone sin precio): antes de cobrar se pide
+     * confirmar. Es una ayuda para no regalar mercadería por olvido, no un permiso: el servidor admite precio 0.
+     *
+     * @var list<string>
+     */
+    public array $productosPrecioCero = [];
+
     public string $fondoInicial = '0.00';
 
     public string $montoCierre = '';
@@ -639,8 +647,9 @@ class Pos extends Component
         $this->resetValidation();
     }
 
-    public function confirmar(VenderEnPos $accion): void
+    public function confirmar(VenderEnPos $accion, bool $precioCeroAceptado = false): void
     {
+        $this->productosPrecioCero = [];
         $caja = $this->cajaActual();
 
         if ($caja === null) {
@@ -671,7 +680,23 @@ class Pos extends Component
             return;
         }
 
-        $cobro = $this->resumen()['pago'];
+        $resumen = $this->resumen();
+
+        if (! $precioCeroAceptado) {
+            $gratis = array_values(array_unique(array_map(
+                fn (array $fila): string => $fila['producto']->nombre,
+                array_filter($resumen['filas'], fn (array $fila): bool => $fila['precio'] !== null
+                    && Decimal::comparar((string) $fila['precio'], '0', Decimal::ESCALA_DINERO) <= 0),
+            )));
+
+            if ($gratis !== []) {
+                $this->productosPrecioCero = $gratis;
+
+                return;
+            }
+        }
+
+        $cobro = $resumen['pago'];
 
         if ($cobro !== null && $cobro['metodo'] === MetodoPago::Efectivo && ($faltante = $this->faltante($cobro['monto'])) !== null) {
             throw ValidationException::withMessages(['recibido' => __('Faltan :importe para cubrir el cobro.', ['importe' => Decimal::bs($faltante)])]);

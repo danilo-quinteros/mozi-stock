@@ -37,6 +37,7 @@ class ExportarProductosController extends Controller
             in_array($filtroStock, ['con_stock', 'sin_stock'], true) ? $filtroStock : null,
             in_array($tipo, ListadoProductos::TIPOS, true) && Gate::forUser($actor)->allows('capacidad', Capacidad::Variantes) ? $tipo : null,
             (string) $request->query('marca', ''),
+            sinPrecio: $request->query('precio') === 'sin_precio',
         )->lazy(500);
 
         return Csv::descargar('productos.csv',

@@ -251,6 +251,12 @@ class NuevoAjuste extends Component
         ]);
     }
 
+    /** Solo en ingresos (Entrada o Ajuste que suma): un producto recién agregado no tiene stock que sacar. */
+    protected function ofreceCatalogoExterno(): bool
+    {
+        return $this->esIngreso();
+    }
+
     private function esIngreso(): bool
     {
         return $this->tipo === 'entrada' || ($this->tipo === 'ajuste' && $this->direccion !== 'restar');

@@ -58,6 +58,10 @@ class Productos extends Component
     #[Url(except: '')]
     public string $marca = '';
 
+    /** «Sin precio» ('sin_precio'): productos con precio consumidor en 0, p. ej. recién agregados de Cyclone. */
+    #[Url(except: '')]
+    public string $precio = '';
+
     /** Tallas y colores § 5: '' (todos), 'modelos' o 'sueltos'; solo cuenta con la capacidad «variantes». */
     #[Url(except: '')]
     public string $tipo = '';
@@ -144,7 +148,7 @@ class Productos extends Component
 
     public function updated(string $propiedad): void
     {
-        if (in_array($propiedad, ['buscar', 'categoria', 'sucursal', 'filtroStock', 'tipo', 'marca'], true)) {
+        if (in_array($propiedad, ['buscar', 'categoria', 'sucursal', 'filtroStock', 'tipo', 'marca', 'precio'], true)) {
             $this->cancelarEdicionPrecio();
             $this->resetPage();
         }
@@ -604,6 +608,7 @@ class Productos extends Component
         }
 
         $filtroStockValido = in_array($this->filtroStock, ['con_stock', 'sin_stock'], true) ? $this->filtroStock : null;
+        $sinPrecio = $this->precio === 'sin_precio';
         // Tallas y colores § 5: con la capacidad, cada modelo es una entrada con sus combinaciones; sin ella, la lista
         // plana de siempre (las variantes se ven como productos sueltos con su nombre completo).
         $agrupado = Gate::allows('capacidad', Capacidad::Variantes);
@@ -614,7 +619,7 @@ class Productos extends Component
 
         if ($agrupado) {
             $productos = ListadoProductos::entradas($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido,
-                in_array($this->tipo, ListadoProductos::TIPOS, true) ? $this->tipo : null, marca: $this->marca);
+                in_array($this->tipo, ListadoProductos::TIPOS, true) ? $this->tipo : null, marca: $this->marca, sinPrecio: $sinPrecio);
             $entradas = collect($productos->items());
             $sueltoIds = array_values($entradas->where('tipo', 'producto')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
             $modeloIds = array_values($entradas->where('tipo', 'modelo')->pluck('entrada_id')->map(fn ($id): int => (int) $id)->all());
@@ -622,7 +627,7 @@ class Productos extends Component
             // de sus tallas y colores), una para los modelos y una para sus totales.
             $sueltos = $sueltoIds === [] ? collect() : ListadoProductos::consulta($empresaId, $sucursal?->id)
                 ->whereIn('productos.id', $sueltoIds)->get()->keyBy('id');
-            $variantes = $modeloIds === [] ? collect() : ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, 'modelos', $this->marca)
+            $variantes = $modeloIds === [] ? collect() : ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, 'modelos', $this->marca, sinPrecio: $sinPrecio)
                 ->whereIn('productos.modelo_id', $modeloIds)
                 ->leftJoin('tallas as tv', fn (JoinClause $j) => $j->on('tv.id', '=', 'productos.talla_id')->on('tv.empresa_id', '=', 'productos.empresa_id'))
                 ->leftJoin('colores as cv', fn (JoinClause $j) => $j->on('cv.id', '=', 'productos.color_id')->on('cv.empresa_id', '=', 'productos.empresa_id'))
@@ -633,7 +638,7 @@ class Productos extends Component
             $resumenModelos = ListadoProductos::resumenModelos($empresaId, $sucursal?->id, $modeloIds);
             $idsPagina = array_merge($sueltoIds, array_values($variantes->flatten(1)->map(fn (Producto $p): int => $p->id)->all()));
         } else {
-            $productos = ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, marca: $this->marca)->paginate(25);
+            $productos = ListadoProductos::consulta($empresaId, $sucursal?->id, $this->buscar, $categoriaId, $filtroStockValido, marca: $this->marca, sinPrecio: $sinPrecio)->paginate(25);
             $idsPagina = array_values(array_map(fn (Producto $p): int => $p->id, $productos->items()));
         }
 

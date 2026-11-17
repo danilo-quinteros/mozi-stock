@@ -41,8 +41,10 @@
     @php
         // Tallas y colores (V2): los modelos van primero; elegir uno abre el selector de talla y color.
         $modelosSugeridos = $this->sugerenciasModelos;
+        // Catálogo de un proveedor externo (Cyclone): lo que aún no se vende, solo en compras y ajustes de ingreso.
+        $externas = $this->sugerenciasExternas;
     @endphp
-    @if ($sugerencias->isNotEmpty() || $modelosSugeridos->isNotEmpty())
+    @if ($sugerencias->isNotEmpty() || $modelosSugeridos->isNotEmpty() || $externas->isNotEmpty())
         <div class="suggestions" role="listbox" aria-label="{{ __('Productos encontrados') }}">
             @foreach ($modelosSugeridos as $modelo)
                 <button type="button" class="suggestion" role="option" wire:key="sugerencia-modelo-{{ $modelo->id }}"
@@ -58,6 +60,17 @@
                     <span class="kbd-quiet">{{ __('Agregar') }}</span>
                 </button>
             @endforeach
+            @if ($externas->isNotEmpty())
+                <div class="suggestion-grupo" data-test="sugerencias-externas">{{ __('Del catálogo :proveedor · aún no lo vendes', ['proveedor' => $externas->first()->proveedor]) }}</div>
+                @foreach ($externas as $externa)
+                    <button type="button" class="suggestion" role="option" wire:key="sugerencia-externa-{{ $externa->id }}"
+                        wire:loading.attr="disabled" wire:target="agregarDesdeCatalogoExterno"
+                        @click="$wire.agregarDesdeCatalogoExterno({{ $externa->id }}).then((ok) => { if (ok) texto = '' }); $refs.buscador.focus()">
+                        <span class="suggestion-product"><b>{{ $externa->nombre }}</b><small>{{ implode(' · ', array_filter([$externa->linea, $externa->codigo, $externa->inactivo ? __('Lo dejaste de vender') : null])) }}</small></span>
+                        <span class="kbd-quiet">{{ __('Agregar a mi catálogo') }}</span>
+                    </button>
+                @endforeach
+            @endif
         </div>
     @elseif (mb_strlen(trim($this->busqueda)) >= 2)
         {{-- Se buscó y no hay coincidencias: se dice en vez de no mostrar nada. Alpine lo oculta si el texto ya se borró. --}}

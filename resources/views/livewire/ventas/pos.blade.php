@@ -492,6 +492,21 @@
         </x-modal>
     @endif
 
+    @if ($productosPrecioCero !== [])
+        {{-- Productos sin precio (Bs 0,00): se confirma antes de cobrar para no regalarlos por olvido. --}}
+        <x-modal titulo="Productos sin precio" cerrar="$set('productosPrecioCero', [])"
+            descripcion="Estos productos se venderán a Bs 0,00. Ponles precio en Productos o confirma si de verdad van sin costo.">
+            <div class="notice" style="margin-bottom:16px" data-test="pos-precio-cero"><x-icon name="tag" /><div>
+                <b>{{ trans_choice(':count producto a Bs 0,00|:count productos a Bs 0,00', count($productosPrecioCero)) }}</b>
+                <p>{{ implode(', ', $productosPrecioCero) }}</p>
+            </div></div>
+            <div class="modal-actions" style="flex-wrap:wrap">
+                <button type="button" class="btn ghost" wire:click="$set('productosPrecioCero', [])">{{ __('Revisar la venta') }}</button>
+                <button type="button" class="btn primary" wire:click="confirmar(true)" wire:loading.attr="disabled" wire:target="confirmar">{{ __('Vender igual') }}</button>
+            </div>
+        </x-modal>
+    @endif
+
     @if ($modalTurnoAnteriorAbierto)
         <x-modal titulo="Turno abierto de un día anterior" cerrar="$set('modalTurnoAnteriorAbierto', false)"
             descripcion="Esta caja tiene un turno abierto desde una fecha anterior. ¿Deseas continuarlo o cerrarlo para abrir uno nuevo?">

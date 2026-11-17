@@ -28,11 +28,12 @@ final class ListadoProductos
      * @param  string|null  $tipo  'modelos' (solo variantes), 'sueltos' (sin modelo) o null (todos)
      * @param  string|null  $marca  solo los productos de esa marca (null o vacío = todas)
      * @param  string  $clase  Producto::CLASE_VENTA (catálogo, POS, exportación) o CLASE_MATERIA_PRIMA (producción § 4)
+     * @param  bool  $sinPrecio  solo los productos con precio consumidor en 0
      * @return Builder<Producto>
      */
-    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null, ?string $filtroStock = null, ?string $tipo = null, ?string $marca = null, string $clase = Producto::CLASE_VENTA): Builder
+    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null, ?string $filtroStock = null, ?string $tipo = null, ?string $marca = null, string $clase = Producto::CLASE_VENTA, bool $sinPrecio = false): Builder
     {
-        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca, $clase)
+        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca, $clase, $sinPrecio)
             ->select('productos.*')
             ->selectRaw('COALESCE(sn.cantidad, 0) as stock')
             ->selectRaw('COALESCE(sn.stock_minimo, productos.stock_minimo) as minimo')
@@ -52,13 +53,13 @@ final class ListadoProductos
      *
      * @return LengthAwarePaginator<int, object{tipo: string, entrada_id: int}>
      */
-    public static function entradas(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, int $porPagina = 25, bool $soloActivos = false, ?int $pagina = null, ?string $marca = null): LengthAwarePaginator
+    public static function entradas(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, int $porPagina = 25, bool $soloActivos = false, ?int $pagina = null, ?string $marca = null, bool $sinPrecio = false): LengthAwarePaginator
     {
         $esModelo = "CASE WHEN productos.modelo_id IS NULL THEN 'producto' ELSE 'modelo' END";
         $entrada = 'COALESCE(productos.modelo_id, productos.id)';
 
         /** @var LengthAwarePaginator<int, object{tipo: string, entrada_id: int}> */
-        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca)->toBase()
+        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca, sinPrecio: $sinPrecio)->toBase()
             ->leftJoin('modelos as mo', fn (JoinClause $j) => $j->on('mo.id', '=', 'productos.modelo_id')->on('mo.empresa_id', '=', 'productos.empresa_id'))
             ->when($soloActivos, fn ($q) => $q->where('productos.activo', true)->where(fn ($q) => $q->whereNull('productos.modelo_id')->orWhere('mo.activo', true)))
             ->selectRaw("{$esModelo} as tipo")
@@ -111,7 +112,7 @@ final class ListadoProductos
      *
      * @return Builder<Producto>
      */
-    private static function filtrada(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, ?string $marca = null, string $clase = Producto::CLASE_VENTA): Builder
+    private static function filtrada(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, ?string $marca = null, string $clase = Producto::CLASE_VENTA, bool $sinPrecio = false): Builder
     {
         $termino = trim($buscar);
         $marca = Producto::normalizarMarca($marca);
@@ -132,7 +133,9 @@ final class ListadoProductos
             ->when($filtroStock === 'con_stock', fn (Builder $q) => $q->where('productos.controla_stock', true)->whereRaw('COALESCE(sn.cantidad, 0) > 0'))
             ->when($filtroStock === 'sin_stock', fn (Builder $q) => $q->where('productos.controla_stock', true)->whereRaw('COALESCE(sn.cantidad, 0) <= 0'))
             ->when($tipo === 'modelos', fn (Builder $q) => $q->whereNotNull('productos.modelo_id'))
-            ->when($tipo === 'sueltos', fn (Builder $q) => $q->whereNull('productos.modelo_id'));
+            ->when($tipo === 'sueltos', fn (Builder $q) => $q->whereNull('productos.modelo_id'))
+            // «Sin precio»: precio consumidor en 0 (p. ej. recién agregados del catálogo de Cyclone).
+            ->when($sinPrecio, fn (Builder $q) => $q->where('productos.precio_consumidor', '<=', 0));
     }
 
     /**
@@ -187,6 +190,20 @@ final class ListadoProductos
             ->when($sucursalId !== null, fn ($q) => $q->where('s.id', $sucursalId))
             ->whereRaw('COALESCE(sn.stock_minimo, p.stock_minimo) > 0')
             ->whereRaw('COALESCE(sn.cantidad, 0) <= COALESCE(sn.stock_minimo, p.stock_minimo)')
+            ->count();
+    }
+
+    /**
+     * Productos de venta activos con precio consumidor en 0 (el aviso de Inicio y el filtro «Sin precio»). Usa el índice
+     * (empresa_id, clase, activo, nombre).
+     */
+    public static function contarSinPrecio(int $empresaId): int
+    {
+        return DB::table('productos')
+            ->where('empresa_id', $empresaId)
+            ->where('clase', Producto::CLASE_VENTA)
+            ->where('activo', true)
+            ->where('precio_consumidor', '<=', 0)
             ->count();
     }
 }

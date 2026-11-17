@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Compras;
 
+use App\Domain\Catalogo\Actions\AsignarPreciosIniciales;
 use App\Domain\Compras\Actions\RegistrarCompra;
 use App\Domain\Compras\CalculadoraCompra;
 use App\Domain\Inventario\DatosLote;
@@ -16,6 +17,7 @@ use App\Models\User;
 use App\Support\Decimal;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -53,6 +55,9 @@ class NuevaCompra extends Component
 
     public bool $confirmando = false;
 
+    /** Margen (%) sobre el costo para sugerir el precio de venta de los productos que aún no tienen precio. */
+    public string $margen = '';
+
     /**
      * Clave de idempotencia de esta pantalla: un doble envío no registra dos compras.
      */
@@ -80,11 +85,86 @@ class NuevaCompra extends Component
      * Cada fila lleva un uid: en productos con vencimiento el mismo producto puede ir en varias líneas, una por lote
      * (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 4). En los demás productos, lote y vencimiento se ignoran.
      *
-     * @return array{id: int, cantidad: string, costo: string, uid: string, lote: string, vencimiento: string}
+     * `precio` es el precio de venta opcional de los productos que aún no tienen precio (AsignarPreciosIniciales).
+     *
+     * @return array{id: int, cantidad: string, costo: string, uid: string, lote: string, vencimiento: string, precio: string}
      */
     protected function nuevaLinea(int $productoId): array
     {
-        return ['id' => $productoId, 'cantidad' => '1', 'costo' => '', 'uid' => 'l'.Str::lower(Str::random(10)), 'lote' => '', 'vencimiento' => ''];
+        return ['id' => $productoId, 'cantidad' => '1', 'costo' => '', 'uid' => 'l'.Str::lower(Str::random(10)), 'lote' => '', 'vencimiento' => '', 'precio' => ''];
+    }
+
+    /**
+     * Ids de los productos de la tabla que piden precio de venta: sin precio, sueltos, de venta, y solo si quien
+     * compra puede definir precios (administrador). Una consulta.
+     *
+     * @return array<int, true>
+     */
+    private function productosSinPrecio(): array
+    {
+        $ids = array_values(array_unique(array_column($this->lineas, 'id')));
+
+        if ($ids === [] || ! Gate::allows('create', Producto::class)) {
+            return [];
+        }
+
+        $sinPrecio = [];
+
+        foreach (Producto::query()->whereIn('id', $ids)->get(['id', 'clase', 'modelo_id', 'precio_consumidor']) as $producto) {
+            if (AsignarPreciosIniciales::admite($producto)) {
+                $sinPrecio[$producto->id] = true;
+            }
+        }
+
+        return $sinPrecio;
+    }
+
+    /**
+     * Precios escritos, por producto (si el producto va en varias líneas por lote, vale el primero que se escribió).
+     *
+     * @return array<int, string> producto_id => precio tal como se escribió
+     */
+    private function preciosEscritos(): array
+    {
+        $sinPrecio = $this->productosSinPrecio();
+        $precios = [];
+
+        foreach ($this->lineas as $linea) {
+            $valor = trim($linea['precio'] ?? '');
+
+            if ($valor !== '' && isset($sinPrecio[$linea['id']]) && ! isset($precios[$linea['id']])) {
+                $precios[$linea['id']] = $valor;
+            }
+        }
+
+        return $precios;
+    }
+
+    /**
+     * «Aplicar margen»: llena el precio de venta vacío de los productos sin precio con costo × (1 + margen %),
+     * redondeado a 2 decimales. Es una sugerencia: cada precio se puede corregir antes de confirmar.
+     */
+    public function aplicarMargen(): void
+    {
+        $margen = Decimal::normalizar(trim($this->margen), 2);
+
+        if ($margen === null || Decimal::comparar($margen, '0', 2) < 0 || Decimal::comparar($margen, '1000', 2) > 0) {
+            throw ValidationException::withMessages(['margen' => __('Escribe un margen entre 0 y 1000 %.')]);
+        }
+
+        $this->resetErrorBag('margen');
+        $sinPrecio = $this->productosSinPrecio();
+        $factor = Decimal::sumar('1', Decimal::dividir($margen, '100', 6), 6);
+
+        foreach ($this->lineas as $indice => $linea) {
+            $costo = Decimal::normalizar($linea['costo'] ?? '', Decimal::ESCALA_DINERO);
+
+            if (! isset($sinPrecio[$linea['id']]) || trim($linea['precio'] ?? '') !== '' || $costo === null || Decimal::comparar($costo, '0', 2) <= 0) {
+                continue;
+            }
+
+            $this->lineas[$indice]['precio'] = Decimal::redondear(Decimal::multiplicar($costo, $factor, 6), Decimal::ESCALA_DINERO);
+        }
     }
 
     /**
@@ -93,6 +173,12 @@ class NuevaCompra extends Component
     protected function clasesCaptura(): array
     {
         return $this->soloMateriaPrima ? [Producto::CLASE_MATERIA_PRIMA] : [Producto::CLASE_VENTA, Producto::CLASE_MATERIA_PRIMA];
+    }
+
+    /** Comprar algo del catálogo del proveedor externo que aún no se vende (no en «Ingreso de materia prima»). */
+    protected function ofreceCatalogoExterno(): bool
+    {
+        return ! $this->soloMateriaPrima;
     }
 
     /**
@@ -122,17 +208,18 @@ class NuevaCompra extends Component
     }
 
     /**
-     * Al corregir el lote o el vencimiento de una línea se quita su error (y el aviso general, si ya no quedan).
+     * Al corregir el lote, el vencimiento o el precio de venta de una línea se quita su error (y el aviso general, si ya
+     * no quedan).
      */
     public function updated(string $propiedad): void
     {
-        if (preg_match('/^lineas\.\d+\.(lote|vencimiento)$/', $propiedad) !== 1) {
+        if (preg_match('/^lineas\.\d+\.(lote|vencimiento|precio)$/', $propiedad) !== 1) {
             return;
         }
 
         $this->resetErrorBag($propiedad);
 
-        if (! $this->getErrorBag()->hasAny(['lineas.*.lote', 'lineas.*.vencimiento'])) {
+        if (! $this->getErrorBag()->hasAny(['lineas.*.lote', 'lineas.*.vencimiento', 'lineas.*.precio'])) {
             $this->resetErrorBag('lineas');
         }
     }
@@ -187,10 +274,25 @@ class NuevaCompra extends Component
             throw ValidationException::withMessages($errores + ['lineas' => __('Completa el lote y el vencimiento de los productos marcados.')]);
         }
 
+        // Precio de venta opcional (productos sin precio): si se escribe, debe ser válido. Se vuelve a validar al guardar.
+        $sinPrecio = $this->productosSinPrecio();
+
+        foreach ($this->lineas as $indice => $linea) {
+            $valor = trim($linea['precio'] ?? '');
+
+            if ($valor !== '' && isset($sinPrecio[$linea['id']]) && AsignarPreciosIniciales::precio($valor) === null) {
+                $errores["lineas.{$indice}.precio"] = __('Precio mayor a 0, con hasta 2 decimales.');
+            }
+        }
+
+        if ($errores !== []) {
+            throw ValidationException::withMessages($errores + ['lineas' => __('Revisa los precios de venta marcados.')]);
+        }
+
         $this->confirmando = true;
     }
 
-    public function confirmar(RegistrarCompra $accion): void
+    public function confirmar(RegistrarCompra $accion, AsignarPreciosIniciales $precios): void
     {
         $this->confirmando = false;
         $lineas = array_map(fn (array $linea) => [
@@ -199,7 +301,11 @@ class NuevaCompra extends Component
         ], $this->lineas);
 
         $actor = $this->actor();
-        $compra = $accion->ejecutar($actor, $this->datosCaja() + [
+        $preciosVenta = $this->preciosEscritos();
+
+        // Compra y precios de venta, juntos o nada: si un precio no se puede guardar, la compra tampoco se registra.
+        // Repetir la confirmación no duplica la compra (clave) ni cambia precios ya puestos (solo llena los que están en 0).
+        $compra = DB::transaction(fn (): Compra => tap($accion->ejecutar($actor, $this->datosCaja() + [
             'sucursal_id' => $this->sucursal_id === null ? null : (int) $this->sucursal_id,
             'proveedor_id' => blank($this->proveedor_id) ? null : (int) $this->proveedor_id,
             'referencia' => $this->referencia,
@@ -211,7 +317,7 @@ class NuevaCompra extends Component
             'efectivo' => $this->efectivo,
             'electronico' => $this->electronico,
             'clave' => $this->clave,
-        ]);
+        ]), fn () => $precios->ejecutar($actor, $preciosVenta)));
 
         session()->flash('aviso', $compra->condicion === 'contado'
             ? __(':codigo registrada: stock ingresado y pago de :importe.', ['codigo' => $compra->codigo(), 'importe' => Decimal::bs($compra->total)])
@@ -290,6 +396,7 @@ class NuevaCompra extends Component
         );
 
         return view('livewire.compras.nueva-compra', [
+            'sinPrecio' => $this->productosSinPrecio(),
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
             'proveedores' => Proveedor::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
             'filas' => $filas,

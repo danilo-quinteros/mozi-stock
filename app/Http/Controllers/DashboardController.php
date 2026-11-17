@@ -74,6 +74,8 @@ class DashboardController extends Controller
             'ventas' => VentasPeriodo::totales($empresaId, $hoy, $sucursalId),
             'porCobrar' => CuentasPorCobrar::resumen($empresaId, $sucursalId),
             'alertas' => ListadoProductos::contarAlertas($empresaId, $sucursalId),
+            // Productos activos con precio 0 (p. ej. recién agregados de Cyclone): se avisan para no venderlos gratis.
+            'sinPrecio' => ListadoProductos::contarSinPrecio($empresaId),
             'serie' => PanelInicio::cobrosPorDia($empresaId, $sucursalId),
             'ultimas' => PanelInicio::ultimasVentas($empresaId, $sucursalId),
             'stockBajo' => PanelInicio::stockBajo($empresaId, $sucursalId),
