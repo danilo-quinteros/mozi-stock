@@ -124,14 +124,16 @@
                     <x-campo etiqueta="Descripción" campo="descripcion" style="grid-column:1/-1">
                         <input id="descripcion" class="input" type="text" maxlength="150" wire:model="descripcion" placeholder="{{ __('Ej. Internet de octubre') }}" required>
                     </x-campo>
-                    <x-campo :etiqueta="$condicion === 'pagado' ? 'Beneficiario (opcional)' : 'Beneficiario'" campo="proveedor_id">
+                    <x-campo :etiqueta="$condicion === 'pagado' ? 'Proveedor (opcional)' : 'Proveedor'" campo="proveedor_id">
                         <select id="proveedor_id" class="select" wire:model="proveedor_id">
-                            <option value="">{{ __('Sin beneficiario') }}</option>
+                            <option value="">{{ __('Sin proveedor') }}</option>
                             @foreach ($proveedores as $proveedor)
                                 <option value="{{ $proveedor->id }}">{{ $proveedor->nombre }}</option>
                             @endforeach
                         </select>
+                        @include('livewire.partials.proveedor-rapido', ['parte' => 'ayuda'])
                     </x-campo>
+                    @include('livewire.partials.proveedor-rapido', ['parte' => 'formulario'])
                     <x-campo etiqueta="Monto (Bs)" campo="monto">
                         <input id="monto" class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="monto" placeholder="0,00" required>
                     </x-campo>
@@ -186,7 +188,7 @@
             <div class="list-line"><span class="subtle">{{ __('Categoría') }}</span><b>{{ $viendo->categoria->nombre }}</b></div>
             <div class="list-line"><span class="subtle">{{ __('Descripción') }}</span><b>{{ $viendo->descripcion }}</b></div>
             <div class="list-line"><span class="subtle">{{ __('Sucursal') }}</span><b>{{ $viendo->sucursal->nombre }}</b></div>
-            @if ($viendo->proveedor)<div class="list-line"><span class="subtle">{{ __('Beneficiario') }}</span><b>{{ $viendo->proveedor->nombre }}</b></div>@endif
+            @if ($viendo->proveedor)<div class="list-line"><span class="subtle">{{ __('Proveedor') }}</span><b>{{ $viendo->proveedor->nombre }}</b></div>@endif
             <div class="list-line"><span class="subtle">{{ __('Medio') }}</span><b>{{ \App\Enums\MetodoPago::tryFrom((string) $viendo->metodo)?->etiqueta() ?? '—' }}@if ($viendo->pago_externo) · {{ __('fuera de caja') }}@endif</b></div>
             <div class="list-line"><span class="subtle">{{ __('Registró') }}</span><b>{{ $viendo->usuario->name }}</b></div>
             <div class="list-line"><span>{{ __('Monto') }}</span><b class="accent-text">{{ Decimal::bs($viendo->monto) }}</b></div>

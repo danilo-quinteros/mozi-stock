@@ -770,3 +770,14 @@ input[type="checkbox"].toggle:disabled {
 .suggestion-grupo{padding:10px 12px 5px;margin-top:4px;border-top:1px solid var(--border);color:var(--faint);font-size:9.5px;font-weight:750;letter-spacing:.04em;text-transform:uppercase}
 .suggestion-grupo:first-child{margin-top:0;border-top:0}
 .lote-campos.precio-venta-campos{grid-template-columns:minmax(0,200px)}
+
+/* «+ Nuevo proveedor» (Nuevo egreso, Nueva compra, Nueva obligación): ayuda bajo el select y alta rápida en línea. */
+.campo-ayuda{display:block;color:var(--faint);font-size:11px;line-height:1.5}
+.btn-enlace{background:none;border:0;padding:0;margin-left:4px;color:var(--brand-bright);font:inherit;font-weight:700;cursor:pointer}
+.btn-enlace:hover,.btn-enlace:focus-visible{text-decoration:underline;outline:none}
+.proveedor-rapido{display:grid;gap:12px;padding:14px;border:1px dashed var(--accent-border);border-radius:12px;background:var(--panel-soft)}
+.proveedor-rapido-titulo{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:12px;font-weight:750;color:var(--text-strong)}
+.proveedor-rapido-titulo .subtle{font-size:11px;font-weight:500}
+.proveedor-rapido-campos{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:12px}
+.proveedor-rapido-acciones{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:720px){.proveedor-rapido-campos{grid-template-columns:1fr}.proveedor-rapido-acciones .btn{flex:1}}

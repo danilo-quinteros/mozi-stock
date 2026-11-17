@@ -29,7 +29,7 @@ use Illuminate\Validation\ValidationException;
  * mixto) y, si queda saldo (parcial o pendiente), se abre su cuenta por pagar, en la misma
  * transacción. Las compras de stock no se registran aquí.
  *
- * Beneficiario y vencimiento obligatorios cuando queda saldo (§ 14.1). Decisiones del
+ * Proveedor y vencimiento obligatorios cuando queda saldo (§ 14.1). Decisiones del
  * propietario: solo administradores y siempre con la fecha y hora actuales (23/10/2026); el
  * efectivo sale de un turno abierto o, si el administrador lo indica, fuera de caja (30/10/2026).
  * Repetir la clave no repite el egreso.
@@ -85,7 +85,7 @@ final class RegistrarEgreso
         $proveedor = empty($datos['proveedor_id']) ? null : Proveedor::query()->where('activo', true)->find($datos['proveedor_id']);
 
         if ($proveedor === null && (! empty($datos['proveedor_id']) || $condicion !== 'pagado')) {
-            throw ValidationException::withMessages(['proveedor_id' => __('Selecciona el beneficiario (proveedor activo de tu empresa): es obligatorio si queda saldo.')]);
+            throw ValidationException::withMessages(['proveedor_id' => __('Selecciona el proveedor: es obligatorio si queda saldo por pagar.')]);
         }
 
         $pago = Decimal::comparar($pagado, '0', 2) > 0

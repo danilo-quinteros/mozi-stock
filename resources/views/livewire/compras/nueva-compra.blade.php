@@ -30,6 +30,7 @@
                         <option value="{{ $proveedor->id }}">{{ $proveedor->nombre }}</option>
                     @endforeach
                 </select>
+                @include('livewire.partials.proveedor-rapido', ['parte' => 'ayuda'])
             </x-campo>
             <x-campo etiqueta="Sucursal" campo="sucursal_id">
                 <select id="sucursal_id" class="select" wire:model.live="sucursal_id">
@@ -41,6 +42,7 @@
             <x-campo etiqueta="Referencia / nota (opcional)" campo="referencia" class="rapid-note-field">
                 <input id="referencia" class="input" type="text" maxlength="150" wire:model.blur="referencia" placeholder="{{ __('Ej. Factura, descripción breve') }}">
             </x-campo>
+            @include('livewire.partials.proveedor-rapido', ['parte' => 'formulario'])
         </div>
     </section>
 
@@ -141,4 +143,6 @@
             </div>
         </x-modal>
     @endif
+
+    <x-aviso :mensaje="$aviso" :numero="$avisoNumero" />
 </div>

@@ -14,7 +14,6 @@ use App\Domain\Reportes\Periodo;
 use App\Livewire\Compras\NuevaCompra as NuevaCompraPantalla;
 use App\Livewire\CuentasPagar\Detalle as CuentaPagarDetalle;
 use App\Livewire\CuentasPagar\Lista as CuentasPagarLista;
-use App\Livewire\CuentasPagar\NuevaObligacion;
 use App\Livewire\Egresos\Panel as EgresosPanel;
 use App\Models\Caja;
 use App\Models\CategoriaEgreso;
@@ -188,10 +187,10 @@ test('the payables screens list, pay from the detail and register a manual oblig
         ->set('monto', '1500')->call('registrar')->assertHasNoErrors()
         ->assertSee('Pago de Bs 1.500,00 registrado.')->assertSee('Bs 3.500,00');
 
-    Livewire::test(NuevaObligacion::class)
+    Livewire::test(CuentasPagarLista::class)->call('nuevaObligacion')
         ->set('proveedor_id', (string) $this->proveedor->id)->set('concepto', 'Impuesto anual')
-        ->set('importe', '900')->call('guardar')->assertHasErrors('vencimiento')
-        ->set('vencimiento', '2026-12-31')->call('guardar')->assertHasNoErrors()->assertRedirect();
+        ->set('importe', '900')->call('registrarObligacion')->assertHasErrors('vencimiento')
+        ->set('vencimiento', '2026-12-31')->call('registrarObligacion')->assertHasNoErrors()->assertRedirect();
 
     expect(CuentaPagar::query()->where('origen', 'manual')->sole()->saldo_pendiente)->toBe('900.00');
 

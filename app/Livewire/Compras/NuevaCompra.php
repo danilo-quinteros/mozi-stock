@@ -8,7 +8,9 @@ use App\Domain\Compras\CalculadoraCompra;
 use App\Domain\Inventario\DatosLote;
 use App\Domain\Inventario\LibroLotes;
 use App\Livewire\Concerns\CapturaProductos;
+use App\Livewire\Concerns\CreaProveedorRapido;
 use App\Livewire\Concerns\EligeCaja;
+use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Compra;
 use App\Models\Producto;
 use App\Models\Proveedor;
@@ -33,7 +35,7 @@ use Livewire\Component;
 #[Title('Nueva compra')]
 class NuevaCompra extends Component
 {
-    use CapturaProductos, EligeCaja;
+    use CapturaProductos, CreaProveedorRapido, EligeCaja, MuestraAvisos;
 
     public ?string $proveedor_id = null;
 

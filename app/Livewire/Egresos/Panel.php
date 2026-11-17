@@ -6,6 +6,7 @@ use App\Domain\Egresos\Actions\GuardarCategoriaEgreso;
 use App\Domain\Egresos\Actions\RegistrarEgreso;
 use App\Domain\Egresos\Consultas\ListadoEgresos;
 use App\Domain\Reportes\Periodo;
+use App\Livewire\Concerns\CreaProveedorRapido;
 use App\Livewire\Concerns\EligeCaja;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\UsaSucursalActiva;
@@ -33,7 +34,7 @@ use Livewire\WithPagination;
 #[Title('Egresos')]
 class Panel extends Component
 {
-    use EligeCaja, MuestraAvisos, UsaSucursalActiva, WithPagination;
+    use CreaProveedorRapido, EligeCaja, MuestraAvisos, UsaSucursalActiva, WithPagination;
 
     #[Url(except: 'movimientos')]
     public string $pestana = 'movimientos';
@@ -115,6 +116,7 @@ class Panel extends Component
         $this->authorize('create', Egreso::class);
         $this->resetValidation();
         $this->reset('categoria_id', 'descripcion', 'proveedor_id', 'condicion', 'pagado', 'vencimiento', 'metodo', 'monto', 'efectivo', 'electronico');
+        $this->resetProveedorRapido();
         $this->clave = (string) Str::uuid();
         $primera = $this->actor()->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
         $this->sucursal_id = $primera === null ? null : (string) $primera;
@@ -199,6 +201,7 @@ class Panel extends Component
         $this->formEgreso = false;
         $this->formCategoria = false;
         $this->viendoId = null;
+        $this->proveedorRapido = false;
         $this->resetValidation();
     }
 

@@ -56,7 +56,6 @@ use App\Livewire\Creditos\Historial as CreditoHistorial;
 use App\Livewire\Creditos\Lista as CreditoLista;
 use App\Livewire\CuentasPagar\Detalle as CuentaPagarDetalle;
 use App\Livewire\CuentasPagar\Lista as CuentaPagarLista;
-use App\Livewire\CuentasPagar\NuevaObligacion;
 use App\Livewire\Egresos\Panel as EgresosPanel;
 use App\Livewire\Empresa\Configuracion;
 use App\Livewire\Empresa\MiSuscripcion;
@@ -192,7 +191,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Cuentas por pagar (solo administradores; CuentaPagarPolicy).
         Route::livewire('cuentas-por-pagar', CuentaPagarLista::class)->name('cuentas-pagar.index');
-        Route::livewire('cuentas-por-pagar/nueva', NuevaObligacion::class)->name('cuentas-pagar.crear');
+        // Enlace antiguo: «Nueva obligación» ahora es un modal de la lista.
+        Route::get('cuentas-por-pagar/nueva', fn () => redirect()->route('cuentas-pagar.index', ['nueva' => 1]))->name('cuentas-pagar.crear');
         Route::get('cuentas-por-pagar/exportar', [ReportesCsvController::class, 'cuentasPagar'])->middleware('throttle:exportaciones')->name('cuentas-pagar.exportar');
         Route::livewire('cuentas-por-pagar/{cuenta}', CuentaPagarDetalle::class)->whereNumber('cuenta')->name('cuentas-pagar.ver');
         Route::get('cuentas-por-pagar/{cuenta}/respaldo', [ComprobanteCuentaController::class, 'respaldo'])->whereNumber('cuenta')->name('cuentas-pagar.respaldo');

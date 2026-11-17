@@ -35,11 +35,70 @@
             <section class="card card-pad">
                 <div class="card-head">
                     <div><div class="heading">{{ __('Condiciones del crédito') }}</div><p class="subtle" style="margin-top:8px">{{ __('Sin vencimiento, una fecha única o un plan de cuotas. Una venta sin vencimiento nunca figura como vencida.') }}</p></div>
-                    @if ($pendiente && $planEditable)
+                    @if ($pendiente && $planEditable && ! $formCondiciones)
                         <button class="btn ghost sm" type="button" wire:click="editarCondiciones"><x-icon name="edit" size="sm" /> {{ __('Definir') }}</button>
                     @endif
                 </div>
-                @if ($venta->cuotas->isNotEmpty())
+                @if ($formCondiciones)
+                <form wire:submit="guardarCondiciones" class="condiciones-form">
+                    <p class="subtle" style="margin:0 0 12px;font-size:12px">{{ __('El plan de cuotas debe sumar exactamente el saldo pendiente. No cambia el total vendido ni lo cobrado.') }}</p>
+                    <x-campo etiqueta="Tipo" campo="tipo">
+                        <select id="tipo" class="select" wire:model.live="condicion">
+                            <option value="ninguno">{{ __('Sin vencimiento') }}</option>
+                            <option value="unico">{{ __('Fecha única de vencimiento') }}</option>
+                            <option value="cuotas">{{ __('Plan de cuotas') }}</option>
+                        </select>
+                    </x-campo>
+                    @if ($condicion === 'unico')
+                        <x-campo etiqueta="Vencimiento" campo="vencimiento">
+                            <input id="vencimiento" class="input" type="date" wire:model="vencimiento" required>
+                        </x-campo>
+                    @elseif ($condicion === 'cuotas')
+                        <div class="fields">
+                            <x-campo etiqueta="Cantidad de cuotas" campo="planCantidad">
+                                <input id="planCantidad" class="input" type="number" min="1" max="{{ PlanCuotas::MAX_CUOTAS }}" wire:model="planCantidad">
+                            </x-campo>
+                            <x-campo etiqueta="Primer vencimiento" campo="planPrimera">
+                                <input id="planPrimera" class="input" type="date" wire:model="planPrimera">
+                            </x-campo>
+                            <x-campo etiqueta="Frecuencia" campo="planFrecuencia">
+                                <select id="planFrecuencia" class="select" wire:model="planFrecuencia">
+                                    @foreach (PlanCuotas::FRECUENCIAS as $valor => $texto)
+                                        <option value="{{ $valor }}">{{ __($texto) }}</option>
+                                    @endforeach
+                                </select>
+                            </x-campo>
+                            <div class="field" style="align-self:end"><button class="btn soft" type="button" wire:click="generarPlan">{{ __('Generar cuotas') }}</button></div>
+                        </div>
+                        @if ($plan !== [])
+                            <div class="table-wrap" style="max-height:280px;margin-top:12px">
+                                <table>
+                                    <thead><tr><th>{{ __('Cuota') }}</th><th>{{ __('Vencimiento') }}</th><th>{{ __('Importe (Bs)') }}</th><th></th></tr></thead>
+                                    <tbody>
+                                        @foreach ($plan as $indice => $fila)
+                                            <tr wire:key="plan-{{ $indice }}">
+                                                <td>{{ $indice + 1 }}</td>
+                                                <td><input class="input" type="date" wire:model="plan.{{ $indice }}.vencimiento" aria-label="{{ __('Vencimiento de la cuota :n', ['n' => $indice + 1]) }}"></td>
+                                                <td><input class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="plan.{{ $indice }}.monto" aria-label="{{ __('Importe de la cuota :n', ['n' => $indice + 1]) }}"></td>
+                                                <td><button class="icon-action" type="button" wire:click="quitarCuota({{ $indice }})" aria-label="{{ __('Quitar cuota') }}"><x-icon name="x" size="sm" /></button></td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                        <div class="row" style="justify-content:space-between;margin-top:10px">
+                            <button class="btn ghost sm" type="button" wire:click="agregarCuota"><x-icon name="plus" size="sm" /> {{ __('Agregar cuota') }}</button>
+                            <span @class(['subtle', 'danger-text' => Decimal::comparar($sumaPlan, $venta->saldo_pendiente, 2) !== 0])>{{ __('Suma :suma de :saldo', ['suma' => Decimal::bs($sumaPlan), 'saldo' => Decimal::bs($venta->saldo_pendiente)]) }}</span>
+                        </div>
+                        @error('cuotas')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                    @endif
+                    <div class="modal-actions">
+                        <button type="button" class="btn ghost" wire:click="$set('formCondiciones', false)">{{ __('Cancelar') }}</button>
+                        <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="guardarCondiciones"><x-icon name="check" /> {{ __('Guardar condiciones') }}</button>
+                    </div>
+                </form>
+                @elseif ($venta->cuotas->isNotEmpty())
                     <div class="table-wrap">
                         <table>
                             <thead><tr><th>{{ __('Cuota') }}</th><th>{{ __('Vencimiento') }}</th><th>{{ __('Importe') }}</th><th>{{ __('Saldo') }}</th><th>{{ __('Estado') }}</th></tr></thead>
@@ -123,68 +182,6 @@
             @endif
         </aside>
     </div>
-
-    @if ($formCondiciones)
-        <x-modal titulo="Condiciones del crédito" descripcion="El plan de cuotas debe sumar exactamente el saldo pendiente. No cambia el total vendido ni lo cobrado." cerrar="$set('formCondiciones', false)">
-            <form wire:submit="guardarCondiciones">
-                <x-campo etiqueta="Tipo" campo="tipo">
-                    <select id="tipo" class="select" wire:model.live="condicion">
-                        <option value="ninguno">{{ __('Sin vencimiento') }}</option>
-                        <option value="unico">{{ __('Fecha única de vencimiento') }}</option>
-                        <option value="cuotas">{{ __('Plan de cuotas') }}</option>
-                    </select>
-                </x-campo>
-                @if ($condicion === 'unico')
-                    <x-campo etiqueta="Vencimiento" campo="vencimiento">
-                        <input id="vencimiento" class="input" type="date" wire:model="vencimiento" required>
-                    </x-campo>
-                @elseif ($condicion === 'cuotas')
-                    <div class="fields">
-                        <x-campo etiqueta="Cantidad de cuotas" campo="planCantidad">
-                            <input id="planCantidad" class="input" type="number" min="1" max="{{ PlanCuotas::MAX_CUOTAS }}" wire:model="planCantidad">
-                        </x-campo>
-                        <x-campo etiqueta="Primer vencimiento" campo="planPrimera">
-                            <input id="planPrimera" class="input" type="date" wire:model="planPrimera">
-                        </x-campo>
-                        <x-campo etiqueta="Frecuencia" campo="planFrecuencia">
-                            <select id="planFrecuencia" class="select" wire:model="planFrecuencia">
-                                @foreach (PlanCuotas::FRECUENCIAS as $valor => $texto)
-                                    <option value="{{ $valor }}">{{ __($texto) }}</option>
-                                @endforeach
-                            </select>
-                        </x-campo>
-                        <div class="field" style="align-self:end"><button class="btn soft" type="button" wire:click="generarPlan">{{ __('Generar cuotas') }}</button></div>
-                    </div>
-                    @if ($plan !== [])
-                        <div class="table-wrap" style="max-height:280px;margin-top:12px">
-                            <table>
-                                <thead><tr><th>{{ __('Cuota') }}</th><th>{{ __('Vencimiento') }}</th><th>{{ __('Importe (Bs)') }}</th><th></th></tr></thead>
-                                <tbody>
-                                    @foreach ($plan as $indice => $fila)
-                                        <tr wire:key="plan-{{ $indice }}">
-                                            <td>{{ $indice + 1 }}</td>
-                                            <td><input class="input" type="date" wire:model="plan.{{ $indice }}.vencimiento" aria-label="{{ __('Vencimiento de la cuota :n', ['n' => $indice + 1]) }}"></td>
-                                            <td><input class="input" type="text" inputmode="decimal" wire:model.live.debounce.400ms="plan.{{ $indice }}.monto" aria-label="{{ __('Importe de la cuota :n', ['n' => $indice + 1]) }}"></td>
-                                            <td><button class="icon-action" type="button" wire:click="quitarCuota({{ $indice }})" aria-label="{{ __('Quitar cuota') }}"><x-icon name="x" size="sm" /></button></td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
-                    <div class="row" style="justify-content:space-between;margin-top:10px">
-                        <button class="btn ghost sm" type="button" wire:click="agregarCuota"><x-icon name="plus" size="sm" /> {{ __('Agregar cuota') }}</button>
-                        <span @class(['subtle', 'danger-text' => Decimal::comparar($sumaPlan, $venta->saldo_pendiente, 2) !== 0])>{{ __('Suma :suma de :saldo', ['suma' => Decimal::bs($sumaPlan), 'saldo' => Decimal::bs($venta->saldo_pendiente)]) }}</span>
-                    </div>
-                    @error('cuotas')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
-                @endif
-                <div class="modal-actions">
-                    <button type="button" class="btn ghost" wire:click="$set('formCondiciones', false)">{{ __('Cancelar') }}</button>
-                    <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="guardarCondiciones"><x-icon name="check" /> {{ __('Guardar condiciones') }}</button>
-                </div>
-            </form>
-        </x-modal>
-    @endif
 
     @if ($administra)
         <livewire:cuentas.anular :volver="route('creditos.historial', $venta)" />

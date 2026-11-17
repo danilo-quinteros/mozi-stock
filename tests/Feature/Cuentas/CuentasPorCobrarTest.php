@@ -254,7 +254,10 @@ test('the receivables screens register a manual account, a plan and collections 
         ->set('estado', 'pendientes')->assertSee('CXC-00001');
 
     Livewire::test(CreditoHistorial::class, ['venta' => $venta])
-        ->call('editarCondiciones')->set('condicion', 'cuotas')->set('planCantidad', '3')->set('planPrimera', '2026-11-19')
+        ->call('editarCondiciones')
+        // Se edita en la sección de la página, no en un modal; «Definir» se oculta mientras tanto.
+        ->assertSee('Guardar condiciones')->assertDontSeeHtml('modal-backdrop')->assertDontSee('Definir')
+        ->set('condicion', 'cuotas')->set('planCantidad', '3')->set('planPrimera', '2026-11-19')
         ->call('generarPlan')->call('guardarCondiciones')->assertHasNoErrors()
         ->assertSee('Condiciones del crédito guardadas.')->assertSee('1 / 3');
 

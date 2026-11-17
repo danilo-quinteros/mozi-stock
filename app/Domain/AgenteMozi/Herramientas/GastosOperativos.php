@@ -118,7 +118,7 @@ final class GastosOperativos extends HerramientaNegocio
             $this->serie($contexto, $periodo, $actual($egresos()), $meta),
             $this->dataset('detalle', [
                 $this->col('egreso', __('Egreso'), 'string'), $this->col('fecha', __('Fecha'), 'date'), $this->col('categoria', __('Categoría'), 'string'),
-                $this->col('descripcion', __('Descripción'), 'string'), $this->col('beneficiario', __('Beneficiario'), 'string'),
+                $this->col('descripcion', __('Descripción'), 'string'), $this->col('beneficiario', __('Proveedor'), 'string'),
                 $dinero('monto', __('Monto')), $dinero('pagado', __('Pagado')), $dinero('saldo', __('Saldo')),
             ], $detalle, $meta, 'Los 50 egresos más grandes del período.'),
         ];

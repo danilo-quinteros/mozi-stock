@@ -654,7 +654,7 @@ final class CatalogoDatos
                 ...$this->fechas('eg.fecha'),
                 $this->campo('descripcion', __('Descripción'), 'string', 'eg.descripcion'),
                 $this->campo('categoria', __('Categoría'), 'string', "COALESCE(ce.nombre, 'Sin categoría')"),
-                $this->campo('beneficiario', __('Beneficiario'), 'string', 'pr.nombre'),
+                $this->campo('beneficiario', __('Proveedor'), 'string', 'pr.nombre'),
                 $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
                 $this->campo('registrado_por', __('Registrado por'), 'string', 'us.name'),
                 $this->campo('condicion', __('Condición'), 'string', 'eg.condicion'),

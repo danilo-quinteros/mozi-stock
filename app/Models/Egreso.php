@@ -98,7 +98,7 @@ class Egreso extends Model
     }
 
     /**
-     * Beneficiario del gasto; obligatorio cuando queda deuda.
+     * Proveedor del gasto (de Contactos › Proveedores); obligatorio cuando queda deuda.
      *
      * @return BelongsTo<Proveedor, $this>
      */

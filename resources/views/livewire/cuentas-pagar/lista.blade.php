@@ -10,7 +10,7 @@
             <p class="lead">{{ __('Deudas con proveedores y acreedores: compras y egresos con saldo y obligaciones manuales.') }}</p>
         </div>
         <div class="page-actions">
-            <a class="btn primary" href="{{ route('cuentas-pagar.crear') }}"><x-icon name="plus" /> {{ __('Nueva obligación') }}</a>
+            <button class="btn primary" type="button" wire:click="nuevaObligacion"><x-icon name="plus" /> {{ __('Nueva obligación') }}</button>
         </div>
     </div>
 
@@ -91,4 +91,58 @@
         @endif
     </section>
     <div class="notice" style="margin-top:18px"><x-icon name="info" /><div><b>{{ __('Una deuda no es una salida de dinero') }}</b><p>{{ __('Caja y reportes cuentan solo lo pagado, en la fecha real de cada pago. Pagar una cuenta no crea otro egreso ni otra compra.') }}</p></div></div>
+
+    @if ($formObligacion)
+        <x-modal titulo="Nueva obligación" descripcion="Deuda con un proveedor que no nace de una compra ni de un egreso registrados en MoziStock (saldo anterior, préstamo, impuesto). No mueve stock ni dinero." cerrar="cerrarObligacion">
+            <form wire:submit="registrarObligacion">
+                <div class="fields">
+                    <x-campo etiqueta="Proveedor" campo="proveedor_id">
+                        <select id="proveedor_id" class="select" wire:model="proveedor_id" required>
+                            <option value="">{{ __('Selecciona el proveedor') }}</option>
+                            @foreach ($proveedores->where('activo', true) as $opcion)
+                                <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
+                            @endforeach
+                        </select>
+                        @include('livewire.partials.proveedor-rapido', ['parte' => 'ayuda'])
+                    </x-campo>
+                    <x-campo etiqueta="Sucursal" campo="sucursal_id">
+                        <select id="sucursal_id" class="select" wire:model="sucursal_id">
+                            @foreach ($sucursalesActivas as $opcion)
+                                <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
+                            @endforeach
+                        </select>
+                    </x-campo>
+                    @include('livewire.partials.proveedor-rapido', ['parte' => 'formulario'])
+                    <x-campo etiqueta="Concepto" campo="concepto" style="grid-column:1/-1">
+                        <input id="concepto" class="input" type="text" maxlength="150" wire:model="concepto" placeholder="{{ __('Ej. Saldo pendiente con proveedor antes de MoziStock') }}" required>
+                    </x-campo>
+                    <x-campo etiqueta="Fecha de registro" campo="fecha">
+                        <input id="fecha" class="input" type="date" wire:model="fecha" required>
+                    </x-campo>
+                    <x-campo etiqueta="Vencimiento" campo="vencimiento">
+                        <input id="vencimiento" class="input" type="date" wire:model="vencimiento" required>
+                    </x-campo>
+                    <x-campo etiqueta="Importe total (Bs)" campo="importe">
+                        <input id="importe" class="input" type="text" inputmode="decimal" wire:model="importe" placeholder="0,00" required>
+                    </x-campo>
+                    <x-campo etiqueta="Ya pagado antes (Bs, opcional)" campo="pagado">
+                        <input id="pagado" class="input" type="text" inputmode="decimal" wire:model="pagado" placeholder="0,00">
+                    </x-campo>
+                    <x-campo etiqueta="Respaldo (opcional)" campo="respaldo">
+                        <input id="respaldo" class="input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" wire:model="respaldo">
+                    </x-campo>
+                    <x-campo etiqueta="Nota (opcional)" campo="nota">
+                        <input id="nota" class="input" type="text" maxlength="250" wire:model="nota">
+                    </x-campo>
+                </div>
+                <p class="subtle" style="margin-top:12px;font-size:12px;line-height:1.6">{{ __('Lo pagado antes solo reduce el saldo inicial. Los pagos que hagas desde hoy se registran en la cuenta, con su fecha real.') }}</p>
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" wire:click="cerrarObligacion">{{ __('Cancelar') }}</button>
+                    <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="registrarObligacion,respaldo"><x-icon name="check" /> {{ __('Registrar obligación') }}</button>
+                </div>
+            </form>
+        </x-modal>
+    @endif
+
+    <x-aviso :mensaje="$aviso" :numero="$avisoNumero" />
 </div>
