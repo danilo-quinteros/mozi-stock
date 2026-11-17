@@ -1,8 +1,11 @@
 {{--
     «+ Nuevo proveedor» del trait CreaProveedorRapido.
     - $parte = 'ayuda': va dentro del campo Proveedor, debajo del select (de dónde sale la lista y el enlace).
-    - $parte = 'formulario': bloque a todo el ancho, después del campo, con los datos mínimos del proveedor.
-    No es un <form> (vive dentro del formulario principal): Enter guarda el proveedor, no el formulario de fuera.
+    - $parte = 'formulario': dentro de un modal (Nuevo egreso, Nueva obligación) → bloque en línea a todo el ancho,
+      después del campo. No es un <form> (vive dentro del formulario principal): Enter guarda el proveedor, no el
+      formulario de fuera.
+    - $parte = 'modal': en una página (Nueva compra) → popup «Nuevo proveedor», como «Registrar cliente» del POS. Se
+      incluye fuera de cualquier formulario de la página.
 --}}
 @if (($parte ?? 'ayuda') === 'ayuda')
     <small class="campo-ayuda">
@@ -11,6 +14,28 @@
             <button type="button" class="btn-enlace" wire:click="abrirProveedorRapido" data-test="nuevo-proveedor">{{ __('+ Nuevo proveedor') }}</button>
         @endif
     </small>
+@elseif (($parte ?? '') === 'modal')
+    @if ($proveedorRapido)
+        <x-modal titulo="Nuevo proveedor" descripcion="Datos mínimos para identificarlo. Completa el resto después en Contactos › Proveedores." cerrar="cancelarProveedorRapido">
+            <form wire:submit="guardarProveedorRapido">
+                <div class="fields">
+                    <x-campo etiqueta="Nombre o razón social *" campo="proveedorNombre" style="grid-column:1/-1">
+                        <input id="proveedorNombre" class="input" type="text" maxlength="150" wire:model="proveedorNombre" autocomplete="off" autofocus>
+                    </x-campo>
+                    <x-campo etiqueta="NIT o CI (opcional)" campo="proveedorDocumento">
+                        <input id="proveedorDocumento" class="input" type="text" maxlength="30" wire:model="proveedorDocumento" autocomplete="off">
+                    </x-campo>
+                    <x-campo etiqueta="Teléfono (opcional)" campo="proveedorTelefono">
+                        <input id="proveedorTelefono" class="input" type="tel" maxlength="40" wire:model="proveedorTelefono" autocomplete="off">
+                    </x-campo>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn ghost" wire:click="cancelarProveedorRapido">{{ __('Cancelar') }}</button>
+                    <button class="btn primary" type="submit" wire:loading.attr="disabled" wire:target="guardarProveedorRapido"><x-icon name="check" /> {{ __('Registrar proveedor') }}</button>
+                </div>
+            </form>
+        </x-modal>
+    @endif
 @elseif ($proveedorRapido)
     <div class="proveedor-rapido" style="grid-column:1/-1" wire:keydown.enter.prevent="guardarProveedorRapido">
         <div class="proveedor-rapido-titulo">{{ __('Nuevo proveedor') }}<span class="subtle">{{ __('Completa el resto de sus datos después en Contactos › Proveedores.') }}</span></div>

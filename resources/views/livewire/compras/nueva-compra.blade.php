@@ -42,7 +42,6 @@
             <x-campo etiqueta="Referencia / nota (opcional)" campo="referencia" class="rapid-note-field">
                 <input id="referencia" class="input" type="text" maxlength="150" wire:model.blur="referencia" placeholder="{{ __('Ej. Factura, descripción breve') }}">
             </x-campo>
-            @include('livewire.partials.proveedor-rapido', ['parte' => 'formulario'])
         </div>
     </section>
 
@@ -143,6 +142,8 @@
             </div>
         </x-modal>
     @endif
+
+    @include('livewire.partials.proveedor-rapido', ['parte' => 'modal'])
 
     <x-aviso :mensaje="$aviso" :numero="$avisoNumero" />
 </div>

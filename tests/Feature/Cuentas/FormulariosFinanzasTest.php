@@ -56,6 +56,9 @@ test('Nuevo egreso llama «Proveedor» al campo y explica de dónde sale la list
 test('desde el egreso se crea un proveedor, queda elegido y el egreso se registra con él', function () {
     $pantalla = Livewire::test(EgresosPanel::class)->call('nuevoEgreso')
         ->call('abrirProveedorRapido')
+        // Dentro de un modal es un bloque en línea, no otro popup encima.
+        ->assertSeeHtml('class="proveedor-rapido"')
+        ->assertDontSee('Registrar proveedor')
         ->assertSee('Nombre o razón social *')
         ->call('guardarProveedorRapido')
         ->assertHasErrors(['proveedorNombre'])
@@ -124,9 +127,14 @@ test('Nueva compra permite agregar un proveedor nuevo y registrar la compra con 
         ->assertSee('De tu lista de proveedores.')
         ->assertSee('+ Nuevo proveedor')
         ->call('abrirProveedorRapido')
+        // En una página es un popup (como «Registrar cliente» del POS), no el bloque en línea de los modales.
+        ->assertSeeHtml('modal-backdrop')
+        ->assertSee('Registrar proveedor')
+        ->assertDontSeeHtml('class="proveedor-rapido"')
         ->set('proveedorNombre', 'Molinos del Sur')
         ->call('guardarProveedorRapido')
         ->assertHasNoErrors()
+        ->assertDontSeeHtml('modal-backdrop')
         ->assertSee('Molinos del Sur')
         ->call('agregarProducto', $arroz->id)->set('lineas.0.costo', '40')
         ->call('revisar')->call('confirmar')
