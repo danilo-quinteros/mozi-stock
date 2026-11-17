@@ -8,6 +8,7 @@ use App\Domain\Catalogo\Actions\GuardarProducto;
 use App\Domain\Catalogo\Variantes;
 use App\Domain\Inventario\Consultas\StockLotes;
 use App\Domain\Inventario\StockInicial;
+use App\Domain\Produccion\Presentaciones;
 use App\Enums\Capacidad;
 use App\Livewire\Concerns\ArmaCombinaciones;
 use App\Models\Categoria;
@@ -93,6 +94,18 @@ class ProductoFormulario extends Component
      */
     public bool $controla_vencimiento = false;
 
+    /**
+     * Presentación de un granel (ESPECIFICACION_PRODUCCION.md § 7.1): granel del que sale, cuánto granel lleva cada
+     * unidad y sus envases. Solo con la capacidad Producción y para el administrador; sin ella no se envía y
+     * GuardarProducto conserva la configuración. Granel vacío = no es presentación.
+     */
+    public string $granel_id = '';
+
+    public string $granel_por_unidad = '';
+
+    /** @var list<array{producto_id: string, cantidad: string}> */
+    public array $envases = [];
+
     /** @var TemporaryUploadedFile|null */
     public $imagen = null;
 
@@ -147,6 +160,8 @@ class ProductoFormulario extends Component
         }
 
         $this->authorize('update', $producto);
+        // Producción § 4.1: una materia prima se edita en su propio formulario.
+        abort_if($producto->clase === Producto::CLASE_MATERIA_PRIMA, 404);
         $this->productoId = $producto->id;
         $this->nombre = $producto->nombre_base;
         $this->marca = (string) ($producto->marca ?? '');
@@ -165,6 +180,10 @@ class ProductoFormulario extends Component
         $this->activo = $producto->activo;
         $this->controla_stock = $producto->controla_stock;
         $this->controla_vencimiento = $producto->controla_vencimiento;
+        $this->granel_id = $producto->granel_id === null ? '' : (string) $producto->granel_id;
+        $this->granel_por_unidad = $producto->granel_por_unidad === null ? '' : Decimal::simple((string) $producto->granel_por_unidad);
+        $this->envases = array_values($producto->envases()->get(['producto_id', 'cantidad'])
+            ->map(fn ($e): array => ['producto_id' => (string) $e->producto_id, 'cantidad' => Decimal::simple((string) $e->cantidad)])->all());
         $this->minimos = StockNivel::query()->where('producto_id', $producto->id)->whereNotNull('stock_minimo')
             ->pluck('stock_minimo', 'sucursal_id')->map(fn ($minimo) => Decimal::simple((string) $minimo))->all();
     }
@@ -205,6 +224,38 @@ class ProductoFormulario extends Component
             $this->controla_stock = true;
             $this->resetErrorBag('controla_stock');
         }
+    }
+
+    /**
+     * Al elegir el granel se propone el granel por unidad con el contenido de la presentación («Suavizante 1 L» de un
+     * granel en litros → 1), si todavía está vacío y las unidades coinciden (§ 7.1).
+     */
+    public function updatedGranelId(string $valor): void
+    {
+        $this->resetErrorBag(['granel_id', 'granel_por_unidad']);
+
+        if ($valor === '' || $this->granel_por_unidad !== '' || ! filled($this->contenido)) {
+            return;
+        }
+
+        $unidadGranel = Producto::query()->whereKey((int) $valor)->value('unidad_medida_id');
+
+        if ($unidadGranel !== null && (int) $unidadGranel === (int) $this->unidad_medida_id) {
+            $this->granel_por_unidad = $this->contenido;
+        }
+    }
+
+    public function agregarEnvase(): void
+    {
+        if (count($this->envases) < Presentaciones::MAX_ENVASES) {
+            $this->envases[] = ['producto_id' => '', 'cantidad' => '1'];
+        }
+    }
+
+    public function quitarEnvase(int $indice): void
+    {
+        $this->envases = array_values(array_diff_key($this->envases, [$indice => true]));
+        $this->resetErrorBag();
     }
 
     /** Valida la imagen apenas se sube, antes de intentar mostrar su vista previa. */
@@ -405,6 +456,10 @@ class ProductoFormulario extends Component
             $datos['controla_vencimiento'] = $this->controla_vencimiento;
         }
 
+        if ($this->conProduccion()) {
+            $datos['presentacion'] = ['granel_id' => $this->granel_id, 'granel_por_unidad' => $this->granel_por_unidad, 'envases' => $this->envases];
+        }
+
         if ($this->productoId === null) {
             $stock = $this->con_stock_inicial ? $this->datosStockInicial() + [
                 'cantidad' => $this->stock_cantidad, 'lote' => $this->stock_lote, 'vencimiento' => $this->stock_vencimiento,
@@ -597,9 +652,13 @@ class ProductoFormulario extends Component
             $this->con_variantes = false;
         }
 
+        $conProduccion = $this->conProduccion();
+
         return view('livewire.catalogo.producto-formulario', [
             'producto' => $producto,
             'conLotes' => $conLotes,
+            'conProduccion' => $conProduccion,
+            ...($conProduccion ? $this->opcionesPresentacion() : []),
             'puedeVariantes' => $puedeVariantes,
             'sucursalesStock' => $this->productoId === null ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
             'pideLote' => $conLotes && $this->controla_vencimiento && ! $this->con_variantes,
@@ -623,6 +682,30 @@ class ProductoFormulario extends Component
         ])->title($this->productoId === null ? __('Nuevo producto') : __('Editar producto'));
     }
 
+    /**
+     * Opciones de la sección «Presentación»: como granel, los productos con receta (los que se fabrican) y el ya
+     * elegido; como envases, las materias primas activas y las ya elegidas. GuardarProducto vuelve a validar todo.
+     *
+     * @return array{graneles: Collection<int, Producto>, materiasEnvase: Collection<int, Producto>}
+     */
+    private function opcionesPresentacion(): array
+    {
+        $elegidas = array_values(array_filter(array_map(fn (array $e): int => (int) $e['producto_id'], $this->envases)));
+
+        return [
+            'graneles' => Producto::query()->with('unidad:id,abreviatura')
+                ->where('clase', Producto::CLASE_VENTA)->whereNull('modelo_id')->whereNull('granel_id')
+                ->when($this->productoId !== null, fn ($q) => $q->whereKeyNot($this->productoId))
+                ->where(fn ($q) => $q->whereIn('id', fn ($s) => $s->select('producto_id')->from('recetas')->whereNotNull('producto_vigente')->where('empresa_id', $this->actor()->empresa_id))
+                    ->orWhere('id', (int) $this->granel_id))
+                ->orderBy('nombre')->limit(500)->get(['id', 'nombre', 'contenido', 'unidad_medida_id']),
+            'materiasEnvase' => Producto::query()->with('unidad:id,abreviatura')
+                ->where('clase', Producto::CLASE_MATERIA_PRIMA)
+                ->where(fn ($q) => $q->where('activo', true)->orWhereIn('id', $elegidas))
+                ->orderBy('nombre')->limit(500)->get(['id', 'nombre', 'sku', 'unidad_medida_id']),
+        ];
+    }
+
     /** «Marca / laboratorio» en farmacias; «Marca» en los demás rubros. */
     private function etiquetaMarca(): string
     {
@@ -632,6 +715,12 @@ class ProductoFormulario extends Component
     private function conLotes(): bool
     {
         return Gate::allows('capacidad', Capacidad::LotesVencimientos);
+    }
+
+    /** Sección «Producto obtenido mediante envasado»: solo la ve y la envía el administrador de una empresa con Producción. */
+    private function conProduccion(): bool
+    {
+        return Gate::allows('usar-produccion');
     }
 
     private function actor(): User

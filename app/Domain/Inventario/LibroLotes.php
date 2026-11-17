@@ -576,12 +576,13 @@ final class LibroLotes
     }
 
     /**
-     * Venta y traspaso: solo lotes no vencidos (§ 5.2 y § 5.3). Salida y ajuste: primero los vencidos (§ 5.4).
+     * Venta, producción y traspaso: solo lotes no vencidos (§ 5.2 y § 5.3). Salida y ajuste: primero los vencidos (§ 5.4).
      */
     private function politica(TipoOperacionInventario $tipo): string
     {
         return match ($tipo) {
-            TipoOperacionInventario::Venta => self::VENTA,
+            // Producción (M3) y envasado: las materias primas y los envases se consumen solo de lotes vigentes, como la venta.
+            TipoOperacionInventario::Venta, TipoOperacionInventario::Produccion, TipoOperacionInventario::Envasado => self::VENTA,
             TipoOperacionInventario::Traspaso => self::TRASPASO,
             default => self::BAJA,
         };

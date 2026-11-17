@@ -15,14 +15,17 @@
             <legend class="field-label">{{ __('Funciones') }}</legend>
             @foreach ($funciones as $funcion)
                 @php($bloqueadaPor = $bloqueadas[$funcion->value] ?? null)
-                <label @class(['funcion-linea', 'is-bloqueada' => $bloqueadaPor]) wire:key="funcion-{{ $funcion->value }}">
-                    <input type="checkbox" value="{{ $funcion->value }}" wire:model.live="capacidades" @disabled($bloqueadaPor) data-test="funcion-{{ $funcion->value }}">
+                @php($requeridaPor = $requeridasPor[$funcion->value] ?? null)
+                <label @class(['funcion-linea', 'is-bloqueada' => $bloqueadaPor || $requeridaPor]) wire:key="funcion-{{ $funcion->value }}">
+                    <input type="checkbox" value="{{ $funcion->value }}" wire:model.live="capacidades" @disabled($bloqueadaPor || $requeridaPor) data-test="funcion-{{ $funcion->value }}">
                     <span class="funcion-texto">
                         <b>{{ $funcion->etiqueta() }}</b>
                         @unless ($funcion->disponible())<span class="badge info">{{ __('Próximamente') }}</span>@endunless
                         <small>{{ $funcion->descripcion() }}</small>
                         @if ($bloqueadaPor)
                             <small class="funcion-aviso">{{ __('No se puede usar junto con «:otra». Desmárcala primero.', ['otra' => $bloqueadaPor->etiqueta()]) }}</small>
+                        @elseif ($requeridaPor)
+                            <small class="funcion-aviso">{{ __('La necesita «:otra». Para desmarcarla, desmarca primero «:otra».', ['otra' => $requeridaPor->etiqueta()]) }}</small>
                         @endif
                     </span>
                 </label>

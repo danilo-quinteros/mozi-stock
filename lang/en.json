@@ -2915,7 +2915,7 @@
     "Unidad de medida *": "Unit of measure *",
     "Escanéalo o ingrésalo": "Scan or enter it",
     "Controla stock": "Tracks stock",
-    "Desmárcala para platos preparados, servicios u otros productos que no se cuentan en inventario. Se venden sin límite de cantidad.": "Uncheck it for prepared dishes, services or other products that are not counted in inventory. They are sold with no quantity limit.",
+    "Desactiva esta opción si no necesitas controlar las existencias de este producto.": "Turn this option off if you don't need to track this product's stock.",
     "Para dejar de controlar el stock, debe estar en 0 en todas las sucursales.": "To stop tracking stock, it must be at 0 in every branch.",
     "Funciones del negocio": "Business features",
     "Elige tu tipo de negocio y el sistema activa solo las funciones que necesitas. Ventas, stock, caja, créditos y reportes son los mismos para todos.": "Choose your type of business and the system turns on only the features you need. Sales, stock, cash, credit and reports are the same for everyone.",

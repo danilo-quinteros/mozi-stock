@@ -9,6 +9,7 @@ use App\Domain\Inventario\ControlLotes;
 use App\Domain\Inventario\DatosLote;
 use App\Domain\Inventario\LibroLotes;
 use App\Domain\Inventario\StockInicial;
+use App\Domain\Produccion\Presentaciones;
 use App\Models\Producto;
 use App\Models\User;
 use App\Support\Decimal;
@@ -44,13 +45,18 @@ use Throwable;
  *   modelo (GuardarModelo y CambiarPrecioVariante): aquí se conservan aunque la petición traiga otros valores;
  * - con la capacidad apagada la variante se edita como un producto suelto (rubros § 5.2). Si se le cambia el precio
  *   y deja de coincidir con el del modelo, queda con precio propio: al reactivar, el precio del modelo no la pisa.
+ *
+ * Presentación (ESPECIFICACION_PRODUCCION.md § 7.1): con `presentacion` en los datos ({granel_id, granel_por_unidad,
+ * envases}) y solo para quien usa Producción, Presentaciones valida la sección y sus envases se guardan en la misma
+ * transacción. Sin la capacidad (o para un vendedor) la sección se ignora y la configuración queda como está.
  */
 final class GuardarProducto
 {
     public const DISCO = 'local';
 
     private const CAMPOS = ['nombre', 'marca', 'contenido', 'tipo_venta', 'sku', 'codigo_barras', 'descripcion', 'categoria_id', 'unidad_medida_id',
-        'precio_consumidor', 'precio_minorista', 'precio_mayorista', 'stock_minimo', 'activo', 'controla_stock', 'controla_vencimiento'];
+        'precio_consumidor', 'precio_minorista', 'precio_mayorista', 'stock_minimo', 'activo', 'controla_stock', 'controla_vencimiento',
+        'clase', 'stock_maximo', 'observacion', 'costo_promedio', 'granel_id', 'granel_por_unidad'];
 
     public function __construct(
         private readonly Auditor $auditor,
@@ -59,6 +65,7 @@ final class GuardarProducto
         private readonly Variantes $variantes,
         private readonly StockInicial $stockInicial,
         private readonly GeneradorSku $skus,
+        private readonly Presentaciones $presentaciones,
     ) {}
 
     /**
@@ -146,6 +153,10 @@ final class GuardarProducto
         }
 
         $this->aplicar($empresaId, $producto, $datos);
+        $envases = array_key_exists('presentacion', $datos) && is_array($datos['presentacion']) && $producto->modelo_id === null
+            && Gate::forUser($actor)->allows('usar-produccion')
+            ? $this->presentaciones->preparar($empresaId, $producto, $datos['presentacion'])
+            : null;
         // «Auto»: sin código escrito, se genera al guardar (la factura del SIN necesita uno por producto).
         $skuAuto = (bool) ($datos['sku_auto'] ?? false) && $producto->sku === null;
 
@@ -170,11 +181,14 @@ final class GuardarProducto
         try {
             $this->exigirStockConVencimiento($producto->controla_stock, $producto->controla_vencimiento);
 
-            DB::transaction(function () use ($actor, $producto, $accion, $antes, $despues, $skuAuto): void {
+            DB::transaction(function () use ($actor, $producto, $accion, $antes, $despues, $skuAuto, $envases): void {
                 $cambioLote = $producto->exists ? $this->revisarControlDeStock($producto) : null;
 
                 if ($skuAuto) {
-                    $producto->sku = $this->skus->generar($producto->empresa_id, $producto->nombre);
+                    // Producción § 4.1: las materias primas llevan su propio correlativo, MP-0001.
+                    $producto->sku = $producto->clase === Producto::CLASE_MATERIA_PRIMA
+                        ? $this->skus->materiaPrima($producto->empresa_id)
+                        : $this->skus->generar($producto->empresa_id, $producto->nombre);
                 }
 
                 $producto->save();
@@ -186,6 +200,10 @@ final class GuardarProducto
                 }
 
                 $this->auditor->registrar($accion, $producto, $actor, $producto->empresa_id, $antes, $this->resumen($producto));
+
+                if ($envases !== null) {
+                    $this->presentaciones->guardar($actor, $producto, $envases);
+                }
 
                 if ($despues !== null) {
                     $despues($producto);
@@ -253,8 +271,14 @@ final class GuardarProducto
             $errores['marca'] = __('La marca admite hasta :max caracteres.', ['max' => Producto::MAX_MARCA]);
         }
 
+        $materia = $this->datosMateriaPrima($empresaId, $producto, $datos, $minimo, $errores);
+
         if ($errores !== []) {
             throw ValidationException::withMessages($errores);
+        }
+
+        foreach ($materia as $campo => $valor) {
+            $producto->setAttribute($campo, $valor);
         }
 
         $producto->nombre = trim((string) $datos['nombre']);
@@ -287,6 +311,85 @@ final class GuardarProducto
             // por lote ya quedaron en cero al apagar la capacidad; exigirLotesVacios lo vuelve a comprobar).
             $producto->controla_vencimiento = false;
         }
+    }
+
+    /**
+     * Campos de producción (ESPECIFICACION_PRODUCCION.md § 4.1), solo si vienen en los datos (GuardarMateriaPrima):
+     * - clase: solo al crear; después no cambia por aquí (una materia prima nunca pasa a venderse sin querer);
+     * - stock máximo: opcional, ≥ 0 y ≥ mínimo;
+     * - observación: hasta 250 caracteres;
+     * - costo inicial: solo en materias primas sin compras; después el costo lo calcula cada compra (§ 9).
+     * Una materia prima siempre controla stock y no lleva precios de venta.
+     *
+     * @param  array<string, mixed>  $datos
+     * @param  array<string, mixed>  $errores
+     *
+     * @param-out array<string, mixed>  $errores
+     *
+     * @return array<string, mixed> atributos a asignar
+     */
+    private function datosMateriaPrima(int $empresaId, Producto $producto, array $datos, ?string $minimo, array &$errores): array
+    {
+        $atributos = [];
+
+        if (! $producto->exists && array_key_exists('clase', $datos)) {
+            $clase = (string) $datos['clase'];
+
+            if (! in_array($clase, [Producto::CLASE_VENTA, Producto::CLASE_MATERIA_PRIMA], true)) {
+                $errores['clase'] = __('Elige una clase de producto válida.');
+            }
+
+            $atributos['clase'] = $clase;
+        }
+
+        $esMateria = ($atributos['clase'] ?? $producto->clase) === Producto::CLASE_MATERIA_PRIMA;
+
+        if (array_key_exists('stock_maximo', $datos)) {
+            $texto = trim((string) $datos['stock_maximo']);
+            $maximo = $texto === '' ? null : Decimal::normalizar($texto, Decimal::ESCALA_CANTIDAD);
+
+            if ($texto !== '' && ($maximo === null || Decimal::comparar($maximo, '0') < 0)) {
+                $errores['stock_maximo'] = __('Ingresa un máximo mayor o igual a 0 (hasta 3 decimales).');
+            } elseif ($maximo !== null && $minimo !== null && Decimal::comparar($maximo, $minimo) < 0) {
+                $errores['stock_maximo'] = __('El stock máximo no puede ser menor que el mínimo.');
+            }
+
+            $atributos['stock_maximo'] = $maximo;
+        }
+
+        if (array_key_exists('observacion', $datos)) {
+            $observacion = trim((string) $datos['observacion']);
+
+            if (mb_strlen($observacion) > 250) {
+                $errores['observacion'] = __('La observación admite hasta 250 caracteres.');
+            }
+
+            $atributos['observacion'] = $observacion === '' ? null : $observacion;
+        }
+
+        if ($esMateria) {
+            $atributos['controla_stock'] = true;
+        }
+
+        $costoTexto = array_key_exists('costo_inicial', $datos) ? trim((string) $datos['costo_inicial']) : '';
+
+        if ($esMateria && $costoTexto !== '') {
+            $costo = Decimal::normalizar($costoTexto, 6);
+
+            $conCompras = $producto->exists
+                && DB::table('compra_items')->where('empresa_id', $empresaId)->where('producto_id', $producto->id)->exists();
+
+            if ($costo === null || Decimal::comparar($costo, '0', 6) < 0) {
+                $errores['costo_inicial'] = __('Ingresa un costo válido en Bs, mayor o igual a 0 (hasta 6 decimales).');
+            } elseif ($conCompras && Decimal::comparar($costo, (string) $producto->costo_promedio, 6) !== 0) {
+                $errores['costo_inicial'] = __('Esta materia prima ya tiene compras: su costo lo calcula el sistema con cada compra.');
+            } elseif (! $conCompras) {
+                // Con compras no se escribe nunca: una compra simultánea pudo haberlo recalculado.
+                $atributos['costo_promedio'] = $costo;
+            }
+        }
+
+        return $atributos;
     }
 
     /**

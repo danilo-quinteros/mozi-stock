@@ -1027,6 +1027,57 @@ test('L4 lot traceability shows each document with its customer or supplier, tra
     expect($pantalla->viewData('movimientos')->total())->toBe(6);
 });
 
+test('the «Sin lote» lot page offers Regularizar per branch with stock and regularizes there; a numbered lot does not', function () {
+    DB::table('productos')->where('id', $this->amoxi->id)->update(['controla_vencimiento' => false]);
+    lotesAjustar($this->admin, 'entrada', $this->matriz, [$this->amoxi->id => '6']);
+    lotesAjustar($this->admin, 'entrada', $this->norte, [$this->amoxi->id => '2']);
+    lotesMarcar($this->admin, $this->amoxi, true);
+    $reg = loteRegularizacion($this->amoxi);
+
+    Livewire::test(TrazabilidadLote::class, ['lote' => $reg])
+        ->assertSee('Casa Matriz · 6')
+        ->assertSee('Sucursal Norte · 2')
+        ->assertSee('Este stock no tiene N.º de lote ni vencimiento.')
+        ->assertSeeHtml('wire:click="regularizar('.$this->matriz->id.', '.$this->amoxi->id.')"')
+        ->assertSeeHtml('wire:click="regularizar('.$this->norte->id.', '.$this->amoxi->id.')"')
+        ->call('regularizar', $this->norte->id, $this->amoxi->id)
+        ->assertSee('Regularizar lote')
+        ->assertSet('regLineas.0.cantidad', '2')
+        ->set('regLineas.0.lote', 'N1')->set('regLineas.0.vencimiento', '08/2027')
+        ->call('confirmarRegularizacion')
+        ->assertHasErrors(['regNota'])
+        ->set('regNota', 'Conteo del estante')
+        ->call('confirmarRegularizacion')
+        ->assertHasNoErrors()
+        ->assertSet('regProductoId', null)
+        ->assertSee('Casa Matriz · 6')
+        ->assertDontSee('Sucursal Norte · 2')
+        // Todavía queda stock sin fecha en Casa Matriz.
+        ->assertSeeHtml('data-estado-lote="sin-fecha"')
+        ->call('regularizar', $this->matriz->id, $this->amoxi->id)
+        ->set('regLineas.0.lote', 'M1')->set('regLineas.0.vencimiento', '10/2027')->set('regNota', 'Conteo del estante')
+        ->call('confirmarRegularizacion')
+        ->assertHasNoErrors()
+        // Sin stock en ninguna sucursal: ya no hay nada pendiente.
+        ->assertSeeHtml('data-estado-lote="regularizado"')
+        ->assertSee('Ya no queda stock sin fecha.')
+        ->assertDontSeeHtml('data-test="regularizar"');
+
+    expect(saldoLote($this->norte, loteDe($this->amoxi, 'N1')))->toBe('2.000')
+        ->and(saldoLote($this->matriz, loteDe($this->amoxi, 'M1')))->toBe('6.000')
+        ->and(saldoLote($this->norte, $reg))->toBe('0.000')
+        ->and(saldoLote($this->matriz, $reg))->toBe('0.000')
+        ->and(stockDe($this->norte, $this->amoxi))->toBe('2.000')
+        ->and(stockDe($this->matriz, $this->amoxi))->toBe('6.000')
+        ->and(OperacionInventario::query()->where('motivo', 'regularizacion_lote')->count())->toBe(2);
+    lotesInvariante();
+
+    // Un lote con número no tiene nada que regularizar.
+    Livewire::test(TrazabilidadLote::class, ['lote' => loteDe($this->amoxi, 'N1')])
+        ->assertSee('Sucursal Norte · 2')
+        ->assertDontSeeHtml('data-test="regularizar"');
+});
+
 test('con «Lotes y vencimientos» apagada, un producto marcado se puede pasar a «sin control de stock» y pierde la marca', function () {
     app(CambiarFuncionesEmpresa::class)->ejecutar($this->admin, $this->empresa, Rubro::Farmacia, [], null, 'DESACTIVAR');
     expect($this->amoxi->refresh()->controla_vencimiento)->toBeTrue();

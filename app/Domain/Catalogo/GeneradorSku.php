@@ -25,6 +25,18 @@ final class GeneradorSku
         return $limpio === '' ? self::SIN_LETRAS : substr($limpio, 0, 3);
     }
 
+    /**
+     * Código de materia prima (ESPECIFICACION_PRODUCCION.md § 4.1): MP-0001, MP-0002… con su propia serie.
+     */
+    public function materiaPrima(int $empresaId): string
+    {
+        do {
+            $sku = sprintf('MP-%04d', $this->numerador->siguiente($empresaId, 'MP'));
+        } while (DB::table('productos')->where('empresa_id', $empresaId)->where('sku', $sku)->exists());
+
+        return $sku;
+    }
+
     public function generar(int $empresaId, string $nombre): string
     {
         $prefijo = self::prefijo($nombre);

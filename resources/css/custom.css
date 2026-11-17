@@ -408,6 +408,124 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to ed
     margin-top: 16px;
 }
 
+/* Aviso chico con ícono («notice mini-note» + <x-icon> + <div>): .mini-note (rapid.css) pone display:block y el
+   ícono quedaba arriba del texto. Con ícono vuelve a ser flex como .notice: ícono a la izquierda, texto al lado. Las
+   notas solo de texto siguen en bloque. */
+.notice.mini-note:has(> .ico) {
+    display: flex;
+}
+
+.notice.mini-note > .ico {
+    flex: none;
+}
+
+.notice.mini-note > .ico + div {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Tablas del formulario de producto (materiales de envasado, stock y lotes por sucursal). Si el espacio no alcanza
+   para la tabla (min-width 620px), cada fila pasa a ser una tarjeta con el rótulo de la columna (data-label) encima
+   de su valor, sin desplazamiento horizontal. Se mide el ancho de la caja de la tabla, no el de la pantalla. */
+.tabla-cantidad {
+    max-width: 120px;
+}
+
+.tabla-apilada {
+    container: tabla-apilada / inline-size;
+}
+
+@container tabla-apilada (width < 620px) {
+    .tabla-apilada table,
+    .tabla-apilada td {
+        display: block;
+    }
+
+    .tabla-apilada table {
+        min-width: 0;
+    }
+
+    .tabla-apilada thead {
+        display: none;
+    }
+
+    .tabla-apilada tbody {
+        display: grid;
+        gap: 10px;
+    }
+
+    .tabla-apilada tbody tr,
+    .tabla-apilada tbody tr:hover {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        padding: 13px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel-soft);
+    }
+
+    /* justify-items:start: una etiqueta de estado conserva su ancho; los campos (width:100%) igual ocupan la celda. */
+    .tabla-apilada td {
+        display: grid;
+        align-content: start;
+        justify-items: start;
+        gap: 6px;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    .tabla-apilada td[data-label]::before {
+        content: attr(data-label);
+        color: var(--faint);
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: .035em;
+        text-transform: uppercase;
+    }
+
+    /* Celda a lo ancho de la tarjeta. */
+    .tabla-apilada td.apilada-ancha {
+        grid-column: 1 / -1;
+    }
+
+    /* Encabezado de la tarjeta: a lo ancho, en negrita y sin rótulo. */
+    .tabla-apilada td.apilada-titulo {
+        grid-column: 1 / -1;
+        color: var(--text-strong);
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    /* Botón de la fila (quitar): abajo a la derecha, a la altura del campo de al lado y sin rótulo. */
+    .tabla-apilada td.apilada-accion {
+        align-self: end;
+        justify-self: end;
+    }
+
+    .tabla-apilada td.apilada-titulo::before,
+    .tabla-apilada td.apilada-accion::before {
+        display: none;
+    }
+
+    .tabla-apilada td.apilada-accion .btn {
+        min-height: 42px;
+    }
+
+    .tabla-apilada .tabla-cantidad {
+        max-width: none;
+    }
+
+    /* Fila vacía («Sin materiales…»): solo el mensaje, sin tarjeta. */
+    .tabla-apilada tbody tr:has(> td[colspan]) {
+        display: block;
+        padding: 0;
+        border: 0;
+        background: none;
+    }
+}
+
 
 
 /* Campos en una misma fila de grilla: si uno lleva texto de ayuda o un error, la fila crece y el .field vecino

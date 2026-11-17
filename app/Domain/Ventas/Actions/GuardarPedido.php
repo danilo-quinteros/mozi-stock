@@ -183,6 +183,8 @@ final class GuardarPedido
             ->join('unidades_medida', 'unidades_medida.id', '=', 'productos.unidad_medida_id')
             ->where('productos.empresa_id', $empresaId)
             ->where('productos.activo', true)
+            // Producción PR1: la materia prima nunca se vende, aunque se manipule la petición.
+            ->where('productos.clase', Producto::CLASE_VENTA)
             ->whereIn('productos.id', $ids)
             ->get(['productos.id', 'productos.nombre', 'productos.contenido', 'productos.tipo_venta', 'productos.precio_consumidor', 'productos.precio_minorista',
                 'productos.precio_mayorista', 'unidades_medida.admite_decimales', 'unidades_medida.abreviatura'])

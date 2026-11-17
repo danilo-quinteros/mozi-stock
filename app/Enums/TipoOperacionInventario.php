@@ -14,6 +14,12 @@ enum TipoOperacionInventario: string
     case Compra = 'compra';
     // Reingreso de productos devueltos de una venta: comparte el correlativo DEV.
     case Devolucion = 'devolucion';
+    // Órdenes de producción (ESPECIFICACION_PRODUCCION.md § 6.4): consumo de materias primas al aprobar, cierre al
+    // finalizar y devolución al anular una orden aprobada. Serie PRD.
+    case Produccion = 'produccion';
+    // Envasado (ESPECIFICACION_PRODUCCION.md § 7): el granel sale de un lote, los envases por FEFO y las presentaciones
+    // entran con el lote del granel. Serie ENV; su número es también el del envasado.
+    case Envasado = 'envasado';
 
     /**
      * Serie de los ajustes que solo mueven saldos por lote sin cambiar el total (regularización, inicio y fin del
@@ -31,6 +37,8 @@ enum TipoOperacionInventario: string
             self::Venta => __('Venta'),
             self::Compra => __('Compra'),
             self::Devolucion => __('Devolución'),
+            self::Produccion => __('Producción'),
+            self::Envasado => __('Envasado'),
         };
     }
 
@@ -41,6 +49,8 @@ enum TipoOperacionInventario: string
             self::Venta => 'V',
             self::Compra => 'COM',
             self::Devolucion => 'DEV',
+            self::Produccion => 'PRD',
+            self::Envasado => 'ENV',
             default => 'AJU',
         };
     }
@@ -76,6 +86,12 @@ enum TipoOperacionInventario: string
                 'devolucion_proveedor' => __('Devolución a proveedor'),
                 // Lotes y vencimientos § 5.4: la baja de lo vencido; en automático sale primero lo vencido.
                 'vencido' => __('Vencido'),
+            ],
+            // Los pone el sistema según el paso de la orden; no se eligen en Ajustes (no es un tipo manual).
+            self::Produccion => [
+                'consumo' => __('Consumo de orden'),
+                'cierre' => __('Cierre de orden'),
+                'anulacion' => __('Anulación de orden'),
             ],
             default => [],
         };

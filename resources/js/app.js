@@ -226,7 +226,7 @@ function textosValidacion() {
 }
 
 function irAlPrimerError() {
-    const marca = document.querySelector('[aria-invalid="true"], .auth-error, .field-error');
+    const marca = document.querySelector('[aria-invalid="true"], .auth-error, .field-error, [data-error-validacion]');
 
     if (! marca) {
         return;
@@ -269,14 +269,19 @@ export function mostrarErrorValidacion(mensaje, total = 1) {
 
 window.mostrarErrorValidacion = mostrarErrorValidacion;
 
-function erroresDe(snapshot) {
+// Los errores de la acción vienen en el efecto `erroresValidacion` (App\Livewire\Hooks\ErroresValidacion), que incluye
+// también las claves que no son propiedades del componente (p. ej. `lineas`); si no está, los que Livewire guarda en el memo.
+function erroresDe(snapshot, effects) {
+    const deLaAccion = Array.isArray(effects?.erroresValidacion) ? effects.erroresValidacion : [];
     let datos = snapshot;
 
-    if (typeof datos === 'string') {
+    if (deLaAccion.length === 0 && typeof datos === 'string') {
         try { datos = JSON.parse(datos); } catch (_) { return []; }
     }
 
-    return Object.values(datos?.memo?.errors ?? {}).flat().filter(mensaje => typeof mensaje === 'string' && mensaje !== '');
+    const mensajes = deLaAccion.length > 0 ? deLaAccion : Object.values(datos?.memo?.errors ?? {}).flat();
+
+    return mensajes.filter(mensaje => typeof mensaje === 'string' && mensaje !== '');
 }
 
 document.addEventListener('livewire:init', () => {
@@ -288,8 +293,8 @@ document.addEventListener('livewire:init', () => {
             return;
         }
 
-        succeed(({ snapshot }) => {
-            const errores = erroresDe(snapshot);
+        succeed(({ snapshot, effects }) => {
+            const errores = erroresDe(snapshot, effects);
 
             if (errores.length > 0) {
                 mostrarErrorValidacion(errores[0], errores.length);

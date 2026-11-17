@@ -57,8 +57,21 @@ class FuncionesNegocio extends Component
         $this->resetValidation();
     }
 
+    /** Marcar una función que necesita otra (Producción → Lotes) marca también la requerida (producción § 8). */
     public function updatedCapacidades(): void
     {
+        foreach (Capacidad::cases() as $capacidad) {
+            if (! in_array($capacidad->value, $this->capacidades, true)) {
+                continue;
+            }
+
+            foreach ($capacidad->requeridas() as $requerida) {
+                if (! in_array($requerida->value, $this->capacidades, true)) {
+                    $this->capacidades[] = $requerida->value;
+                }
+            }
+        }
+
         $this->resetValidation('capacidades');
     }
 
@@ -127,6 +140,7 @@ class FuncionesNegocio extends Component
             'rubros' => Rubro::cases(),
             'funciones' => Capacidad::cases(),
             'bloqueadas' => $this->bloqueadas($marcadas),
+            'requeridasPor' => $this->requeridasPor($marcadas),
             'rubroActual' => $empresa->rubro,
             'minutosActuales' => $empresa->minutos_alerta_cocina,
             'activan' => array_values(array_filter($marcadas, fn (Capacidad $c): bool => ! in_array($c->value, $actuales, true))),
@@ -165,6 +179,26 @@ class FuncionesNegocio extends Component
         }
 
         return $bloqueadas;
+    }
+
+    /**
+     * Casillas marcadas que no se pueden desmarcar porque otra marcada las necesita (Lotes, mientras Producción esté
+     * marcada). La acción lo vuelve a validar en el servidor.
+     *
+     * @param  list<Capacidad>  $marcadas
+     * @return array<string, Capacidad> casilla fija => la marcada que la necesita
+     */
+    private function requeridasPor(array $marcadas): array
+    {
+        $fijas = [];
+
+        foreach ($marcadas as $marcada) {
+            foreach ($marcada->requeridas() as $requerida) {
+                $fijas[$requerida->value] = $marcada;
+            }
+        }
+
+        return $fijas;
     }
 
     private function cargar(Empresa $empresa): void

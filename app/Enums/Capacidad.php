@@ -12,6 +12,8 @@ enum Capacidad: string
     case LotesVencimientos = 'lotes_vencimientos';
     case Despachos = 'despachos';
     case Cocina = 'cocina';
+    // ESPECIFICACION_PRODUCCION.md § 8: no la trae ningún rubro; se activa a mano.
+    case Produccion = 'produccion';
 
     public function etiqueta(): string
     {
@@ -20,6 +22,7 @@ enum Capacidad: string
             self::LotesVencimientos => __('Lotes y vencimientos'),
             self::Despachos => __('Despachos'),
             self::Cocina => __('Pedidos en cocina'),
+            self::Produccion => __('Producción'),
         };
     }
 
@@ -30,6 +33,21 @@ enum Capacidad: string
             self::LotesVencimientos => __('Stock por lote; bloquea la venta de vencidos.'),
             self::Despachos => __('Ventas Por despachar → Despachado → Entregado.'),
             self::Cocina => __('Ventas En cocina → Entregado, con botón flotante.'),
+            self::Produccion => __('Materias primas, recetas y órdenes de producción. Activa también Lotes y vencimientos.'),
+        };
+    }
+
+    /**
+     * Capacidades que esta necesita encendidas (producción § 8): activarla las enciende y, mientras esté activa, no se
+     * pueden apagar.
+     *
+     * @return list<self>
+     */
+    public function requeridas(): array
+    {
+        return match ($this) {
+            self::Produccion => [self::LotesVencimientos],
+            default => [],
         };
     }
 
@@ -56,7 +74,7 @@ enum Capacidad: string
     public function disponible(): bool
     {
         return match ($this) {
-            self::Despachos, self::Cocina, self::LotesVencimientos, self::Variantes => true,
+            self::Despachos, self::Cocina, self::LotesVencimientos, self::Variantes, self::Produccion => true,
         };
     }
 

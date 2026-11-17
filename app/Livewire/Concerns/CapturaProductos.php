@@ -91,7 +91,7 @@ trait CapturaProductos
             return $this->entradasBuscador[$termino];
         }
 
-        $agrupar = Gate::allows('capacidad', Capacidad::Variantes);
+        $agrupar = Gate::allows('capacidad', Capacidad::Variantes) && in_array(Producto::CLASE_VENTA, $this->clasesCaptura(), true);
         $productos = $this->coincidencias($termino)
             ->when(! $this->admiteSinControlDeStock(), fn (Builder $q) => $q->where('productos.controla_stock', true))
             ->with('unidad:id,abreviatura')
@@ -118,7 +118,8 @@ trait CapturaProductos
     }
 
     /**
-     * Productos activos de la empresa (scope) que coinciden por nombre, marca, SKU, código de barras o contenido.
+     * Productos activos de la empresa (scope), de las clases que admite la pantalla, que coinciden por nombre, marca,
+     * SKU, código de barras o contenido.
      *
      * @return Builder<Producto>
      */
@@ -126,6 +127,7 @@ trait CapturaProductos
     {
         return Producto::filtrarPorTexto(Producto::query()
             ->where('productos.activo', true)
+            ->whereIn('productos.clase', $this->clasesCaptura())
             ->leftJoin('unidades_medida as um', 'um.id', '=', 'productos.unidad_medida_id'), $termino);
     }
 
@@ -176,6 +178,7 @@ trait CapturaProductos
 
         $exacto = Producto::query()
             ->where('activo', true)
+            ->whereIn('clase', $this->clasesCaptura())
             ->where(fn (Builder $q) => $q->where('codigo_barras', $termino)->orWhere('sku', $termino))
             ->value('id');
 
@@ -210,7 +213,7 @@ trait CapturaProductos
     public function agregarProducto(int $id): bool
     {
         // El scope de empresa impide agregar productos de otra empresa.
-        $producto = Producto::query()->where('activo', true)->with('unidad:id,abreviatura')->find($id, ['id', 'nombre', 'contenido', 'unidad_medida_id', 'controla_stock']);
+        $producto = Producto::query()->where('activo', true)->whereIn('clase', $this->clasesCaptura())->with('unidad:id,abreviatura')->find($id, ['id', 'nombre', 'contenido', 'unidad_medida_id', 'controla_stock']);
 
         if ($producto === null) {
             $this->mensajeCaptura = __('El producto no está disponible.');
@@ -276,6 +279,21 @@ trait CapturaProductos
     protected function admiteSinControlDeStock(): bool
     {
         return false;
+    }
+
+    /**
+     * Clases de producto que ofrece el buscador (ESPECIFICACION_PRODUCCION.md § 3): las pantallas de venta (las que
+     * admiten productos sin control de stock) nunca ofrecen materias primas; compras, ajustes y traspasos ofrecen las
+     * dos, y «Ingreso de materia prima» (compra filtrada) solo materias primas. Solo filtra el buscador: las acciones
+     * de venta rechazan la materia prima en el servidor.
+     *
+     * @return list<string>
+     */
+    protected function clasesCaptura(): array
+    {
+        return $this->admiteSinControlDeStock()
+            ? [Producto::CLASE_VENTA]
+            : [Producto::CLASE_VENTA, Producto::CLASE_MATERIA_PRIMA];
     }
 
     /**

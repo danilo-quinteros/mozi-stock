@@ -248,7 +248,7 @@
                                     <b>{{ __('Controla stock') }}</b>
                                     <small id="controla-stock-ayuda">{{ $conLotes && $controla_vencimiento
                                         ? __('Este producto controla lote y vencimiento, así que siempre controla stock.')
-                                        : __('Desmárcala para platos preparados, servicios u otros productos que no se cuentan en inventario. Se venden sin límite de cantidad.') }}</small>
+                                        : __('Desactiva esta opción si no necesitas controlar las existencias de este producto.') }}</small>
                                 </span>
                             </label>
                             @error('controla_stock')<p class="auth-error" role="alert" data-test="controla-stock-error">{{ $message }}</p>@enderror
@@ -325,16 +325,16 @@
                             <p class="subtle" style="margin:6px 0 12px">{{ $controla_stock
                                 ? __('El stock cambia solo con ajustes y traspasos. Deja el mínimo vacío para usar la alerta general.')
                                 : __('Para dejar de controlar el stock, debe estar en 0 en todas las sucursales.') }}</p>
-                            <div class="table-wrap">
+                            <div class="table-wrap tabla-apilada">
                                 <table>
                                     <thead><tr><th>{{ __('Sucursal') }}</th><th>{{ __('Stock actual') }}</th>@if ($controla_stock)<th>{{ __('Mínimo propio') }}</th>@endif</tr></thead>
                                     <tbody>
                                         @forelse ($stockSucursales as $fila)
                                             <tr wire:key="minimo-{{ $fila['sucursal']->id }}">
-                                                <td>{{ $fila['sucursal']->nombre }}</td>
-                                                <td><b>{{ Decimal::formatear($fila['stock']) }}</b></td>
+                                                <td class="apilada-titulo">{{ $fila['sucursal']->nombre }}</td>
+                                                <td data-label="{{ __('Stock actual') }}"><b>{{ Decimal::formatear($fila['stock']) }}</b></td>
                                                 @if ($controla_stock)
-                                                    <td>
+                                                    <td data-label="{{ __('Mínimo propio') }}">
                                                         <input class="input rapid-numeric" type="text" inputmode="decimal" placeholder="{{ __('General') }}" aria-label="{{ __('Mínimo en :nombre', ['nombre' => $fila['sucursal']->nombre]) }}" wire:model="minimos.{{ $fila['sucursal']->id }}">
                                                         @error('minimos.'.$fila['sucursal']->id)<p class="auth-error">{{ $message }}</p>@enderror
                                                     </td>
@@ -350,19 +350,84 @@
                     @endif
                 </section>
 
+                {{-- Producción § 7.1: producto obtenido envasando un granel, o «presentación» (solo el administrador con Producción). --}}
+                @if ($conProduccion && ! $con_variantes && ! $modeloVariante && $controla_stock)
+                    @php
+                        $granelElegido = $graneles->firstWhere('id', (int) $granel_id);
+                    @endphp
+                    <section class="card card-pad" data-test="producto-presentacion">
+                        <div class="card-head"><div><div class="heading">{{ __('Producto obtenido mediante envasado') }}</div><p class="subtle" style="margin:9px 0 0">{{ __('Si este producto se obtiene envasando un producto elaborado a granel, configura aquí de dónde proviene y cuánto contenido lleva cada envase.') }}</p></div></div>
+                        <div class="fields">
+                            <x-campo etiqueta="Producto de origen (a granel)" campo="granel_id">
+                                <select id="granel_id" class="select" wire:model.live="granel_id" data-test="producto-granel">
+                                    <option value="">{{ __('Seleccionar producto…') }}</option>
+                                    @foreach ($graneles as $opcion)
+                                        <option value="{{ $opcion->id }}">{{ $opcion->nombre_completo }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="subtle">{{ __('Selecciona el producto elaborado (con receta) que se utilizará para llenar estos envases. Déjalo sin elegir si este producto no se envasa.') }}</small>
+                            </x-campo>
+                            @if ($granel_id !== '')
+                                <x-campo etiqueta="{{ __('Cantidad utilizada por envase') }}{{ $granelElegido ? ' ('.$granelElegido->unidad->abreviatura.')' : '' }}" campo="granel_por_unidad">
+                                    <input id="granel_por_unidad" class="input" type="text" inputmode="decimal" wire:model="granel_por_unidad" placeholder="{{ __('Ej. 1') }}" data-test="producto-granel-por-unidad">
+                                    <small class="subtle">{{ __('Indica cuánto producto a granel se necesita para llenar una unidad de este producto.') }}</small>
+                                </x-campo>
+                            @endif
+                        </div>
+                        @if ($granel_id !== '')
+                            {{-- Subencabezado de la tabla: título en negrita (un punto menor que el del card), separado por una línea. --}}
+                            <div class="card-head" id="materiales-envasado" style="flex-wrap:wrap;margin:22px 0 14px;padding-top:20px;border-top:1px solid var(--border);scroll-margin-top:90px" data-test="materiales-envasado">
+                                <div>
+                                    <div class="heading" style="font-size:13px">{{ __('Materiales de envasado') }}</div>
+                                    <p class="subtle" style="margin:6px 0 0">{{ __('Materias primas que se usan en cada unidad de este producto: botella, tapa, etiqueta…') }}</p>
+                                </div>
+                                <button class="btn ghost sm" type="button" wire:click="agregarEnvase" data-test="agregar-envase"><x-icon name="plus" size="sm" /> {{ __('Agregar material') }}</button>
+                            </div>
+                            @error('envases')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                            <div class="table-wrap tabla-apilada">
+                                <table>
+                                    <thead><tr><th>{{ __('Material') }}</th><th>{{ __('Cantidad por unidad') }}</th><th><span class="sr-only">{{ __('Quitar') }}</span></th></tr></thead>
+                                    <tbody>
+                                        @forelse ($envases as $indice => $envase)
+                                            <tr wire:key="envase-{{ $indice }}">
+                                                <td class="apilada-ancha" data-label="{{ __('Material') }}">
+                                                    <select class="select" wire:model="envases.{{ $indice }}.producto_id" aria-label="{{ __('Material :n', ['n' => $indice + 1]) }}" data-test="envase-producto-{{ $indice }}">
+                                                        <option value="">{{ __('Elige la materia prima') }}</option>
+                                                        @foreach ($materiasEnvase as $materia)
+                                                            <option value="{{ $materia->id }}">{{ $materia->nombre }} ({{ $materia->unidad->abreviatura }})</option>
+                                                        @endforeach
+                                                    </select>
+                                                    @error('envases.'.$indice.'.producto_id')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                                                </td>
+                                                <td data-label="{{ __('Cantidad por unidad') }}">
+                                                    <input class="input tabla-cantidad" type="text" inputmode="decimal" wire:model="envases.{{ $indice }}.cantidad" aria-label="{{ __('Cantidad por unidad del material :n', ['n' => $indice + 1]) }}" data-test="envase-cantidad-{{ $indice }}">
+                                                    @error('envases.'.$indice.'.cantidad')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                                                </td>
+                                                <td class="apilada-accion"><button class="btn ghost sm" type="button" wire:click="quitarEnvase({{ $indice }})" aria-label="{{ __('Quitar material :n', ['n' => $indice + 1]) }}"><x-icon name="trash" size="sm" /></button></td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="3"><div class="empty">{{ __('Sin materiales. Agrega la botella, la tapa, la etiqueta o lo que lleve cada unidad.') }}</div></td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </section>
+                @endif
+
                 {{-- Lotes por sucursal (§ 4): solo lectura; se mueven con compras, ajustes, traspasos y ventas. --}}
                 @if ($productoId && $conLotes && $producto?->controla_vencimiento)
                     <section class="card card-pad" data-test="producto-lotes">
                         <div class="card-head"><div><div class="heading">{{ __('Lotes por sucursal') }}</div><p class="subtle" style="margin:9px 0 0">{{ __('Lotes con stock, en el orden en que salen. Toca un lote para ver su trazabilidad.') }}</p></div>
                             <a class="btn ghost sm" href="{{ route('inventario.vencimientos') }}">{{ __('Ver vencimientos') }} <x-icon name="arrow" size="sm" /></a></div>
-                        <div class="table-wrap">
+                        <div class="table-wrap tabla-apilada">
                             <table>
                                 <thead><tr><th>{{ __('Sucursal') }}</th><th>{{ __('Lote') }}</th><th>{{ __('Stock') }}</th><th>{{ __('Estado') }}</th></tr></thead>
                                 <tbody>
                                     @forelse ($lotes as $lote)
                                         <tr wire:key="lote-{{ $lote['id'] }}-{{ $loop->index }}">
-                                            <td data-label="{{ __('Sucursal') }}">{{ $lote['sucursal'] }}</td>
-                                            <td data-label="{{ __('Lote') }}"><a class="link" href="{{ route('inventario.lote', $lote['id']) }}">{{ \App\Domain\Inventario\Consultas\StockLotes::etiqueta($lote) }}</a></td>
+                                            <td class="apilada-titulo">{{ $lote['sucursal'] }}</td>
+                                            <td class="apilada-ancha" data-label="{{ __('Lote') }}"><a class="link" href="{{ route('inventario.lote', $lote['id']) }}">{{ \App\Domain\Inventario\Consultas\StockLotes::etiqueta($lote) }}</a></td>
                                             <td data-label="{{ __('Stock') }}"><b>{{ Decimal::formatear($lote['cantidad']) }}</b></td>
                                             <td data-label="{{ __('Estado') }}">@include('livewire.inventario.partials.estado-lote', ['lote' => $lote])</td>
                                         </tr>

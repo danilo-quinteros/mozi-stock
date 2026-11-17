@@ -10,6 +10,7 @@ use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
 use App\Domain\CuentasPagar\AbrirCuentaPagar;
 use App\Domain\Inventario\DatosLote;
 use App\Domain\Inventario\LibroStock;
+use App\Domain\Produccion\CostoPromedio;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Domain\Ventas\ValidadorPago;
 use App\Enums\TipoOperacionInventario;
@@ -44,6 +45,9 @@ use Illuminate\Validation\ValidationException;
  * Lotes y vencimientos (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 5.1 y § 6.5): cada línea de un producto con
  * vencimiento exige número de lote y vencimiento; el mismo producto puede ir en varias líneas, una por lote, y cada
  * línea de compra guarda su lote_id. Los productos sin vencimiento repetidos se agrupan en una línea.
+ *
+ * Producción (ESPECIFICACION_PRODUCCION.md § 4.2 y § 9): el ingreso de materia prima es esta misma compra, y cada
+ * compra recalcula el costo promedio ponderado de las materias primas compradas (CostoPromedio).
  */
 final class RegistrarCompra
 {
@@ -54,6 +58,7 @@ final class RegistrarCompra
         private readonly AbrirCuentaPagar $cuentas,
         private readonly ResolverSucursal $resolverSucursal,
         private readonly Auditor $auditor,
+        private readonly CostoPromedio $costos,
     ) {}
 
     /**
@@ -106,6 +111,8 @@ final class RegistrarCompra
                 $caja = $pago === null ? ['caja_id' => null, 'turno_id' => null, 'externo' => false]
                     : $this->cajas->resolver($actor, $sucursal->id, $pago['efectivo'], (bool) ($datos['externo'] ?? false), 'externo', isset($datos['turno_id']) ? (int) $datos['turno_id'] : null);
                 $nota = 'Compra · '.$proveedor->nombre.($referencia !== '' ? ' · '.$referencia : '');
+                // Producción § 9: fichas de materia prima bloqueadas antes que los saldos (orden ficha → saldos).
+                $materias = $this->costos->bloquear((int) $actor->empresa_id, array_column($lineas, 'producto_id'));
                 $operacion = $this->libro->aplicar($actor, [
                     'tipo' => TipoOperacionInventario::Compra,
                     'motivo' => null,
@@ -114,6 +121,9 @@ final class RegistrarCompra
                     'nota' => mb_substr($nota, 0, 250),
                     'clave' => $datos['clave'],
                 ], $cambios);
+                $costos = $this->costos->ingresar((int) $actor->empresa_id, $materias, array_map(fn (array $l) => [
+                    'producto_id' => $l['producto_id'], 'cantidad' => $l['cantidad'], 'importe' => $l['subtotal'],
+                ], $lineas));
                 $lotes = $this->lotesDe((int) $actor->empresa_id, $lineas);
 
                 $compra = new Compra;
@@ -169,7 +179,7 @@ final class RegistrarCompra
                     'total' => $total, 'condicion' => $condicion, 'pagado' => $pagado, 'metodo' => $pago['metodo']->value ?? null,
                     'externo' => $caja['externo'], 'turno_caja_id' => $caja['turno_id'], 'cuenta_pagar' => $cuenta?->codigo(),
                     'lineas' => count($lineas),
-                ]);
+                ] + ($costos === [] ? [] : ['costo_promedio' => $costos]));
 
                 return $compra;
             }, attempts: 3);

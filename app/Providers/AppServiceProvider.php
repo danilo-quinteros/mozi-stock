@@ -9,6 +9,7 @@ use App\Domain\AgenteMozi\Ia\GestorProveedores;
 use App\Domain\AgenteMozi\Ia\Orquestador;
 use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Enums\Capacidad;
+use App\Livewire\Hooks\ErroresValidacion;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -46,6 +47,9 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
 
+        // Aviso rojo de validación también para errores cuya clave no es una propiedad del componente (p. ej. `lineas`).
+        ErroresValidacion::registrar();
+
         // Exportaciones CSV (§ 6: límite en operaciones sensibles): recorren tablas enteras de la empresa,
         // así que se limitan por usuario. Las subidas de archivos ya pasan por el límite de Livewire (60/min).
         RateLimiter::for('exportaciones', fn (Request $request): Limit => Limit::perMinute(30)
@@ -62,6 +66,10 @@ class AppServiceProvider extends ServiceProvider
             return $capacidad !== null && $user->perteneceAEmpresa() && $user->empresa_id !== null
                 && app(CapacidadesEmpresa::class)->tiene($user->empresa_id, $capacidad);
         });
+
+        // Producción (ESPECIFICACION_PRODUCCION.md, PR16 y § 11): solo el administrador de una empresa con la capacidad.
+        Gate::define('usar-produccion', fn (User $user): bool => $user->esAdministrador()
+            && Gate::forUser($user)->allows('capacidad', Capacidad::Produccion));
 
         // Agente Mozi: usuarios de empresa mientras la bandera del servidor esté activa y, en SaaS, solo si
         // el plan de su empresa lo incluye. Cada herramienta vuelve a autorizar con su propio permiso

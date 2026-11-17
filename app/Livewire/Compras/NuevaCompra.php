@@ -9,12 +9,14 @@ use App\Domain\Inventario\LibroLotes;
 use App\Livewire\Concerns\CapturaProductos;
 use App\Livewire\Concerns\EligeCaja;
 use App\Models\Compra;
+use App\Models\Producto;
 use App\Models\Proveedor;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Support\Decimal;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -57,9 +59,17 @@ class NuevaCompra extends Component
     #[Locked]
     public string $clave = '';
 
+    /**
+     * «Ingreso de materia prima» (ESPECIFICACION_PRODUCCION.md § 4.2): la misma compra, con el buscador limitado a
+     * materias primas. Solo con Producción y para el administrador; si no, es una compra normal.
+     */
+    #[Locked]
+    public bool $soloMateriaPrima = false;
+
     public function mount(): void
     {
         $this->authorize('create', Compra::class);
+        $this->soloMateriaPrima = request()->boolean('materia_prima') && Gate::allows('usar-produccion');
         $this->clave = (string) Str::uuid();
         $primera = Auth::user()?->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
         $this->sucursal_id = $primera === null ? null : (string) $primera;
@@ -75,6 +85,14 @@ class NuevaCompra extends Component
     protected function nuevaLinea(int $productoId): array
     {
         return ['id' => $productoId, 'cantidad' => '1', 'costo' => '', 'uid' => 'l'.Str::lower(Str::random(10)), 'lote' => '', 'vencimiento' => ''];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function clasesCaptura(): array
+    {
+        return $this->soloMateriaPrima ? [Producto::CLASE_MATERIA_PRIMA] : [Producto::CLASE_VENTA, Producto::CLASE_MATERIA_PRIMA];
     }
 
     /**
@@ -204,10 +222,14 @@ class NuevaCompra extends Component
 
     public function render(): View
     {
-        $datos = $this->datosDeLineas(null);
+        $sucursalId = blank($this->sucursal_id) ? null : (int) $this->sucursal_id;
+        $datos = $this->datosDeLineas($sucursalId);
         $conLote = $this->lineas === [] ? [] : $this->productosConLote();
         $filas = [];
         $vencidos = [];
+        // Producción PR17: stock máximo de la materia prima. Solo avisa; el servidor no bloquea.
+        $sobreMaximo = [];
+        $comprado = [];
         $unidades = '0';
         $total = '0.00';
         $valido = true;
@@ -235,9 +257,30 @@ class NuevaCompra extends Component
                 ? null : CalculadoraCompra::subtotal($cantidad, $costo);
             $valido = $valido && $subtotal !== null;
             $unidades = $cantidad === null ? $unidades : Decimal::sumar($unidades, $cantidad);
+
+            if ($cantidad !== null && Decimal::comparar($cantidad, '0') > 0) {
+                $comprado[$producto->id] = Decimal::sumar($comprado[$producto->id] ?? '0', $cantidad);
+            }
+
             $total = $subtotal === null ? $total : Decimal::sumar($total, $subtotal, 2);
             $filas[] = compact('indice', 'clave', 'producto', 'cantidad', 'costo', 'subtotal', 'lote', 'vence', 'vencido')
                 + ['numeroLote' => trim($linea['lote'] ?? '')];
+        }
+
+        foreach ($comprado as $productoId => $cantidad) {
+            $producto = $datos['productos']->get($productoId);
+
+            if ($sucursalId === null || $producto?->stock_maximo === null) {
+                continue;
+            }
+
+            $despues = Decimal::sumar($datos['stock'][$productoId] ?? '0', $cantidad);
+
+            if (Decimal::comparar($despues, (string) $producto->stock_maximo) > 0) {
+                $sobreMaximo[] = __(':producto: quedará en :despues (máximo :maximo)', [
+                    'producto' => $producto->nombre, 'despues' => Decimal::formatear($despues), 'maximo' => Decimal::formatear((string) $producto->stock_maximo),
+                ]);
+            }
         }
 
         $mixto = Decimal::sumar(
@@ -251,6 +294,7 @@ class NuevaCompra extends Component
             'proveedores' => Proveedor::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
             'filas' => $filas,
             'vencidos' => $vencidos,
+            'sobreMaximo' => $sobreMaximo,
             'unidades' => $unidades,
             'total' => $total,
             'valido' => $valido,

@@ -8,9 +8,11 @@ use App\Domain\Inventario\ControlLotes;
 use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Enums\Capacidad;
 use App\Enums\EstadoEntrega;
+use App\Enums\EstadoOrdenProduccion;
 use App\Enums\Rubro;
 use App\Models\Empresa;
 use App\Models\EmpresaCapacidad;
+use App\Models\OrdenProduccion;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +36,9 @@ use Illuminate\Validation\ValidationException;
  * «Tallas y colores» (rubros § 5 y tallas § 3.1): encenderla crea la lista sugerida de tallas y colores si la empresa
  * todavía no tiene ninguna. Apagarla siempre se permite y no toca ningún dato: cada variante sigue siendo un producto
  * real que se vende como suelto; los modelos se ocultan y, al reactivar, vuelven a agruparse.
+ *
+ * «Producción» (ESPECIFICACION_PRODUCCION.md § 8) necesita «Lotes y vencimientos»: encenderla la enciende, y mientras
+ * esté activa Lotes no se puede apagar (conRequeridas).
  */
 final class CambiarFuncionesEmpresa
 {
@@ -82,6 +87,7 @@ final class CambiarFuncionesEmpresa
                 $actuales = $this->normalizar(EmpresaCapacidad::withoutGlobalScopes()
                     ->where('empresa_id', $bloqueada->id)->where('activa', true)
                     ->pluck('capacidad')->all());
+                $deseadas = $this->conRequeridas($deseadas, $actuales);
                 $minutosAntes = $bloqueada->minutos_alerta_cocina;
                 $minutos = $minutosAlertaCocina ?? $minutosAntes;
 
@@ -162,6 +168,12 @@ final class CambiarFuncionesEmpresa
      */
     private function verificarApagado(Empresa $empresa, Capacidad $capacidad): void
     {
+        if ($capacidad === Capacidad::Produccion) {
+            $this->verificarOrdenesAbiertas($empresa);
+
+            return;
+        }
+
         $estados = EstadoEntrega::pendientes($capacidad);
 
         if ($estados === []) {
@@ -185,6 +197,30 @@ final class CambiarFuncionesEmpresa
             ? trans_choice('{1} No puedes desactivar «Pedidos en cocina»: la venta :ventas todavía está en cocina. Entrégala, o cancélala con una devolución, y vuelve a intentarlo.|[2,*] No puedes desactivar «Pedidos en cocina»: :total ventas todavía están en cocina (:ventas:mas). Entrégalas, o cancélalas con una devolución, y vuelve a intentarlo.', $total, $reemplazos)
             : trans_choice('{1} No puedes desactivar «Despachos»: la venta :ventas todavía no se entregó. Despáchala y entrégala, o cancélala con una devolución, y vuelve a intentarlo.|[2,*] No puedes desactivar «Despachos»: :total ventas todavía no se entregaron (:ventas:mas). Despáchalas y entrégalas, o cancélalas con una devolución, y vuelve a intentarlo.', $total, $reemplazos),
         ]);
+    }
+
+    /**
+     * Producción § 8: no se apaga con órdenes Emitidas o Aprobadas; se listan para finalizarlas o anularlas. Índice
+     * (empresa_id, estado, fecha_programada).
+     */
+    private function verificarOrdenesAbiertas(Empresa $empresa): void
+    {
+        $abiertas = DB::table('ordenes_produccion')->where('empresa_id', $empresa->id)
+            ->whereIn('estado', array_map(fn (EstadoOrdenProduccion $e): string => $e->value, EstadoOrdenProduccion::abiertas()));
+        $total = (clone $abiertas)->count();
+
+        if ($total === 0) {
+            return;
+        }
+
+        $codigos = $abiertas->orderBy('numero')->limit(self::MUESTRA_PENDIENTES)->pluck('numero')
+            ->map(fn ($numero): string => OrdenProduccion::formatearCodigo((int) $numero))->implode(', ');
+
+        throw ValidationException::withMessages(['capacidades' => trans_choice(
+            '{1} No puedes desactivar «Producción»: la orden :ordenes está abierta. Finalízala o anúlala y vuelve a intentarlo.|[2,*] No puedes desactivar «Producción»: hay :total órdenes abiertas (:ordenes:mas). Finalízalas o anúlalas y vuelve a intentarlo.',
+            $total,
+            ['total' => $total, 'ordenes' => $codigos, 'mas' => $total > self::MUESTRA_PENDIENTES ? __(' y :n más', ['n' => $total - self::MUESTRA_PENDIENTES]) : ''],
+        )]);
     }
 
     /**
@@ -259,6 +295,36 @@ final class CambiarFuncionesEmpresa
                 }
             }
         }
+    }
+
+    /**
+     * Capacidades que otra necesita (producción § 8): si la requerida está apagada se enciende junto con la que la pide;
+     * si está encendida y la petición la apaga, se rechaza mientras la que la necesita siga activa. Se evalúa contra el
+     * estado bloqueado de la empresa, así que una petición manipulada no puede saltarse la regla.
+     *
+     * @param  list<Capacidad>  $deseadas
+     * @param  list<Capacidad>  $actuales
+     * @return list<Capacidad>
+     */
+    private function conRequeridas(array $deseadas, array $actuales): array
+    {
+        foreach ($deseadas as $capacidad) {
+            foreach ($capacidad->requeridas() as $requerida) {
+                if (in_array($requerida, $deseadas, true)) {
+                    continue;
+                }
+
+                if (in_array($requerida, $actuales, true)) {
+                    throw ValidationException::withMessages(['capacidades' => __('No puedes desactivar «:requerida» mientras «:capacidad» esté activa: la necesita. Desmarca primero «:capacidad».', [
+                        'requerida' => $requerida->etiqueta(), 'capacidad' => $capacidad->etiqueta(),
+                    ])]);
+                }
+
+                $deseadas[] = $requerida;
+            }
+        }
+
+        return $this->normalizar($deseadas);
     }
 
     /**

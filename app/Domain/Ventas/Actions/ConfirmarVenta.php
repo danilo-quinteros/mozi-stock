@@ -150,10 +150,16 @@ final class ConfirmarVenta
             ->where('pedido_items.empresa_id', $pedido->empresa_id)
             ->where('pedido_items.pedido_id', $pedido->id)
             ->orderBy('pedido_items.orden')
-            ->get(['pedido_items.*', 'productos.nombre', 'productos.marca', 'productos.contenido', 'productos.sku', 'productos.activo', 'unidades_medida.abreviatura']);
+            ->get(['pedido_items.*', 'productos.nombre', 'productos.marca', 'productos.contenido', 'productos.sku', 'productos.activo', 'productos.clase', 'unidades_medida.abreviatura']);
 
         if ($items->isEmpty()) {
             throw ValidationException::withMessages(['lineas' => __('El pedido no tiene productos.')]);
+        }
+
+        // Producción PR1: una materia prima nunca se vende (GuardarPedido ya la rechaza; esto cubre pedidos anteriores).
+        if (($materia = $items->firstWhere('clase', Producto::CLASE_MATERIA_PRIMA)) !== null) {
+            $nombreMateria = Producto::formatoNombreCompleto($materia->nombre, $materia->contenido, $materia->abreviatura);
+            throw ValidationException::withMessages(['lineas' => __(':producto es materia prima y no se vende; quítalo del pedido.', ['producto' => $nombreMateria])]);
         }
 
         if (($inactivo = $items->firstWhere('activo', false)) !== null) {

@@ -43,6 +43,12 @@ use Illuminate\Support\Facades\DB;
  * @property int|null $color_id
  * @property bool $precio_propio false: usa el precio del modelo; true: el cambio de precio del modelo no la toca
  * @property-read string|null $clave_variante columna generada «modelo-talla-color», única por empresa
+ * @property string $clase 'venta' o 'materia_prima' (ESPECIFICACION_PRODUCCION.md § 4): la materia prima nunca se vende
+ * @property string|null $stock_maximo aviso de sobre stock y sugerencia de compra (materias primas)
+ * @property string|null $observacion
+ * @property string $costo_promedio costo promedio ponderado (producción § 9), 6 decimales
+ * @property int|null $granel_id presentación: granel del que sale al envasarse (producción § 7)
+ * @property string|null $granel_por_unidad presentación: granel por unidad, en la unidad del granel
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read string $nombre_base
@@ -65,6 +71,12 @@ class Producto extends Model
 
     protected $table = 'productos';
 
+    /** Producto que se vende (todos los productos anteriores a producción). */
+    public const CLASE_VENTA = 'venta';
+
+    /** Materia prima, insumo o envase: solo se usa en producción y nunca se vende (producción PR1). */
+    public const CLASE_MATERIA_PRIMA = 'materia_prima';
+
     /**
      * @var array<int, string>
      */
@@ -80,6 +92,8 @@ class Producto extends Model
         'controla_stock' => true,
         'controla_vencimiento' => false,
         'precio_propio' => false,
+        'clase' => self::CLASE_VENTA,
+        'costo_promedio' => '0.000000',
     ];
 
     protected function casts(): array
@@ -89,6 +103,9 @@ class Producto extends Model
             'precio_minorista' => 'decimal:2',
             'precio_mayorista' => 'decimal:2',
             'stock_minimo' => 'decimal:3',
+            'stock_maximo' => 'decimal:3',
+            'costo_promedio' => 'decimal:6',
+            'granel_por_unidad' => 'decimal:3',
             'contenido' => 'decimal:3',
             'tipo_venta' => 'string',
             'activo' => 'boolean',
@@ -289,6 +306,16 @@ class Producto extends Model
     }
 
     /**
+     * Versión vigente de la receta del producto fabricado (producción § 5); null si no tiene.
+     *
+     * @return HasOne<Receta, $this>
+     */
+    public function recetaVigente(): HasOne
+    {
+        return $this->hasOne(Receta::class)->where('vigente', true);
+    }
+
+    /**
      * @return BelongsTo<Modelo, $this>
      */
     public function modelo(): BelongsTo
@@ -318,6 +345,26 @@ class Producto extends Model
     public function stock(): HasMany
     {
         return $this->hasMany(StockNivel::class);
+    }
+
+    /**
+     * Presentación: granel del que sale (ESPECIFICACION_PRODUCCION.md § 7.1).
+     *
+     * @return BelongsTo<Producto, $this>
+     */
+    public function granel(): BelongsTo
+    {
+        return $this->belongsTo(Producto::class, 'granel_id');
+    }
+
+    /**
+     * Presentación: envases por unidad, en su orden.
+     *
+     * @return HasMany<PresentacionEnvase, $this>
+     */
+    public function envases(): HasMany
+    {
+        return $this->hasMany(PresentacionEnvase::class, 'presentacion_id')->orderBy('orden');
     }
 
     /**

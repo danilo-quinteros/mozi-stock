@@ -27,11 +27,12 @@ final class ListadoProductos
     /**
      * @param  string|null  $tipo  'modelos' (solo variantes), 'sueltos' (sin modelo) o null (todos)
      * @param  string|null  $marca  solo los productos de esa marca (null o vacío = todas)
+     * @param  string  $clase  Producto::CLASE_VENTA (catálogo, POS, exportación) o CLASE_MATERIA_PRIMA (producción § 4)
      * @return Builder<Producto>
      */
-    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null, ?string $filtroStock = null, ?string $tipo = null, ?string $marca = null): Builder
+    public static function consulta(int $empresaId, ?int $sucursalId, string $buscar = '', ?int $categoriaId = null, ?string $filtroStock = null, ?string $tipo = null, ?string $marca = null, string $clase = Producto::CLASE_VENTA): Builder
     {
-        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca)
+        return self::filtrada($empresaId, $sucursalId, $buscar, $categoriaId, $filtroStock, $tipo, $marca, $clase)
             ->select('productos.*')
             ->selectRaw('COALESCE(sn.cantidad, 0) as stock')
             ->selectRaw('COALESCE(sn.stock_minimo, productos.stock_minimo) as minimo')
@@ -105,17 +106,19 @@ final class ListadoProductos
     }
 
     /**
-     * Productos de la empresa con el saldo de la sucursal unido y los filtros aplicados, sin columnas ni orden.
+     * Productos de la empresa con el saldo de la sucursal unido y los filtros aplicados, sin columnas ni orden. Solo de
+     * una clase: las materias primas nunca aparecen en el catálogo de venta ni en el POS (producción PR1).
      *
      * @return Builder<Producto>
      */
-    private static function filtrada(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, ?string $marca = null): Builder
+    private static function filtrada(int $empresaId, ?int $sucursalId, string $buscar, ?int $categoriaId, ?string $filtroStock, ?string $tipo, ?string $marca = null, string $clase = Producto::CLASE_VENTA): Builder
     {
         $termino = trim($buscar);
         $marca = Producto::normalizarMarca($marca);
 
         return Producto::query()
             ->where('productos.empresa_id', $empresaId)
+            ->where('productos.clase', $clase)
             ->leftJoin('stock_niveles as sn', function (JoinClause $join) use ($sucursalId): void {
                 $join->on('sn.producto_id', '=', 'productos.id')
                     ->on('sn.empresa_id', '=', 'productos.empresa_id')
@@ -166,9 +169,10 @@ final class ListadoProductos
     }
 
     /**
-     * Pares producto-sucursal activos en o bajo su mínimo (solo productos con mínimo > 0).
+     * Pares producto-sucursal activos en o bajo su mínimo (solo productos con mínimo > 0) de una clase: el panel y el
+     * catálogo cuentan productos de venta; las materias primas tienen su propio aviso en Producción.
      */
-    public static function contarAlertas(int $empresaId, ?int $sucursalId = null): int
+    public static function contarAlertas(int $empresaId, ?int $sucursalId = null, string $clase = Producto::CLASE_VENTA): int
     {
         return (int) DB::table('productos as p')
             ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.empresa_id', '=', 'p.empresa_id')->where('s.activa', true))
@@ -177,6 +181,7 @@ final class ListadoProductos
             ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'p.empresa_id')
                 ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
             ->where('p.empresa_id', $empresaId)
+            ->where('p.clase', $clase)
             ->where('p.activo', true)
             ->where('p.controla_stock', true)
             ->when($sucursalId !== null, fn ($q) => $q->where('s.id', $sucursalId))

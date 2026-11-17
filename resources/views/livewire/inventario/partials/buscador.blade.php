@@ -1,4 +1,5 @@
-{{-- Buscador/escáner compartido (ajustes, traspasos y pedidos). Variables: $sugerencias.
+{{-- Buscador/escáner compartido (ajustes, traspasos, pedidos y recetas). Variables: $sugerencias y, opcionales,
+     $placeholder, $vacioTitulo, $vacioAyuda y $botonAgregar (textos para otra pantalla, como las recetas).
      El texto lo controla Alpine: Enter lo vacía al instante para el siguiente escaneo. Las
      lecturas se envían en cola, una tras otra: Livewire agrupa llamadas idénticas simultáneas
      y un lector rápido perdería unidades. Si nada se agregó, el texto se restaura para elegir
@@ -66,9 +67,9 @@
             @if ($sinControl->isNotEmpty())
                 <div class="suggestion suggestion-vacia"><span class="suggestion-product"><b>{{ __(':producto no controla stock', ['producto' => $sinControl->join(', ')]) }}</b><small>{{ __('Para comprarlo, ajustarlo o traspasarlo, marca «Controla stock» en Productos.') }}</small></span></div>
             @else
-                <div class="suggestion suggestion-vacia"><span class="suggestion-product"><b>{{ __('Producto no encontrado') }}</b><small>{{ __('Revisa el nombre o el código, o créalo en Productos.') }}</small></span></div>
+                <div class="suggestion suggestion-vacia"><span class="suggestion-product"><b>{{ __($vacioTitulo ?? 'Producto no encontrado') }}</b><small>{{ __($vacioAyuda ?? 'Revisa el nombre o el código, o créalo en Productos.') }}</small></span></div>
             @endif
         </div>
     @endif
-    <button class="btn primary" type="button" @click="agregar(); $refs.buscador.focus()"><x-icon name="plus" /> {{ __('Agregar producto') }}</button>
+    <button class="btn primary" type="button" @click="agregar(); $refs.buscador.focus()"><x-icon name="plus" /> {{ __($botonAgregar ?? 'Agregar producto') }}</button>
 </div>

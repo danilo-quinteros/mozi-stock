@@ -9,6 +9,8 @@ use App\Http\Controllers\ExportarDespachosController;
 use App\Http\Controllers\ExportarMovimientosController;
 use App\Http\Controllers\ExportarPedidosController;
 use App\Http\Controllers\ExportarProductosController;
+use App\Http\Controllers\ExportarReporteProduccionController;
+use App\Http\Controllers\ExportarSugerenciaCompraController;
 use App\Http\Controllers\ExportarUsuariosController;
 use App\Http\Controllers\ExportarVencimientosController;
 use App\Http\Controllers\FacturaSiatController;
@@ -68,6 +70,19 @@ use App\Livewire\Inventario\TrazabilidadLote;
 use App\Livewire\Inventario\Vencimientos;
 use App\Livewire\Pedidos\Editor as PedidoEditor;
 use App\Livewire\Pedidos\Lista as PedidoLista;
+use App\Livewire\Produccion\EnvasadoDetalle;
+use App\Livewire\Produccion\EnvasadoFormulario;
+use App\Livewire\Produccion\Envasados;
+use App\Livewire\Produccion\MateriaPrimaFormulario;
+use App\Livewire\Produccion\MateriasPrimas;
+use App\Livewire\Produccion\OrdenDetalle;
+use App\Livewire\Produccion\Ordenes;
+use App\Livewire\Produccion\OrdenFinalizar;
+use App\Livewire\Produccion\OrdenFormulario;
+use App\Livewire\Produccion\RecetaDetalle;
+use App\Livewire\Produccion\RecetaFormulario;
+use App\Livewire\Produccion\Recetas;
+use App\Livewire\Produccion\Reportes as ReportesProduccion;
 use App\Livewire\Reportes\Panel as ReportesPanel;
 use App\Livewire\Ventas\Detalle as VentaDetalle;
 use App\Livewire\Ventas\NuevaDevolucion;
@@ -127,6 +142,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('inventario/vencimientos', Vencimientos::class)->middleware('capacidad:lotes_vencimientos')->name('inventario.vencimientos');
         Route::get('inventario/vencimientos/exportar', ExportarVencimientosController::class)->middleware(['capacidad:lotes_vencimientos', 'throttle:exportaciones'])->name('inventario.vencimientos.exportar');
         Route::livewire('inventario/lotes/{lote}', TrazabilidadLote::class)->whereNumber('lote')->middleware('capacidad:lotes_vencimientos')->name('inventario.lote');
+
+        // Producción (ESPECIFICACION_PRODUCCION.md): sin la capacidad responden 404; cada pantalla exige además el
+        // gate usar-produccion (solo el administrador).
+        Route::middleware('capacidad:produccion')->prefix('produccion')->name('produccion.')->group(function (): void {
+            Route::livewire('materias-primas', MateriasPrimas::class)->name('materias');
+            Route::livewire('materias-primas/nueva', MateriaPrimaFormulario::class)->name('materias.crear');
+            Route::livewire('materias-primas/{producto}/editar', MateriaPrimaFormulario::class)->whereNumber('producto')->name('materias.editar');
+            Route::get('materias-primas/sugerencia/exportar', ExportarSugerenciaCompraController::class)->middleware('throttle:exportaciones')->name('sugerencia.exportar');
+            Route::livewire('recetas', Recetas::class)->name('recetas');
+            Route::livewire('recetas/nueva', RecetaFormulario::class)->name('recetas.crear');
+            Route::livewire('recetas/{producto}', RecetaDetalle::class)->whereNumber('producto')->name('recetas.ver');
+            Route::livewire('recetas/{producto}/editar', RecetaFormulario::class)->whereNumber('producto')->name('recetas.editar');
+            Route::livewire('ordenes', Ordenes::class)->name('ordenes');
+            Route::livewire('ordenes/nueva', OrdenFormulario::class)->name('ordenes.crear');
+            Route::livewire('ordenes/{orden}', OrdenDetalle::class)->whereNumber('orden')->name('ordenes.ver');
+            Route::livewire('ordenes/{orden}/editar', OrdenFormulario::class)->whereNumber('orden')->name('ordenes.editar');
+            Route::livewire('ordenes/{orden}/finalizar', OrdenFinalizar::class)->whereNumber('orden')->name('ordenes.finalizar');
+            Route::livewire('envasados', Envasados::class)->name('envasados');
+            Route::livewire('envasados/nuevo', EnvasadoFormulario::class)->name('envasados.crear');
+            Route::livewire('envasados/{envasado}', EnvasadoDetalle::class)->whereNumber('envasado')->name('envasados.ver');
+            Route::livewire('reportes', ReportesProduccion::class)->name('reportes');
+            Route::get('reportes/exportar', ExportarReporteProduccionController::class)->middleware('throttle:exportaciones')->name('reportes.exportar');
+        });
 
         // Punto de venta: guarda y confirma en un paso con las mismas acciones de Pedidos y ventas.
         Route::livewire('pos', Pos::class)->name('pos');

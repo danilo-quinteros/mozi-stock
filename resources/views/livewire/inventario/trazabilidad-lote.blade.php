@@ -1,6 +1,9 @@
 @use('App\Support\Decimal')
 @use('App\Enums\TipoOperacionInventario')
 @use('App\Domain\Inventario\Consultas\StockLotes')
+@php
+    $verOrdenes = \Illuminate\Support\Facades\Gate::allows('usar-produccion');
+@endphp
 <div>
     <div class="page-head">
         <div>
@@ -17,16 +20,31 @@
         <article class="card stat">
             <span class="stat-label">{{ __('Estado') }}</span>
             <div class="stat-value" style="font-size:20px">@include('livewire.inventario.partials.estado-lote', ['lote' => $datos])</div>
-            <div class="stat-foot">{{ $datos['regularizacion'] ? __('Stock anterior al control por lote') : __('Vence el :fecha', ['fecha' => \App\Domain\Inventario\DatosLote::formatear($datos['vencimiento'])]) }}</div>
+            <div class="stat-foot">{{ match (true) {
+                $datos['regularizacion'] && $datos['sin_stock'] => __('Ya no queda stock sin fecha.'),
+                $datos['regularizacion'] => __('Stock anterior al control por lote'),
+                default => __('Vence el :fecha', ['fecha' => \App\Domain\Inventario\DatosLote::formatear($datos['vencimiento'])]),
+            } }}</div>
         </article>
         <article class="card stat" style="grid-column: span 2">
             <span class="stat-label">{{ __('Stock actual por sucursal') }}</span>
-            <div class="stat-foot" data-test="lote-stock">
+            <div class="stat-foot lote-stock" data-test="lote-stock">
                 @forelse ($stock as $fila)
-                    <span class="badge soft" style="margin:4px 6px 0 0">{{ $fila->sucursal }} · {{ Decimal::formatear((string) $fila->cantidad) }}</span>
+                    @if ($puedeRegularizar)
+                        {{-- Lote «Sin lote (regularización)»: se regulariza por sucursal, como en Vencimientos → Sin fecha. --}}
+                        <span class="lote-stock-fila">
+                            <span class="badge soft">{{ $fila->sucursal }} · {{ Decimal::formatear((string) $fila->cantidad) }}</span>
+                            <button class="btn ghost sm" type="button" wire:click="regularizar({{ (int) $fila->sucursal_id }}, {{ (int) $lote->producto_id }})" data-test="regularizar">{{ __('Regularizar') }}</button>
+                        </span>
+                    @else
+                        <span class="badge soft" style="margin:4px 6px 0 0">{{ $fila->sucursal }} · {{ Decimal::formatear((string) $fila->cantidad) }}</span>
+                    @endif
                 @empty
                     {{ __('Sin stock en ninguna sucursal.') }}
                 @endforelse
+                @if ($puedeRegularizar && $stock !== [])
+                    <small class="lote-stock-ayuda">{{ __('Este stock no tiene N.º de lote ni vencimiento. Regulariza para indicar sus lotes reales; el total no cambia.') }}</small>
+                @endif
             </div>
         </article>
     </div>
@@ -45,6 +63,8 @@
                                 $movimiento->venta_id !== null => route('ventas.ver', $movimiento->venta_id),
                                 $movimiento->devolucion_venta_id !== null => route('ventas.ver', $movimiento->devolucion_venta_id),
                                 $movimiento->compra_id !== null => route('compras.ver', $movimiento->compra_id),
+                                $movimiento->orden_id !== null && $verOrdenes => route('produccion.ordenes.ver', $movimiento->orden_id),
+                                $movimiento->envasado_id !== null && $verOrdenes => route('produccion.envasados.ver', $movimiento->envasado_id),
                                 default => null,
                             };
                             $positivo = Decimal::comparar((string) $movimiento->cantidad, '0') > 0;
@@ -55,7 +75,12 @@
                             <td data-label="{{ __('Documento') }}"><span class="badge info">{{ $tipo->etiqueta() }}</span>
                                 <small style="display:block;margin-top:5px">@if ($enlace)<a class="link" href="{{ $enlace }}">{{ $codigo }}</a>@else{{ $codigo }}@endif{{ $motivo ? ' · '.$motivo : '' }}</small>
                                 @if ($movimiento->nota && $enlace === null)<small style="display:block;color:var(--faint);margin-top:3px">{{ $movimiento->nota }}</small>@endif</td>
-                            <td data-label="{{ __('Cliente o proveedor') }}">{{ $movimiento->cliente ?? $movimiento->proveedor ?? ($tipo === TipoOperacionInventario::Traspaso && $movimiento->destino ? __('Traspaso a :destino', ['destino' => $movimiento->destino]) : '—') }}</td>
+                            <td data-label="{{ __('Cliente o proveedor') }}">{{ $movimiento->cliente ?? $movimiento->proveedor ?? match (true) {
+                                $tipo === TipoOperacionInventario::Traspaso && $movimiento->destino !== null => __('Traspaso a :destino', ['destino' => $movimiento->destino]),
+                                $movimiento->orden_id !== null => __('Orden :codigo', ['codigo' => \App\Models\OrdenProduccion::formatearCodigo((int) $movimiento->orden_numero)]),
+                                $movimiento->envasado_id !== null => __('Envasado :codigo', ['codigo' => \App\Models\Envasado::formatearCodigo((int) $movimiento->envasado_numero)]),
+                                default => '—',
+                            } }}</td>
                             <td data-label="{{ __('Sucursal') }}">{{ $movimiento->sucursal }}</td>
                             <td data-label="{{ __('Cantidad') }}" @class(['success-text' => $positivo, 'danger-text' => ! $positivo])>{{ $positivo ? '+' : '−' }}{{ Decimal::formatear(ltrim((string) $movimiento->cantidad, '-')) }}</td>
                             <td data-label="{{ __('Saldo') }}">{{ Decimal::formatear((string) $movimiento->saldo_posterior) }}</td>
@@ -77,4 +102,7 @@
             </div>
         @endif
     </section>
+
+    @include('livewire.inventario.partials.regularizar-lote')
+    <x-aviso :mensaje="$aviso" :numero="$avisoNumero" />
 </div>

@@ -4,9 +4,15 @@
 <div>
     <div class="page-head">
         <div>
-            <div class="eyebrow">{{ __('Abastecimiento') }}</div>
-            <h1>{{ __('Nueva compra') }}<span class="accent-text">.</span></h1>
-            <p class="lead">{{ __('Selecciona el proveedor, añade productos y confirma la compra.') }}</p>
+            @if ($soloMateriaPrima)
+                <div class="eyebrow">{{ __('Producción') }}</div>
+                <h1>{{ __('Ingreso de materia prima') }}<span class="accent-text">.</span></h1>
+                <p class="lead">{{ __('Es una compra: elige el proveedor, añade las materias primas con su costo, lote y vencimiento, y confírmala.') }}</p>
+            @else
+                <div class="eyebrow">{{ __('Abastecimiento') }}</div>
+                <h1>{{ __('Nueva compra') }}<span class="accent-text">.</span></h1>
+                <p class="lead">{{ __('Selecciona el proveedor, añade productos y confirma la compra.') }}</p>
+            @endif
         </div>
     </div>
 
@@ -121,6 +127,9 @@
             </div>
             @if ($vencidos !== [])
                 <div class="notice" role="alert" data-test="lotes-vencidos"><x-icon name="info" /><div><b>{{ __('Lotes ya vencidos') }}</b><p>{{ __('Se ingresarán al stock, pero quedarán bloqueados para la venta desde el primer momento:') }} {{ implode('; ', $vencidos) }}.</p></div></div>
+            @endif
+            @if ($sobreMaximo !== [])
+                <div class="notice" role="alert" data-test="sobre-maximo"><x-icon name="info" /><div><b>{{ __('Sobre el stock máximo') }}</b><p>{{ __('La compra se puede confirmar igual:') }} {{ implode('; ', $sobreMaximo) }}.</p></div></div>
             @endif
             @unless ($valido)
                 <div class="notice" role="alert"><x-icon name="info" /><div><b>{{ __('Revisa la tabla') }}</b><p>{{ __('Hay productos con cantidad o costo inválido; el servidor rechazará la compra.') }}</p></div></div>

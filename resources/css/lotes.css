@@ -24,6 +24,12 @@
   .lote-regularizar .lote-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Trazabilidad del lote «Sin lote (regularización)»: cada sucursal con su stock y su botón Regularizar. */
+.lote-stock { flex-wrap: wrap; row-gap: 8px; }
+.lote-stock-fila { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; }
+.lote-stock-fila .badge { white-space: nowrap; }
+.lote-stock-ayuda { flex-basis: 100%; margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--muted); }
+
 /* El rótulo sr-only (absoluto) de la columna de acción queda dentro del desplazamiento de la tabla: sin esto,
    a 375 px ensancha la página. */
 .lotes-tabla { position: relative; }

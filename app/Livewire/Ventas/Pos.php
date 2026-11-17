@@ -782,7 +782,7 @@ class Pos extends Component
             'resumenModelos' => $resumenModelos,
             'totalProductos' => $total,
             'categorias' => Categoria::query()->where('activa', true)
-                ->whereIn('id', Producto::query()->where('activo', true)->whereNotNull('categoria_id')->select('categoria_id'))
+                ->whereIn('id', Producto::query()->where('activo', true)->where('clase', Producto::CLASE_VENTA)->whereNotNull('categoria_id')->select('categoria_id'))
                 ->orderBy('nombre')->get(['id', 'nombre']),
             'filas' => $resumen['filas'],
             'calculo' => $resumen['calculo'],

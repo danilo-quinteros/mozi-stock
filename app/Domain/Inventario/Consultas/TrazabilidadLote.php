@@ -8,7 +8,7 @@ use stdClass;
 
 /**
  * Trazabilidad de un lote (ESPECIFICACION_LOTES_Y_VENCIMIENTOS.md § 4): cada movimiento del libro por lote con su
- * documento (compra y proveedor, venta y cliente, devolución, traspaso, ajuste o cambio de control) para responder
+ * documento (compra y proveedor, venta y cliente, devolución, orden de producción, traspaso, ajuste o cambio de control) para responder
  * «¿a quién le vendí el lote X?». Una consulta con LEFT JOIN por tipo de documento, filtrada por empresa en cada tabla;
  * usa el índice movimientos_stock_lotes (empresa_id, lote_id, created_at).
  */
@@ -27,6 +27,11 @@ final class TrazabilidadLote
             ->leftJoin('devoluciones as dv', fn ($j) => $j->on('dv.operacion_inventario_id', '=', 'o.id')->where('dv.empresa_id', $empresaId))
             ->leftJoin('ventas as vd', fn ($j) => $j->on('vd.id', '=', 'dv.venta_id')->where('vd.empresa_id', $empresaId))
             ->leftJoin('clientes as cl', fn ($j) => $j->on('cl.id', '=', DB::raw('COALESCE(v.cliente_id, vd.cliente_id)'))->where('cl.empresa_id', $empresaId))
+            // Producción: la orden de cada operación de consumo, cierre o anulación (índices únicos por operación).
+            ->leftJoin('ordenes_produccion as op', fn ($j) => $j->where('op.empresa_id', $empresaId)->where(fn ($w) => $w
+                ->whereColumn('op.operacion_consumo_id', 'o.id')->orWhereColumn('op.operacion_cierre_id', 'o.id')->orWhereColumn('op.operacion_anulacion_id', 'o.id')))
+            // Envasado: el de la operación ENV (índice único empresa_id, operacion_id).
+            ->leftJoin('envasados as en', fn ($j) => $j->on('en.operacion_id', '=', 'o.id')->where('en.empresa_id', $empresaId))
             ->where('m.empresa_id', $empresaId)
             ->where('o.empresa_id', $empresaId)
             ->where('s.empresa_id', $empresaId)
@@ -37,13 +42,14 @@ final class TrazabilidadLote
                 'm.id', 'm.created_at', 'm.cantidad', 'm.saldo_posterior', 's.nombre as sucursal',
                 'o.serie', 'o.numero', 'o.tipo', 'o.motivo', 'o.nota', 'd.nombre as destino', 'u.name as usuario',
                 'v.id as venta_id', 'c.id as compra_id', 'pr.nombre as proveedor', 'dv.venta_id as devolucion_venta_id', 'cl.nombre as cliente',
+                'op.id as orden_id', 'op.numero as orden_numero', 'en.id as envasado_id', 'en.numero as envasado_numero',
             ]);
     }
 
     /**
      * Stock actual del lote por sucursal (solo las que tienen).
      *
-     * @return list<stdClass> filas con sucursal y cantidad
+     * @return list<stdClass> filas con sucursal_id, sucursal y cantidad
      */
     public static function stock(int $empresaId, int $loteId): array
     {
@@ -54,7 +60,7 @@ final class TrazabilidadLote
             ->where('sl.lote_id', $loteId)
             ->where('sl.cantidad', '>', 0)
             ->orderBy('s.nombre')
-            ->get(['s.nombre as sucursal', 'sl.cantidad'])
+            ->get(['s.id as sucursal_id', 's.nombre as sucursal', 'sl.cantidad'])
             ->all());
     }
 }

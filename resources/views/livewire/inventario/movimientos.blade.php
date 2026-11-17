@@ -40,6 +40,8 @@
             <select class="select" wire:model.live="tipo" aria-label="{{ __('Filtrar tipo') }}">
                 <option value="">{{ __('Todos') }}</option>
                 @foreach (TipoOperacionInventario::cases() as $opcion)
+                    {{-- Producción solo para las empresas con la capacidad (ESPECIFICACION_PRODUCCION.md § 8). --}}
+                    @continue(in_array($opcion, [TipoOperacionInventario::Produccion, TipoOperacionInventario::Envasado], true) && ! \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::Produccion))
                     <option value="{{ $opcion->value }}">{{ $opcion->etiqueta() }}</option>
                 @endforeach
             </select>

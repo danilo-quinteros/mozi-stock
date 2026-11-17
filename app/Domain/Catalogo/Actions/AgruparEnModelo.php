@@ -171,7 +171,7 @@ final class AgruparEnModelo
             throw ValidationException::withMessages(['productos' => __('Agrupa hasta :max productos por vez.', ['max' => self::MAXIMO])]);
         }
 
-        $productos = Producto::query()->where('empresa_id', $empresaId)->whereIn('id', $ids)->orderBy('id')
+        $productos = Producto::query()->where('empresa_id', $empresaId)->where('clase', Producto::CLASE_VENTA)->whereIn('id', $ids)->orderBy('id')
             ->when($bloquear, fn ($q) => $q->lockForUpdate())
             ->withExists('vinculoExterno')
             ->get()->keyBy('id');

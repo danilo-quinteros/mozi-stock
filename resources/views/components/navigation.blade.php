@@ -14,8 +14,11 @@
         'Ventas y finanzas' => ['cart', 'Ventas'],
         'Inventario' => ['box', 'Inventario'],
         'Gestión' => ['users', 'Gestión'],
+        'Producción' => ['scale', 'Producción'],
         'Reportes' => ['chart', 'Reportes'],
     ];
+    // Producción (ESPECIFICACION_PRODUCCION.md § 3): solo el administrador de una empresa con la capacidad.
+    $produce = $usuario->perteneceAEmpresa() && \Illuminate\Support\Facades\Gate::allows('usar-produccion');
     $grupos = [
         'Ventas y finanzas' => [
             $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*|pos', 'cart', corto: 'Pedidos'),
@@ -38,6 +41,13 @@
             $enlace('Proveedores', 'proveedores.index', 'proveedores.*', 'building', $administra),
             $enlace('Sucursales y cajas', 'sucursales.index', 'sucursales.*', 'store', $administra, 'Sucursales'),
             $enlace('Usuarios', 'usuarios.index', 'usuarios.*', 'shield', $administra),
+        ],
+        'Producción' => [
+            $enlace('Órdenes', 'produccion.ordenes', 'produccion.ordenes|produccion.ordenes.*', 'receipt', $produce),
+            $enlace('Envasado', 'produccion.envasados', 'produccion.envasados|produccion.envasados.*', 'swap', $produce),
+            $enlace('Recetas', 'produccion.recetas', 'produccion.recetas|produccion.recetas.*', 'table', $produce),
+            $enlace('Materias primas', 'produccion.materias', 'produccion.materias|produccion.materias.*', 'box', $produce, 'Materias'),
+            $enlace('Reportes de producción', 'produccion.reportes', 'produccion.reportes|produccion.reportes.*', 'chart', $produce, 'Reportes'),
         ],
         'Reportes' => [
             $enlace('Caja y arqueo', 'caja', 'caja|caja.*', 'cash', $administra, 'Caja'),
