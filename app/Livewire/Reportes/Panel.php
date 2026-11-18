@@ -34,15 +34,15 @@ class Panel extends Component
 {
     use UsaSucursalActiva, WithPagination;
 
-    public const PESTANAS = ['cobros', 'ventas', 'inventario', 'creditos'];
+    public const PESTANAS = ['ventas', 'cobros', 'inventario', 'creditos'];
 
     public const COOKIE_RANGO = 'reportes_rango';
 
     /** La cookie del rango dura un año. */
     public const MINUTOS_COOKIE = 60 * 24 * 365;
 
-    #[Url(except: 'cobros')]
-    public string $pestana = 'cobros';
+    #[Url(except: 'ventas')]
+    public string $pestana = 'ventas';
 
     /** Preajuste elegido (clave de Periodo::PREAJUSTES) o «personalizado». Solo lo cambia el servidor. */
     #[Locked]
@@ -82,7 +82,7 @@ class Panel extends Component
         $this->cargarRango();
 
         if (! in_array($this->pestana, self::PESTANAS, true)) {
-            $this->pestana = 'cobros';
+            $this->pestana = 'ventas';
         }
 
         if ($this->agrupar !== 'cliente') {
@@ -100,6 +100,11 @@ class Panel extends Component
         if (in_array($propiedad, ['desde', 'hasta'], true)) {
             $this->usarPeriodo('personalizado', Periodo::rango($this->desde, $this->hasta));
             $this->guardarRango();
+        }
+
+        // Una pestaña inventada desde el navegador vuelve a Ventas: la vista solo sabe pintar las cuatro.
+        if ($propiedad === 'pestana' && ! in_array($this->pestana, self::PESTANAS, true)) {
+            $this->pestana = 'ventas';
         }
 
         if (! str_starts_with($propiedad, 'personal')) {

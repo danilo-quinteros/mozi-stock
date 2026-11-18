@@ -24,6 +24,9 @@
             <div class="agente-acciones">
                 <button type="button" class="icon-action" wire:click="nueva" title="{{ __('Nueva charla') }}" aria-label="{{ __('Nueva charla') }}"><x-icon name="plus" size="sm" /></button>
                 <button type="button" class="icon-action" @click="historialAbierto = ! historialAbierto" :aria-expanded="historialAbierto" aria-controls="agente-historial" title="{{ __('Historial') }}" aria-label="{{ __('Historial') }}"><x-icon name="history" size="sm" /></button>
+                @if ($conversacionId !== null)
+                    <button type="button" class="icon-action agente-borrar" wire:click="confirmarEliminar({{ $conversacionId }})" :disabled="!! enviando" title="{{ __('Eliminar charla') }}" aria-label="{{ __('Eliminar esta charla') }}"><x-icon name="trash" size="sm" /></button>
+                @endif
             </div>
         </header>
         <p class="agente-aviso" role="note"><span class="agente-aviso-punto" aria-hidden="true"></span>{{ $conIa
@@ -35,11 +38,15 @@
             <div class="agente-historial-head"><b>{{ __('Tus charlas') }}</b><small>{{ __('Privadas: solo tú las ves') }}</small></div>
             <div class="agente-historial-lista">
                 @forelse ($historial as $charla)
-                    <button type="button" wire:key="h{{ $charla->id }}" class="agente-historial-item {{ $charla->id === $conversacionId ? 'active' : '' }}"
-                        wire:click="abrir({{ $charla->id }})" @click="historialAbierto = false">
-                        <span>{{ $charla->titulo }}</span>
-                        <small>{{ $charla->ultima_actividad_en->timezone($zona)->format('d/m/Y H:i') }}</small>
-                    </button>
+                    <div class="agente-historial-fila" wire:key="h{{ $charla->id }}">
+                        <button type="button" class="agente-historial-item {{ $charla->id === $conversacionId ? 'active' : '' }}"
+                            wire:click="abrir({{ $charla->id }})" @click="historialAbierto = false">
+                            <span>{{ $charla->titulo }}</span>
+                            <small>{{ $charla->ultima_actividad_en->timezone($zona)->format('d/m/Y H:i') }}</small>
+                        </button>
+                        <button type="button" class="icon-action agente-borrar" wire:click="confirmarEliminar({{ $charla->id }})" @click="historialAbierto = false"
+                            title="{{ __('Eliminar charla') }}" aria-label="{{ __('Eliminar la charla «:titulo»', ['titulo' => $charla->titulo]) }}"><x-icon name="trash" size="sm" /></button>
+                    </div>
                 @empty
                     <p class="agente-historial-vacio">{{ __('Todavía no tienes charlas.') }}</p>
                 @endforelse
@@ -64,6 +71,7 @@
                 @foreach ($mensajes as $mensaje)
                     @if ($mensaje->esDelAgente())
                         @php($botones = Panel::botones($mensaje))
+                        @php($acciones = Panel::acciones($mensaje))
                         <article class="agente-msg ia {{ $mensaje->estado === AgenteMensaje::FALLIDO ? 'fallido' : '' }}" wire:key="m{{ $mensaje->id }}">
                             <span class="agente-avatar" aria-hidden="true"><x-icon name="sparkles" size="sm" /></span>
                             <div class="agente-burbuja">
@@ -83,6 +91,14 @@
                                             @endforeach
                                         </div>
                                     </div>
+                                @endif
+                                @if ($acciones !== [])
+                                    {{-- Enlaces a pantallas existentes: el agente no ejecuta nada; la pantalla vuelve a autorizar. --}}
+                                    <nav class="agente-acciones-msg" aria-label="{{ __('Acciones sugeridas') }}">
+                                        @foreach ($acciones as $accion)
+                                            <a class="btn ghost sm" href="{{ $accion['url'] }}"><x-icon :name="$accion['icono']" size="sm" /> {{ $accion['etiqueta'] }}</a>
+                                        @endforeach
+                                    </nav>
                                 @endif
                                 <div class="agente-msg-meta">
                                     @if ($mensaje->proveedor === 'demo')<span class="badge warning">{{ __('Demo') }}</span>@elseif ($mensaje->proveedor !== null)<span class="badge info">{{ __('IA') }}</span>@endif
@@ -135,4 +151,15 @@
             <script type="application/json" data-lienzo-textos>@json($textos)</script>
         </div>
     </section>
+
+    @if ($eliminando)
+        <x-modal titulo="¿Eliminar esta charla?" cerrar="cancelarEliminar"
+            descripcion="Se borrarán sus mensajes, tablas y gráficos, y dejará de aparecer en tu historial. No se puede deshacer.">
+            <p class="agente-eliminar-titulo">«{{ $eliminando->titulo }}»</p>
+            <div class="modal-actions">
+                <button type="button" class="btn ghost" wire:click="cancelarEliminar" x-init="$el.focus()">{{ __('Cancelar') }}</button>
+                <button type="button" class="btn danger" wire:click="eliminar" wire:loading.attr="disabled"><x-icon name="trash" size="sm" /> {{ __('Eliminar charla') }}</button>
+            </div>
+        </x-modal>
+    @endif
 </div>

@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $conversacion_id
  * @property string $rol
  * @property string $texto
+ * @property list<array{tipo: string, id: int|null, etiqueta: string}>|null $acciones
  * @property string $estado
  * @property string|null $clave
  * @property int|null $respuesta_de_id
@@ -44,6 +45,13 @@ class AgenteMensaje extends Model
     public const FALLIDO = 'fallido';
 
     protected $table = 'agente_mensajes';
+
+    protected function casts(): array
+    {
+        return [
+            'acciones' => 'array',
+        ];
+    }
 
     public function esDelAgente(): bool
     {

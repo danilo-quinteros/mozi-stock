@@ -2,8 +2,10 @@
 
 namespace App\Domain\AgenteMozi\Herramientas;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Datos\ConsultaDatos;
+use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 use App\Domain\Reportes\Periodo;
 use App\Enums\Rol;
@@ -138,6 +140,33 @@ abstract class HerramientaNegocio implements Herramienta
         }
 
         return ['dataset' => new DatasetPropuesto($clave, $columnas, $limpias, $meta), 'descripcion' => $descripcion];
+    }
+
+    /**
+     * Agrega al dataset las acciones que ofrece (enlaces de CatalogoAcciones), sin repetir y con tope. El modelo
+     * decide cuáles mostrar; las que no cumplen la lista cerrada se descartan aquí.
+     *
+     * @param  array{dataset: DatasetPropuesto, descripcion: string}  $item
+     * @param  iterable<AccionPropuesta>  $acciones
+     * @return array{dataset: DatasetPropuesto, descripcion: string, acciones: list<AccionPropuesta>}
+     */
+    protected function conAcciones(array $item, iterable $acciones): array
+    {
+        $unicas = [];
+
+        foreach ($acciones as $accion) {
+            $valida = CatalogoAcciones::desde($accion->aArreglo());
+
+            if ($valida !== null) {
+                $unicas[$valida->tipo.':'.$valida->id] ??= $valida;
+            }
+
+            if (count($unicas) === CatalogoAcciones::MAXIMO_OFRECIDAS) {
+                break;
+            }
+        }
+
+        return $item + ['acciones' => array_values($unicas)];
     }
 
     /** Variación porcentual con un decimal; null si la base es 0 (no hay contra qué comparar). */

@@ -1,6 +1,8 @@
 <?php
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
+use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\Herramientas\RegistroHerramientas;
 use App\Domain\AgenteMozi\Ia\DTOs\LlamadaHerramienta;
 use App\Domain\AgenteMozi\Lienzo\ValidadorLienzo;
@@ -28,6 +30,7 @@ use App\Models\User;
 use App\Models\Venta;
 use App\Support\Decimal;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
@@ -466,4 +469,35 @@ test('a seller is offered only their branch tools and finance tools are refused 
     foreach (['analyze_receivables', 'get_payables_schedule', 'forecast_cash_flow', 'analyze_operating_expenses', 'get_branch_comparison', 'analyze_returns'] as $nombre) {
         expect(ucLlamar($this->ana, $nombre)['error'])->toContain('no tiene permiso');
     }
+});
+
+test('IA-P3: receivables offer «Registrar cobro» per client, payables the account detail and pending orders the order, in their own order', function () {
+    ucCuentasPorCobrar($this);
+    ucCuentasPorPagar($this);
+    $acciones = function (User $usuario, string $herramienta, string $dataset): array {
+        $item = collect(ucLlamar($usuario, $herramienta)['datasets'])->firstOrFail(fn (array $i) => $i['dataset']->clave === $dataset);
+
+        return array_map(fn (AccionPropuesta $a) => [$a->tipo, $a->id, $a->etiqueta, CatalogoAcciones::url($a)], $item['acciones'] ?? []);
+    };
+    $cuentas = DB::table('cuentas_pagar')->where('empresa_id', $this->empresa->id)->orderBy('vencimiento')->get(['id', 'numero']);
+
+    expect($acciones($this->admin, 'analyze_receivables', 'clientes'))->toBe([
+        ['registrar_cobro', $this->lucia->id, 'Registrar cobro · Lucía Vargas', '/creditos/cobrar?cliente='.$this->lucia->id],
+        ['registrar_cobro', $this->carlos->id, 'Registrar cobro · Carlos Mendoza', '/creditos/cobrar?cliente='.$this->carlos->id],
+    ])
+        // Las que vencen hasta el horizonte (15 días), de la más antigua a la más lejana; la de diciembre no.
+        ->and(array_map(fn (array $a) => [$a[1], $a[3]], $acciones($this->admin, 'get_payables_schedule', 'calendario')))->toBe([
+            [$cuentas[0]->id, '/cuentas-por-pagar/'.$cuentas[0]->id], [$cuentas[1]->id, '/cuentas-por-pagar/'.$cuentas[1]->id],
+        ])
+        ->and($acciones($this->admin, 'get_payables_schedule', 'calendario')[0][2])->toBe('Ver cuenta CXP-'.str_pad((string) $cuentas[0]->numero, 5, '0', STR_PAD_LEFT).' · Distribuidora Oriente');
+
+    $pedido = crearPedido($this->admin, $this->centro, [['producto_id' => $this->arroz->id, 'cantidad' => '1']], ['cliente_id' => $this->carlos->id]);
+    crearPedido($this->admin, $this->norte, [['producto_id' => $this->leche->id, 'cantidad' => '1']]);
+
+    // La vendedora de Centro solo recibe los pedidos de su sucursal, y su vista no muestra cobros (finanzas).
+    expect($acciones($this->ana, 'analyze_pending_orders', 'pendientes'))->toBe([
+        ['abrir_pedido', $pedido->id, 'Abrir pedido '.$pedido->codigo().' · Carlos Mendoza', '/pedidos/'.$pedido->id],
+    ])
+        ->and(CatalogoAcciones::paraVista($this->ana, [['tipo' => 'registrar_cobro', 'id' => $this->carlos->id, 'etiqueta' => 'Registrar cobro']]))->toBe([])
+        ->and($acciones($this->admin, 'analyze_pending_orders', 'pendientes'))->toHaveCount(2);
 });

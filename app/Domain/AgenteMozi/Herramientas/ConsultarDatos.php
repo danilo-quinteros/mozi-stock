@@ -13,11 +13,15 @@ use Illuminate\Validation\Rule;
  * query_business_data (§ 5.1): consulta genérica de solo lectura para preguntas sin herramienta
  * propia. El modelo lee la pregunta y rellena los argumentos; Laravel valida contra el catálogo y
  * ejecuta. La descripción y las fuentes ofrecidas dependen del rol (el vendedor no ve fuentes ni
- * campos financieros), pero la autoridad al ejecutar es siempre ContextoAgente.
+ * campos financieros) y de las funciones activas de la empresa (producción y lotes, § 5.2), pero la
+ * autoridad al ejecutar es siempre ContextoAgente.
  */
 final class ConsultarDatos extends HerramientaNegocio
 {
-    public function __construct(private readonly bool $administrador = false) {}
+    /**
+     * @param  list<string>  $capacidades  funciones activas de la empresa, leídas en el servidor
+     */
+    public function __construct(private readonly bool $administrador = false, private readonly array $capacidades = []) {}
 
     public function nombre(): string
     {
@@ -26,7 +30,7 @@ final class ConsultarDatos extends HerramientaNegocio
 
     public function descripcion(): string
     {
-        $catalogo = CatalogoDatos::paraDescribir($this->administrador);
+        $catalogo = CatalogoDatos::paraDescribir($this->administrador, $this->capacidades);
         $nombres = fn (array $campos) => implode(', ', array_map(fn (Campo $c) => $c->tipo === 'string' ? $c->nombre : "{$c->nombre}:{$c->tipo}", $campos));
         $fuentes = array_map(function (string $nombre) use ($catalogo, $nombres): string {
             $fuente = $catalogo->fuente($nombre);
@@ -38,7 +42,7 @@ final class ConsultarDatos extends HerramientaNegocio
             .'Modos: listar (fields; vacío = campos principales); agregar (group_by con hasta 2 campos y measures con hasta 6; measures sin group_by = una fila de totales, apta para un KPI; group_by sin measures cuenta filas). '
             .'Filtros (hasta 8): field, op y value como texto (números con punto decimal, fechas AAAA-MM-DD) o values para in. El texto se compara sin distinguir mayúsculas ni tildes. Una medida solo se filtra en una agregación. '
             .'date_from y date_to (AAAA-MM-DD, días de La Paz) filtran la fecha principal de la fuente; los campos fecha, semana, mes, anio, dia_semana y hora sirven para agrupar. '
-            .'Productos, clientes y proveedores inactivos se excluyen salvo que filtres por estado. Devuelve hasta limit filas (100 por defecto, máximo 500) y total_matches: si truncated es true viste un recorte y debes decirlo. '
+            .'Productos, clientes y proveedores inactivos (y en recetas las versiones anteriores o desactivadas) se excluyen salvo que filtres por estado. Devuelve hasta limit filas (100 por defecto, máximo 500) y total_matches: si truncated es true viste un recorte y debes decirlo. '
             .($this->administrador ? 'Consulta toda la empresa; filtra por sucursal si la pregunta lo pide. ' : 'Solo ves la sucursal del usuario. ')
             ."Fuentes:\n".implode("\n", $fuentes);
     }
@@ -50,7 +54,7 @@ final class ConsultarDatos extends HerramientaNegocio
         return [
             'type' => 'object',
             'properties' => [
-                'source' => ['type' => 'string', 'enum' => CatalogoDatos::paraDescribir($this->administrador)->fuentesPermitidas(), 'description' => 'Fuente de datos.'],
+                'source' => ['type' => 'string', 'enum' => CatalogoDatos::paraDescribir($this->administrador, $this->capacidades)->fuentesPermitidas(), 'description' => 'Fuente de datos.'],
                 'fields' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo listar: campos a devolver (hasta 20).'],
                 'group_by' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo agregar: hasta 2 campos para agrupar.'],
                 'measures' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo agregar: hasta 6 medidas de la fuente.'],
@@ -81,7 +85,7 @@ final class ConsultarDatos extends HerramientaNegocio
     public function reglas(): array
     {
         return [
-            'source' => ['required', 'string', Rule::in(CatalogoDatos::FUENTES)],
+            'source' => ['required', 'string', Rule::in(CatalogoDatos::TODAS)],
             'fields' => ['sometimes', 'array', 'max:20'],
             'fields.*' => ['string', 'max:40'],
             'group_by' => ['sometimes', 'array', 'max:2'],

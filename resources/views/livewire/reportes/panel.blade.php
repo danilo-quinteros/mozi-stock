@@ -92,7 +92,7 @@
     <section class="card card-pad">
         <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Reportes por categoría') }}</div><span class="subtle">{{ $periodo->desde->format('d/m/Y') }}{{ $periodo->esUnDia() ? '' : ' al '.$periodo->hasta->format('d/m/Y') }}</span></div>
         <div class="tabs" role="tablist">
-            @foreach (['cobros' => 'Cobros', 'ventas' => 'Ventas', 'inventario' => 'Inventario', 'creditos' => 'Créditos'] as $clave => $etiqueta)
+            @foreach (['ventas' => 'Ventas', 'cobros' => 'Cobros', 'inventario' => 'Inventario', 'creditos' => 'Créditos'] as $clave => $etiqueta)
                 <button type="button" role="tab" class="tab {{ $pestana === $clave ? 'active' : '' }}" aria-selected="{{ $pestana === $clave ? 'true' : 'false' }}" wire:click="$set('pestana', '{{ $clave }}')">{{ __($etiqueta) }}</button>
             @endforeach
         </div>

@@ -2,6 +2,7 @@
 
 namespace App\Domain\AgenteMozi\Herramientas;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Datos\CatalogoDatos;
 use Illuminate\Database\Query\Builder;
@@ -84,7 +85,7 @@ final class PedidosPendientes extends HerramientaNegocio
             ->leftJoinSub($porPedido, 'l', 'l.pedido_id', '=', 'pe.id')
             ->orderBy('pe.created_at')->orderBy('pe.id')
             ->limit(500)
-            ->select([DB::raw(CatalogoDatos::sqlCodigo('PED', 'pe.numero').' AS pedido'), 's.nombre as sucursal', 'vend.name as vendedor',
+            ->select(['pe.id', DB::raw(CatalogoDatos::sqlCodigo('PED', 'pe.numero').' AS pedido'), 's.nombre as sucursal', 'vend.name as vendedor',
                 DB::raw("COALESCE(c.nombre, 'Consumidor final') AS cliente"), 'pe.total', DB::raw('COALESCE(l.lineas, 0) AS lineas'),
                 DB::raw('COALESCE(l.sin_stock, 0) AS lineas_sin_stock')])
             ->selectRaw("{$creado} AS fecha", [$desfase])
@@ -130,11 +131,13 @@ final class PedidosPendientes extends HerramientaNegocio
                 'conversion_pct' => $this->porcentaje((string) ($estados->vendidos ?? 0), (string) ((int) ($estados->vendidos ?? 0) + (int) ($estados->cancelados ?? 0))),
                 'productos_con_faltante' => $faltantes->count(),
             ]], $meta, 'Resumen (una fila). conversion_pct = vendidos ÷ (vendidos + cancelados) de los pedidos creados en el período; vacío si ninguno se decidió.'),
-            $this->dataset('pendientes', [
+            // Acción (§ UC-17): abrir el pedido. El agente nunca lo confirma ni lo cancela.
+            $this->conAcciones($this->dataset('pendientes', [
                 $this->col('pedido', __('Pedido'), 'string'), $this->col('fecha', __('Fecha'), 'date'), $this->col('dias_abierto', __('Días abierto'), 'integer'),
                 $this->col('sucursal', __('Sucursal'), 'string'), $this->col('vendedor', __('Vendedor'), 'string'), $this->col('cliente', __('Cliente'), 'string'),
                 $dinero('total', __('Total')), $this->col('lineas', __('Líneas'), 'integer'), $this->col('lineas_sin_stock', __('Líneas sin stock suficiente'), 'integer'),
             ], $pendientes, $meta, 'Pedidos pendientes del más antiguo al más reciente. lineas_sin_stock compara cada línea con el stock actual de la sucursal.'),
+                $pendientes->map(fn (object $p) => CatalogoAcciones::crear('abrir_pedido', (int) $p->id, __('Abrir pedido :pedido · :cliente', ['pedido' => $p->pedido, 'cliente' => $p->cliente])))),
             $this->dataset('faltantes', [
                 $this->col('producto', __('Producto'), 'string'), $this->col('sucursal', __('Sucursal'), 'string'), $this->col('pedido', __('Pedido en pendientes'), 'number'),
                 $this->col('stock', __('Stock actual'), 'number'), $this->col('faltante', __('Faltante'), 'number'), $this->col('pedidos', __('Pedidos'), 'integer'),

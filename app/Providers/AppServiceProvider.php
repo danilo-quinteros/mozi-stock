@@ -71,6 +71,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('usar-produccion', fn (User $user): bool => $user->esAdministrador()
             && Gate::forUser($user)->allows('capacidad', Capacidad::Produccion));
 
+        // Agente Mozi, UC-27 (AGENTE_MOZI_IA.md § 2.1): vencimientos y trazabilidad para el administrador con Lotes.
+        Gate::define('analizar-lotes', fn (User $user): bool => $user->esAdministrador()
+            && Gate::forUser($user)->allows('capacidad', Capacidad::LotesVencimientos));
+
         // Agente Mozi: usuarios de empresa mientras la bandera del servidor esté activa y, en SaaS, solo si
         // el plan de su empresa lo incluye. Cada herramienta vuelve a autorizar con su propio permiso
         // (p. ej. ver-reportes para costos, márgenes y deudas).

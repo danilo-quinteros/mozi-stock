@@ -62,12 +62,13 @@ final class Orquestador implements Respondedor
         $sandbox = $this->gestor->sandboxIa();
         $disponibles = $this->registro->disponibles($usuario);
         $definiciones = [...array_map(fn ($herramienta) => new DefinicionHerramienta($herramienta->nombre(), $herramienta->descripcion(), $herramienta->parametros()), array_values($disponibles)), $this->protocolo->definicion($sandbox)];
-        $sistema = $this->instrucciones->texto($contexto, $sandbox);
+        $sistema = $this->instrucciones->texto($contexto, $sandbox, array_keys($disponibles));
         $mensajes = [...$this->historial($historial), MensajeIa::usuario($pregunta)];
 
         $inicio = hrtime(true);
         $uso = new UsoIa;
         $datasets = [];
+        $acciones = [];
         $ejecutadas = 0;
         $ultimoModelo = $modelo;
 
@@ -101,7 +102,7 @@ final class Orquestador implements Respondedor
                     return $this->protocolo->respuesta(['message' => $respuesta->mensaje->texto], [], $id, $ultimoModelo, $uso, $sandbox);
                 }
 
-                return $this->protocolo->respuesta($final->argumentos, $datasets, $id, $ultimoModelo, $uso, $sandbox);
+                return $this->protocolo->respuesta($final->argumentos, $datasets, $id, $ultimoModelo, $uso, $sandbox, $acciones);
             }
 
             $resultados = [];
@@ -131,10 +132,19 @@ final class Orquestador implements Respondedor
 
                 $entregados = [];
 
-                foreach ($salida['datasets'] as ['dataset' => $dataset, 'descripcion' => $descripcion]) {
+                foreach ($salida['datasets'] as $item) {
                     $clave = 'd'.(count($datasets) + 1);
-                    $datasets[$clave] = $dataset;
-                    $entregados[] = $this->protocolo->paraModelo($clave, $dataset, $descripcion);
+                    $datasets[$clave] = $item['dataset'];
+                    // Acciones del turno por id (a1, a2…): el modelo solo puede elegir entre estas.
+                    $ofrecidas = [];
+
+                    foreach ($item['acciones'] ?? [] as $accion) {
+                        $idAccion = 'a'.(count($acciones) + 1);
+                        $acciones[$idAccion] = $accion;
+                        $ofrecidas[$idAccion] = $accion->etiqueta;
+                    }
+
+                    $entregados[] = $this->protocolo->paraModelo($clave, $item['dataset'], $item['descripcion'], $ofrecidas);
                 }
 
                 $resultados[] = new ResultadoHerramienta($llamada->id, $llamada->nombre, ['datasets' => $entregados]);

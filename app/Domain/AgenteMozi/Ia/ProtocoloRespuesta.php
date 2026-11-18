@@ -2,6 +2,8 @@
 
 namespace App\Domain\AgenteMozi\Ia;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
+use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\ArtefactoPropuesto;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 use App\Domain\AgenteMozi\DTOs\RespuestaAgente;
@@ -16,7 +18,8 @@ use App\Enums\TipoArtefacto;
  * «responder», con un esquema por tipo de artefacto que usa las mismas claves que valida
  * ValidadorLienzo. Así funciona igual con cualquier proveedor que admita herramientas, sin combinar
  * herramientas y salida estructurada en la misma petición. El modelo solo referencia datasets que
- * devolvieron las herramientas: nunca envía filas ni cifras para el Lienzo.
+ * devolvieron las herramientas: nunca envía filas ni cifras para el Lienzo. Del mismo modo, solo elige
+ * por id (a1, a2…) acciones que ofrecieron las herramientas: nunca escribe URLs ni etiquetas.
  *
  * Sin minItems/maxItems: verificado el 30/10/2026, Gemini rechaza con INVALID_ARGUMENT un arreglo de
  * objetos con maxItems 20 bajo anyOf. Los topes los aplica ValidadorLienzo y van en las descripciones.
@@ -42,6 +45,11 @@ final class ProtocoloRespuesta
                     'description' => 'Elementos del Lienzo (máximo '.(int) config('agente_mozi.limites.artefactos_por_mensaje').') basados en datasets devueltos por herramientas. Vacío si la pregunta no necesita datos.',
                     'items' => ['anyOf' => $variantes],
                 ],
+                'actions' => [
+                    'type' => 'array',
+                    'description' => 'Ids de acciones (a1, a2…) que ofrecieron las herramientas en este turno, máximo '.CatalogoAcciones::MAXIMO_POR_MENSAJE.'. Son enlaces que el usuario abre para actuar él mismo. Solo las que sirven a lo que respondiste; vacío si ninguna.',
+                    'items' => ['type' => 'string'],
+                ],
             ],
             'required' => ['message', 'artifacts'],
             'additionalProperties' => false,
@@ -51,9 +59,10 @@ final class ProtocoloRespuesta
     /**
      * Resultado de una herramienta para el modelo: columnas tipadas y filas acotadas.
      *
+     * @param  array<string, string>  $acciones  acciones que ofrece el dataset: id => etiqueta
      * @return array<string, mixed>
      */
-    public function paraModelo(string $clave, DatasetPropuesto $dataset, string $descripcion): array
+    public function paraModelo(string $clave, DatasetPropuesto $dataset, string $descripcion, array $acciones = []): array
     {
         $meta = $dataset->meta;
 
@@ -71,14 +80,17 @@ final class ProtocoloRespuesta
             // Consulta genérica: coincidencias en la base y si el dataset es un recorte de ellas.
             'total_matches' => $meta['total_matches'] ?? null,
             'truncated' => $meta['truncated'] ?? null,
+            'actions' => $acciones === [] ? null
+                : array_map(fn (string $id, string $etiqueta) => ['action' => $id, 'label' => $etiqueta], array_keys($acciones), $acciones),
         ], fn ($valor) => $valor !== null);
     }
 
     /**
      * @param  array<string, mixed>  $argumentos  argumentos de «responder» (no confiables)
      * @param  array<string, DatasetPropuesto>  $datasets  datasets del turno por clave (d1, d2…)
+     * @param  array<string, AccionPropuesta>  $acciones  acciones ofrecidas en el turno por id (a1, a2…)
      */
-    public function respuesta(array $argumentos, array $datasets, string $proveedor, string $modelo, UsoIa $uso, bool $sandbox): RespuestaAgente
+    public function respuesta(array $argumentos, array $datasets, string $proveedor, string $modelo, UsoIa $uso, bool $sandbox, array $acciones = []): RespuestaAgente
     {
         $mensaje = is_string($argumentos['message'] ?? null) ? trim($argumentos['message']) : '';
 
@@ -104,7 +116,26 @@ final class ProtocoloRespuesta
         return new RespuestaAgente($mensaje, $artefactos, array_map(
             fn (string $clave, DatasetPropuesto $dataset) => new DatasetPropuesto($clave, $dataset->columnas, $dataset->filas, $dataset->meta),
             array_keys($datasets), $datasets,
-        ), $proveedor, $modelo, $uso);
+        ), $proveedor, $modelo, $uso, $this->acciones($argumentos['actions'] ?? null, $acciones));
+    }
+
+    /**
+     * Acciones elegidas por el modelo: solo ids ofrecidos en el turno, sin repetir y con tope. Un id desconocido se ignora.
+     *
+     * @param  array<string, AccionPropuesta>  $ofrecidas
+     * @return list<AccionPropuesta>
+     */
+    private function acciones(mixed $elegidas, array $ofrecidas): array
+    {
+        $acciones = [];
+
+        foreach (is_array($elegidas) ? $elegidas : [] as $id) {
+            if (is_string($id) && isset($ofrecidas[$id])) {
+                $acciones[$id] = $ofrecidas[$id];
+            }
+        }
+
+        return array_slice(array_values($acciones), 0, CatalogoAcciones::MAXIMO_POR_MENSAJE);
     }
 
     /**

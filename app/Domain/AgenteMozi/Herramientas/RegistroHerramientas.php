@@ -3,6 +3,7 @@
 namespace App\Domain\AgenteMozi\Herramientas;
 
 use App\Domain\AgenteMozi\ContextoAgente;
+use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 use App\Domain\AgenteMozi\Ia\DTOs\LlamadaHerramienta;
 use App\Models\User;
@@ -33,6 +34,18 @@ final class RegistroHerramientas
         ComparativaSucursales::class,
         PedidosPendientes::class,
         AnalizarDevoluciones::class,
+        // Producción (UC-19 a UC-26; Gate usar-produccion) y lotes (UC-27; Gate analizar-lotes): con la función apagada
+        // el Gate las niega, así el modelo no las recibe y una llamada por nombre se rechaza.
+        EstimarCapacidadProduccion::class,
+        RevisarOrdenesProduccion::class,
+        SugerirPlanProduccion::class,
+        SugerirCompraMateriaPrima::class,
+        AnalizarRendimientoProduccion::class,
+        AnalizarCostoProduccion::class,
+        AnalizarMargenFabricados::class,
+        PlanificarEnvasado::class,
+        RevisarVencimientosLotes::class,
+        TrazarLote::class,
     ];
 
     /**
@@ -41,9 +54,11 @@ final class RegistroHerramientas
     public function disponibles(User $usuario): array
     {
         $disponibles = [];
+        // Funciones activas de la empresa (§ 5.2): la consulta genérica ofrece las fuentes de producción y de lotes.
+        $parametros = ['administrador' => $usuario->esAdministrador(), 'capacidades' => ContextoAgente::capacidadesDe($usuario)];
 
         foreach (self::CATALOGO as $clase) {
-            $herramienta = app()->makeWith($clase, ['administrador' => $usuario->esAdministrador()]);
+            $herramienta = app()->makeWith($clase, $parametros);
 
             if ($this->permitida($herramienta, $usuario)) {
                 $disponibles[$herramienta->nombre()] = $herramienta;
@@ -55,7 +70,7 @@ final class RegistroHerramientas
 
     /**
      * @param  array<string, Herramienta>  $disponibles
-     * @return array{error: string}|array{datasets: list<array{dataset: DatasetPropuesto, descripcion: string}>}
+     * @return array{error: string}|array{datasets: list<array{dataset: DatasetPropuesto, descripcion: string, acciones?: list<AccionPropuesta>}>}
      */
     public function ejecutar(LlamadaHerramienta $llamada, array $disponibles, User $usuario, ContextoAgente $contexto): array
     {

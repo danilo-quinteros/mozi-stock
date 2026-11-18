@@ -2,6 +2,7 @@
 
 namespace App\Domain\AgenteMozi\Actions;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Contratos\Respondedor;
 use App\Domain\AgenteMozi\DTOs\RespuestaAgente;
@@ -83,6 +84,12 @@ final class EnviarMensaje
     private function conversacion(User $actor, int $id): AgenteConversacion
     {
         $conversacion = AgenteConversacion::query()->findOrFail($id);
+
+        // Eliminada en otra pestaña: solo su autor recibe el aviso; cualquier otro, la denegación de siempre.
+        if ($conversacion->eliminada() && Gate::forUser($actor)->allows('delete', $conversacion)) {
+            throw ValidationException::withMessages(['texto' => __('Esta charla fue eliminada. Inicia una nueva charla.')]);
+        }
+
         Gate::forUser($actor)->authorize('view', $conversacion);
 
         $limite = (int) config('agente_mozi.limites.mensajes_por_conversacion');
@@ -109,7 +116,14 @@ final class EnviarMensaje
     private function guardarPregunta(User $actor, ?AgenteConversacion $conversacion, string $texto, string $clave): AgenteMensaje
     {
         return DB::transaction(function () use ($actor, $conversacion, $texto, $clave) {
-            if ($conversacion === null) {
+            if ($conversacion !== null) {
+                // Pudo eliminarse después de validarla: se relee bloqueada para no guardar la pregunta en ella.
+                $conversacion = AgenteConversacion::query()->lockForUpdate()->findOrFail($conversacion->id);
+
+                if ($conversacion->eliminada()) {
+                    throw ValidationException::withMessages(['texto' => __('Esta charla fue eliminada. Inicia una nueva charla.')]);
+                }
+            } else {
                 $conversacion = new AgenteConversacion;
                 $conversacion->empresa_id = (int) $actor->empresa_id;
                 $conversacion->usuario_id = $actor->id;
@@ -155,7 +169,27 @@ final class EnviarMensaje
 
         [$datasets, $artefactos] = $this->validar($respuesta, $referencia, $actor);
 
-        return $this->guardar($pregunta, $referencia, Str::limit($respuesta->texto, 10000), AgenteMensaje::COMPLETADO, $respuesta->proveedor, $respuesta->modelo, $respuesta->uso, $datasets, $artefactos);
+        return $this->guardar($pregunta, $referencia, Str::limit($respuesta->texto, 10000), AgenteMensaje::COMPLETADO, $respuesta->proveedor, $respuesta->modelo, $respuesta->uso, $datasets, $artefactos, $this->acciones($respuesta));
+    }
+
+    /**
+     * Acciones de la respuesta que cumplen la lista cerrada (IA-P3), sin repetir y con tope.
+     *
+     * @return list<array{tipo: string, id: int|null, etiqueta: string}>
+     */
+    private function acciones(RespuestaAgente $respuesta): array
+    {
+        $acciones = [];
+
+        foreach ($respuesta->acciones as $propuesta) {
+            $accion = CatalogoAcciones::desde($propuesta->aArreglo());
+
+            if ($accion !== null) {
+                $acciones[$accion->tipo.':'.$accion->id] ??= $accion->aArreglo();
+            }
+        }
+
+        return array_slice(array_values($acciones), 0, CatalogoAcciones::MAXIMO_POR_MENSAJE);
     }
 
     /**
@@ -218,17 +252,24 @@ final class EnviarMensaje
     /**
      * @param  array<string, array{columnas: list<array{field: string, label: string, type: string, nullable: bool}>, filas: list<array<string, string|int|null>>, meta: array<string, mixed>}>  $datasets
      * @param  list<array{tipo: TipoArtefacto, dataset: string|null, titulo: string, spec: array<string, mixed>, meta: array<string, mixed>}>  $artefactos
+     * @param  list<array{tipo: string, id: int|null, etiqueta: string}>  $acciones
      */
-    private function guardar(AgenteMensaje $pregunta, string $referencia, string $texto, string $estado, ?string $proveedor, ?string $modelo, ?UsoIa $uso, array $datasets, array $artefactos): AgenteMensaje
+    private function guardar(AgenteMensaje $pregunta, string $referencia, string $texto, string $estado, ?string $proveedor, ?string $modelo, ?UsoIa $uso, array $datasets, array $artefactos, array $acciones = []): AgenteMensaje
     {
-        return DB::transaction(function () use ($pregunta, $referencia, $texto, $estado, $proveedor, $modelo, $uso, $datasets, $artefactos) {
-            $conversacion = $pregunta->conversacion;
+        return DB::transaction(function () use ($pregunta, $referencia, $texto, $estado, $proveedor, $modelo, $uso, $datasets, $artefactos, $acciones) {
+            // Si el autor eliminó la charla mientras respondía el motor, se guarda solo el uso (cuota), sin contenido.
+            $conversacion = AgenteConversacion::query()->lockForUpdate()->findOrFail($pregunta->conversacion_id);
+
+            if ($conversacion->eliminada()) {
+                [$texto, $datasets, $artefactos, $acciones] = ['', [], [], []];
+            }
 
             $mensaje = new AgenteMensaje;
             $mensaje->empresa_id = $pregunta->empresa_id;
             $mensaje->conversacion_id = $pregunta->conversacion_id;
             $mensaje->rol = AgenteMensaje::ROL_AGENTE;
             $mensaje->texto = $texto;
+            $mensaje->acciones = $acciones === [] ? null : $acciones;
             $mensaje->estado = $estado;
             $mensaje->respuesta_de_id = $pregunta->id;
             $mensaje->proveedor = $proveedor;

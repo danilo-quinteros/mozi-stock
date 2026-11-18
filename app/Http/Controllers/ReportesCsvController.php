@@ -138,7 +138,7 @@ class ReportesCsvController extends Controller
         $buscar = (string) $request->query('q', '');
         $sufijo = $periodo->desde->format('Y-m-d').'_'.$periodo->hasta->format('Y-m-d');
 
-        $pestana = (string) $request->query('pestana', 'cobros');
+        $pestana = (string) $request->query('pestana', 'ventas');
 
         return match (true) {
             $pestana === 'ventas' && $request->query('vista') === 'devoluciones' => Csv::descargar("devoluciones-{$sufijo}.csv",

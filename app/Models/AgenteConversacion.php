@@ -10,13 +10,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Charla de un usuario con Agente Mozi. Es privada: solo su autor la ve (AgenteConversacionPolicy),
- * además del aislamiento por empresa de EmpresaScope.
+ * además del aislamiento por empresa de EmpresaScope. Eliminada (eliminada_en), queda sin contenido:
+ * solo se conservan los contadores de uso de sus mensajes (EliminarConversacion).
  *
  * @property int $id
  * @property int $empresa_id
  * @property int $usuario_id
  * @property string $titulo
  * @property CarbonImmutable $ultima_actividad_en
+ * @property CarbonImmutable|null $eliminada_en
  * @property CarbonImmutable $created_at
  * @property CarbonImmutable $updated_at
  * @property-read User $usuario
@@ -31,7 +33,13 @@ class AgenteConversacion extends Model
     {
         return [
             'ultima_actividad_en' => 'datetime',
+            'eliminada_en' => 'datetime',
         ];
+    }
+
+    public function eliminada(): bool
+    {
+        return $this->eliminada_en !== null;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Domain\AgenteMozi\Herramientas;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Datos\CatalogoDatos;
 use App\Domain\CuentasPagar\Consultas\CuentasPorPagar;
@@ -65,7 +66,7 @@ final class CalendarioPagos extends HerramientaNegocio
         $calendario = $abiertas()->where('cxp.vencimiento', '<=', $limite)
             ->orderBy('cxp.vencimiento')->orderByDesc('cxp.saldo_pendiente')
             ->limit(500)
-            ->select([DB::raw("{$codigo} AS cuenta"), 'cxp.proveedor as acreedor', 'cxp.concepto', DB::raw("{$origen} AS documento_origen"), 'cxp.sucursal',
+            ->select(['cxp.id', DB::raw("{$codigo} AS cuenta"), 'cxp.proveedor as acreedor', 'cxp.concepto', DB::raw("{$origen} AS documento_origen"), 'cxp.sucursal',
                 'cxp.vencimiento', 'cxp.saldo_pendiente as saldo'])
             ->selectRaw('DATEDIFF(cxp.vencimiento, ?) AS dias_para_vencer', [$hoy])
             ->selectRaw("CASE WHEN cxp.vencimiento < ? THEN 'vencida' ELSE 'por vencer' END AS estado", [$hoy])
@@ -109,12 +110,14 @@ final class CalendarioPagos extends HerramientaNegocio
             ], [['pendiente' => $resumen['pendiente'], 'vencido' => $resumen['vencido'], 'por_vencer' => $resumen['por_vencer'],
                 'cuentas_abiertas' => $resumen['abiertas'], 'en_horizonte' => $enHorizonte]],
                 $meta, "Resumen (una fila) igual a Cuentas por pagar. en_horizonte = saldo que vence entre hoy y {$limite} (sin lo ya vencido)."),
-            $this->dataset('calendario', [
+            // Acción (§ UC-12): abrir el detalle de la cuenta con su formulario de pago. El agente nunca paga.
+            $this->conAcciones($this->dataset('calendario', [
                 $this->col('cuenta', __('Cuenta'), 'string'), $this->col('acreedor', __('Acreedor'), 'string'), $this->col('concepto', __('Concepto'), 'string'),
                 $this->col('documento_origen', __('Documento de origen'), 'string'), $this->col('sucursal', __('Sucursal'), 'string'),
                 $this->col('vencimiento', __('Vencimiento'), 'date'), $dinero('saldo', __('Saldo')),
                 $this->col('dias_para_vencer', __('Días para vencer'), 'integer'), $this->col('estado', __('Estado'), 'string'),
             ], $calendario, $meta, "Cuentas con saldo vencidas o que vencen hasta {$limite}, de la más antigua a la más lejana."),
+                $calendario->map(fn (object $c) => CatalogoAcciones::crear('ver_cuenta_pagar', (int) $c->id, __('Ver cuenta :cuenta · :acreedor', ['cuenta' => $c->cuenta, 'acreedor' => $c->acreedor])))),
             $this->dataset('por_fecha', [$this->col('fecha', __('Fecha'), 'date'), $dinero('vencido', __('Vencido')), $dinero('por_vencer', __('Por vencer')), $dinero('total', __('Total'))],
                 $dias, $meta, 'Importe a pagar por día desde hoy hasta el fin del horizonte; lo ya vencido se acumula en el día de hoy.'),
             $this->dataset('por_acreedor', [

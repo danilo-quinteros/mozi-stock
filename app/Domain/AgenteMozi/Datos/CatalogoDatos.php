@@ -6,7 +6,9 @@ use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Herramientas\ArgumentoInvalido;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
 use App\Domain\CuentasPagar\Consultas\CuentasPorPagar;
+use App\Domain\Produccion\Consultas\MaterialesEnvasado;
 use App\Enums\Rol;
+use App\Models\Producto;
 use App\Models\Venta;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -24,9 +26,15 @@ use LogicException;
  *
  * Las definiciones del negocio son las de los módulos: venta = venta confirmada, cobrado = libro de
  * caja, cuentas por cobrar y por pagar desde sus consultas (sin anuladas), devoluciones en su fecha.
+ *
+ * Producción y lotes (§ 5.2): las fuentes de producción solo existen para el administrador de una empresa con la
+ * capacidad produccion, y la de lotes para una empresa con Lotes y vencimientos. Las materias primas nunca aparecen en
+ * productos ni en stock (son de venta): tienen su propia fuente. Lo producido repite los criterios de Reportes de
+ * producción: órdenes finalizadas por su fecha de finalización.
  */
 final class CatalogoDatos
 {
+    /** Fuentes generales (sin funciones por rubro). */
     public const FUENTES = [
         'productos', 'stock', 'ventas', 'productos_vendidos', 'pedidos', 'clientes', 'devoluciones', 'productos_devueltos',
         'compras', 'productos_comprados', 'proveedores', 'dinero', 'egresos', 'cuentas_por_cobrar', 'cuentas_por_pagar', 'movimientos_inventario',
@@ -35,10 +43,31 @@ final class CatalogoDatos
     /** Fuentes del vendedor: su sucursal, sin costos, compras, gastos ni cuentas. */
     public const FUENTES_VENDEDOR = ['productos', 'stock', 'ventas', 'productos_vendidos', 'pedidos', 'clientes'];
 
+    /** Fuentes de producción: administrador con la capacidad produccion (PR16). */
+    public const FUENTES_PRODUCCION = ['materias_primas', 'recetas', 'ordenes_produccion', 'produccion', 'consumos_produccion', 'envasados', 'materiales_envasado'];
+
+    /** Lotes con stock: empresa con Lotes y vencimientos; el vendedor ve su sucursal, sin costos ni materias primas. */
+    public const FUENTE_LOTES = 'lotes';
+
+    /** Todo el catálogo, para validar el nombre; qué fuentes puede usar cada usuario lo decide fuentesPermitidas(). */
+    public const TODAS = [...self::FUENTES, ...self::FUENTES_PRODUCCION, self::FUENTE_LOTES];
+
     private const DIAS = "'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'";
 
     /** Nombre visible del producto, igual que en Inventario (requiere los alias p y u). */
     private const PRODUCTO = "CASE WHEN p.contenido IS NOT NULL THEN CONCAT(p.nombre, ' ', TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM p.contenido)), ' ', u.abreviatura) ELSE p.nombre END";
+
+    /** Producto de venta con receta vigente (fabricado). Usa el índice único (empresa_id, producto_vigente). */
+    private const CON_RECETA = 'EXISTS (SELECT 1 FROM recetas rv WHERE rv.empresa_id = p.empresa_id AND rv.producto_vigente = p.id)';
+
+    /** Origen del producto de venta: presentación (sale de envasar un granel), fabricado (tiene receta) o reventa. */
+    private const ORIGEN = "CASE WHEN p.granel_id IS NOT NULL THEN 'presentación' WHEN ".self::CON_RECETA." THEN 'fabricado' ELSE 'reventa' END";
+
+    /** Clase del producto (requiere el alias p). */
+    private const CLASE = "CASE WHEN p.clase = 'materia_prima' THEN 'materia prima' ELSE 'venta' END";
+
+    /** Número visible de la orden (OP-0015), como OrdenProduccion::formatearCodigo: 4 cifras, sin recortar las más largas. */
+    private const ORDEN = "CONCAT('OP-', IF(o.numero < 10000, LPAD(o.numero, 4, '0'), o.numero))";
 
     private readonly int $empresaId;
 
@@ -49,6 +78,12 @@ final class CatalogoDatos
 
     private readonly string $hoy;
 
+    /** Administrador con la capacidad produccion. */
+    private readonly bool $produccion;
+
+    /** Empresa con Lotes y vencimientos. */
+    private readonly bool $lotes;
+
     public function __construct(ContextoAgente $contexto)
     {
         $this->empresaId = $contexto->empresaId;
@@ -56,6 +91,8 @@ final class CatalogoDatos
         $this->sucursalVendedor = $contexto->rol === Rol::Administrador ? null : ($contexto->sucursalId ?? 0);
         $this->desfase = $contexto->fechaReferencia->format('P');
         $this->hoy = $contexto->fechaReferencia->format('Y-m-d');
+        $this->produccion = $contexto->produccion();
+        $this->lotes = $contexto->lotes();
 
         if (preg_match('/^[+-]\d{2}:\d{2}$/', $this->desfase) !== 1 || preg_match('/^\d{4}-\d{2}-\d{2}$/', $this->hoy) !== 1) {
             throw new LogicException('Fecha de referencia inválida para la consulta.');
@@ -64,17 +101,24 @@ final class CatalogoDatos
 
     /**
      * Catálogo solo para describir fuentes y campos al modelo: sin empresa, nunca se ejecuta.
+     *
+     * @param  list<string>  $capacidades  funciones activas de la empresa del usuario
      */
-    public static function paraDescribir(bool $administrador): self
+    public static function paraDescribir(bool $administrador, array $capacidades = []): self
     {
         $zona = (string) config('mozistock.business_timezone');
 
-        return new self(new ContextoAgente(0, 0, $administrador ? Rol::Administrador : Rol::Vendedor, null, $zona, CarbonImmutable::now($zona), 'es'));
+        return new self(new ContextoAgente(0, 0, $administrador ? Rol::Administrador : Rol::Vendedor, null, $zona, CarbonImmutable::now($zona), 'es', '', $capacidades));
     }
 
     public function administrador(): bool
     {
         return $this->sucursalVendedor === null;
+    }
+
+    public function produccion(): bool
+    {
+        return $this->produccion;
     }
 
     public function sucursalVendedor(): ?int
@@ -109,13 +153,23 @@ final class CatalogoDatos
      */
     public function fuentesPermitidas(): array
     {
-        return $this->administrador() ? self::FUENTES : self::FUENTES_VENDEDOR;
+        return [
+            ...($this->administrador() ? self::FUENTES : self::FUENTES_VENDEDOR),
+            ...($this->produccion ? self::FUENTES_PRODUCCION : []),
+            ...($this->lotes ? [self::FUENTE_LOTES] : []),
+        ];
     }
 
     public function fuente(string $nombre): Fuente
     {
         if (! in_array($nombre, $this->fuentesPermitidas(), true)) {
-            throw new ArgumentoInvalido("La fuente {$nombre} no está disponible para el rol del usuario. Fuentes disponibles: ".implode(', ', $this->fuentesPermitidas()).'.');
+            $motivo = match (true) {
+                in_array($nombre, self::FUENTES_PRODUCCION, true) => 'solo existe para el administrador de una empresa con Producción activa',
+                $nombre === self::FUENTE_LOTES => 'solo existe en empresas con Lotes y vencimientos activo',
+                default => 'no está disponible para el rol del usuario',
+            };
+
+            throw new ArgumentoInvalido("La fuente {$nombre} {$motivo}. Fuentes disponibles: ".implode(', ', $this->fuentesPermitidas()).'.');
         }
 
         return match ($nombre) {
@@ -135,6 +189,14 @@ final class CatalogoDatos
             'cuentas_por_cobrar' => $this->cuentasPorCobrar(),
             'cuentas_por_pagar' => $this->cuentasPorPagar(),
             'movimientos_inventario' => $this->movimientosInventario(),
+            'materias_primas' => $this->materiasPrimas(),
+            'recetas' => $this->recetas(),
+            'ordenes_produccion' => $this->ordenesProduccion(),
+            'produccion' => $this->produccionFinalizada(),
+            'consumos_produccion' => $this->consumosProduccion(),
+            'envasados' => $this->envasados(),
+            'materiales_envasado' => $this->materialesEnvasado(),
+            'lotes' => $this->lotesConStock(),
             default => throw new ArgumentoInvalido("La fuente {$nombre} no existe."),
         };
     }
@@ -156,7 +218,9 @@ final class CatalogoDatos
                     ->where('sn.empresa_id', $this->empresaId), 'sn.sucursal_id')
                     ->groupBy('sn.producto_id')
                     ->select(['sn.producto_id', DB::raw('SUM(sn.cantidad) AS existencia')]), 'st', 'st.producto_id', '=', 'p.id')
-                ->where('p.empresa_id', $this->empresaId),
+                ->where('p.empresa_id', $this->empresaId)
+                // Las materias primas no se venden: tienen su propia fuente (materias_primas), solo con Producción.
+                ->where('p.clase', Producto::CLASE_VENTA),
             [
                 $this->campo('nombre', __('Nombre'), 'string', 'p.nombre'),
                 $this->campo('sku', __('SKU'), 'string', 'p.sku'),
@@ -174,6 +238,11 @@ final class CatalogoDatos
                 $this->campo('stock_minimo', __('Stock mínimo'), 'number', 'p.stock_minimo'),
                 $this->campo('estado', __('Estado'), 'string', "CASE WHEN p.activo = 1 THEN 'activo' ELSE 'inactivo' END"),
                 $this->campo('fecha_alta', __('Fecha de alta'), 'date', "DATE({$this->local('p.created_at')})"),
+                ...$this->conProduccion([
+                    $this->campo('origen', __('Origen'), 'string', self::ORIGEN, administrador: true),
+                    // El costo solo se mantiene en lo que se fabrica o se envasa; en reventa queda vacío.
+                    $this->campo('costo_materiales', __('Costo de materiales'), 'money', 'CASE WHEN p.granel_id IS NOT NULL OR '.self::CON_RECETA.' THEN p.costo_promedio END', administrador: true),
+                ]),
                 Campo::medida('conteo', __('Productos'), 'integer', 'COUNT(*)'),
                 Campo::medida('stock_total', __('Stock total'), 'number', "SUM({$existencia})"),
                 Campo::medida('sin_stock', __('Sin stock'), 'integer', "SUM(CASE WHEN {$existencia} <= 0 THEN 1 ELSE 0 END)"),
@@ -203,6 +272,7 @@ final class CatalogoDatos
                 ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'p.empresa_id')
                     ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
                 ->where('p.empresa_id', $this->empresaId)
+                ->where('p.clase', Producto::CLASE_VENTA)
                 ->where('p.controla_stock', true), 's.id'),
             [
                 $this->campo('producto', __('Producto'), 'string', self::PRODUCTO),
@@ -297,6 +367,7 @@ final class CatalogoDatos
                 $this->campo('precio_unitario', __('Precio unitario'), 'money', 'vi.precio_unitario'),
                 $this->campo('descuento', __('Descuento'), 'money', 'vi.descuento'),
                 $this->campo('total', __('Total'), 'money', 'vi.total'),
+                ...$this->conProduccion([$this->campo('origen', __('Origen'), 'string', self::ORIGEN, administrador: true)]),
                 Campo::medida('unidades', __('Unidades'), 'number', 'SUM(vi.cantidad)'),
                 Campo::medida('importe', __('Importe'), 'money', 'SUM(vi.total)'),
                 Campo::medida('ventas', __('Ventas'), 'integer', 'COUNT(DISTINCT vi.venta_id)'),
@@ -501,7 +572,7 @@ final class CatalogoDatos
 
     private function productosComprados(): Fuente
     {
-        return new Fuente('productos_comprados', 'Líneas de compras por producto con su costo unitario.',
+        return new Fuente('productos_comprados', 'Líneas de compras por producto con su costo unitario. clase: venta (mercadería) o materia prima (insumos de Producción).',
             true,
             fn () => DB::table('compra_items as ci')
                 ->join('compras as co', 'co.id', '=', 'ci.compra_id')
@@ -517,6 +588,7 @@ final class CatalogoDatos
                 $this->campo('producto', __('Producto'), 'string', self::PRODUCTO),
                 $this->campo('sku', __('SKU'), 'string', 'p.sku'),
                 $this->campo('categoria', __('Categoría'), 'string', 'cat.nombre'),
+                $this->campo('clase', __('Clase'), 'string', self::CLASE),
                 $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
                 $this->campo('proveedor', __('Proveedor'), 'string', "COALESCE(pr.nombre, 'Sin proveedor')"),
                 $this->campo('cantidad', __('Cantidad'), 'number', 'ci.cantidad'),
@@ -749,7 +821,9 @@ final class CatalogoDatos
 
     private function movimientosInventario(): Fuente
     {
-        return new Fuente('movimientos_inventario', 'Movimientos de stock por producto y sucursal: cantidad positiva entra y negativa sale. tipo: venta, compra, entrada, salida, ajuste, traspaso o devolucion.',
+        return new Fuente('movimientos_inventario', 'Movimientos de stock por producto y sucursal: cantidad positiva entra y negativa sale. tipo: venta, compra, entrada, salida, ajuste, traspaso o devolucion'
+            .($this->produccion ? '; con Producción también produccion (motivo consumo = materia prima descontada al aprobar, cierre = lo obtenido y el ajuste del consumo real al finalizar, anulacion = devolución al anular) y envasado' : '')
+            .'. clase: venta o materia prima.',
             true,
             fn () => DB::table('movimientos_stock as ms')
                 ->join('operaciones_inventario as o', 'o.id', '=', 'ms.operacion_id')
@@ -768,6 +842,7 @@ final class CatalogoDatos
                 $this->campo('producto', __('Producto'), 'string', self::PRODUCTO),
                 $this->campo('sku', __('SKU'), 'string', 'p.sku'),
                 $this->campo('categoria', __('Categoría'), 'string', 'cat.nombre'),
+                $this->campo('clase', __('Clase'), 'string', self::CLASE),
                 $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
                 $this->campo('sucursal_destino', __('Sucursal destino'), 'string', 'sd.nombre'),
                 $this->campo('usuario', __('Usuario'), 'string', 'us.name'),
@@ -784,6 +859,433 @@ final class CatalogoDatos
             ['operacion', 'fecha', 'tipo', 'producto', 'sucursal', 'cantidad', 'saldo_posterior'],
             ['fecha', 'desc'],
             'ms.created_at',
+        );
+    }
+
+    /**
+     * Materias primas por sucursal activa (§ 5.2), con el mínimo efectivo y el aviso de Producción › Materias primas
+     * (ListadoMateriasPrimas). Utilizable = saldo − lotes vencidos, nunca negativo, como DisponibilidadMaterias: lo
+     * vencido solo cuenta con Lotes y vencimientos activo y en materias primas que controlan vencimiento.
+     */
+    private function materiasPrimas(): Fuente
+    {
+        $existencia = 'COALESCE(sn.cantidad, 0)';
+        $vencido = $this->lotes ? 'CASE WHEN p.controla_vencimiento = 1 THEN COALESCE(ve.cantidad, 0) ELSE 0 END' : '0';
+        $utilizable = "GREATEST({$existencia} - {$vencido}, 0)";
+        $minimo = 'COALESCE(sn.stock_minimo, p.stock_minimo)';
+        $bajo = "{$minimo} > 0 AND {$existencia} <= {$minimo}";
+        $sobre = "p.stock_maximo IS NOT NULL AND {$existencia} > p.stock_maximo";
+        $tope = "COALESCE(p.stock_maximo, {$minimo})";
+        $vencidos = DB::table('stock_lotes as sl')
+            ->join('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'sl.lote_id')->on('l.empresa_id', '=', 'sl.empresa_id'))
+            ->where('sl.empresa_id', $this->empresaId)
+            ->where('sl.cantidad', '>', 0)
+            ->where('l.vencimiento', '<', $this->hoy)
+            ->groupBy('sl.sucursal_id', 'sl.producto_id')
+            ->select(['sl.sucursal_id', 'sl.producto_id', DB::raw('SUM(sl.cantidad) AS cantidad')]);
+        $usos = DB::table('receta_items as ri')
+            ->join('recetas as r', fn (JoinClause $j) => $j->on('r.id', '=', 'ri.receta_id')->on('r.empresa_id', '=', 'ri.empresa_id'))
+            ->join('productos as pr', fn (JoinClause $j) => $j->on('pr.id', '=', 'r.producto_id')->on('pr.empresa_id', '=', 'r.empresa_id'))
+            ->join('unidades_medida as pu', 'pu.id', '=', 'pr.unidad_medida_id')
+            ->where('ri.empresa_id', $this->empresaId)
+            ->where('r.vigente', true)
+            ->where('r.activa', true)
+            ->groupBy('ri.producto_id')
+            ->select(['ri.producto_id', DB::raw('COUNT(DISTINCT r.id) AS recetas'),
+                DB::raw('GROUP_CONCAT(DISTINCT '.Producto::sqlNombreCompleto('pr', 'pu')." ORDER BY pr.nombre SEPARATOR ', ') AS productos")]);
+
+        return new Fuente('materias_primas', 'Materias primas e insumos de Producción (no se venden) por sucursal activa: existencia, lo que está en lotes vencidos, utilizable (lo que se puede usar para producir), mínimo, máximo, alerta (sin stock, bajo mínimo, sobre máximo o normal) y cantidad sugerida para comprar (hasta el máximo o, si no tiene, hasta el mínimo, como Producción › Sugerencia de compra). usos = productos cuya receta vigente la usa. Sin fecha principal.',
+            true,
+            fn () => DB::table('productos as p')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.empresa_id', '=', 'p.empresa_id')->where('s.activa', true))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->leftJoin('stock_niveles as sn', fn (JoinClause $j) => $j->on('sn.empresa_id', '=', 'p.empresa_id')
+                    ->on('sn.sucursal_id', '=', 's.id')->on('sn.producto_id', '=', 'p.id'))
+                ->leftJoinSub($vencidos, 've', fn (JoinClause $j) => $j->on('ve.sucursal_id', '=', 's.id')->on('ve.producto_id', '=', 'p.id'))
+                ->leftJoinSub($usos, 'uso', 'uso.producto_id', '=', 'p.id')
+                ->where('p.empresa_id', $this->empresaId)
+                ->where('p.clase', Producto::CLASE_MATERIA_PRIMA),
+            [
+                $this->campo('materia_prima', __('Materia prima'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('codigo', __('Código'), 'string', 'p.sku'),
+                $this->campo('unidad', __('Unidad'), 'string', 'u.nombre'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('existencia', __('Existencia'), 'number', $existencia),
+                $this->campo('vencido', __('En lotes vencidos'), 'number', $vencido),
+                $this->campo('utilizable', __('Utilizable'), 'number', $utilizable),
+                $this->campo('minimo', __('Mínimo'), 'number', $minimo),
+                $this->campo('maximo', __('Máximo'), 'number', 'p.stock_maximo'),
+                $this->campo('alerta', __('Alerta'), 'string', "CASE WHEN {$existencia} <= 0 THEN 'sin stock' WHEN {$bajo} THEN 'bajo mínimo' WHEN {$sobre} THEN 'sobre máximo' ELSE 'normal' END"),
+                $this->campo('sugerido_comprar', __('Sugerido para comprar'), 'number', "CASE WHEN {$bajo} AND {$tope} - {$existencia} > 0 THEN {$tope} - {$existencia} END"),
+                $this->campo('costo_promedio', __('Costo promedio'), 'money', 'p.costo_promedio'),
+                $this->campo('valor_costo', __('Valor a costo'), 'money', "{$existencia} * p.costo_promedio"),
+                $this->campo('controla_lote', __('Controla vencimiento'), 'string', "CASE WHEN p.controla_vencimiento = 1 THEN 'sí' ELSE 'no' END"),
+                $this->campo('recetas', __('Recetas que la usan'), 'integer', 'COALESCE(uso.recetas, 0)'),
+                $this->campo('usos', __('Se usa en'), 'string', 'uso.productos'),
+                $this->campo('observacion', __('Observación'), 'string', 'LEFT(p.observacion, 200)'),
+                $this->campo('estado', __('Estado'), 'string', "CASE WHEN p.activo = 1 THEN 'activa' ELSE 'inactiva' END"),
+                Campo::medida('conteo', __('Registros'), 'integer', 'COUNT(*)'),
+                Campo::medida('materias', __('Materias primas'), 'integer', 'COUNT(DISTINCT p.id)'),
+                Campo::medida('existencia_total', __('Existencia total'), 'number', "SUM({$existencia})"),
+                Campo::medida('utilizable_total', __('Utilizable'), 'number', "SUM({$utilizable})"),
+                Campo::medida('valor_costo_total', __('Valor a costo'), 'money', "SUM({$existencia} * p.costo_promedio)"),
+                Campo::medida('sin_stock', __('Sin stock'), 'integer', "SUM(CASE WHEN {$existencia} <= 0 THEN 1 ELSE 0 END)"),
+                Campo::medida('bajo_minimo', __('Bajo mínimo'), 'integer', "SUM(CASE WHEN {$bajo} THEN 1 ELSE 0 END)"),
+                Campo::medida('sobre_maximo', __('Sobre máximo'), 'integer', "SUM(CASE WHEN {$sobre} THEN 1 ELSE 0 END)"),
+            ],
+            ['materia_prima', 'sucursal', 'existencia', 'utilizable', 'minimo', 'alerta'],
+            ['materia_prima', 'asc'],
+            soloActivos: 'p.activo = 1',
+        );
+    }
+
+    /**
+     * Líneas de las recetas (§ 5.2): una fila por materia prima de cada versión. Por defecto solo las vigentes y
+     * activas; con el filtro estado se ven las desactivadas y las versiones anteriores.
+     */
+    private function recetas(): Fuente
+    {
+        $costoLinea = 'ri.cantidad * m.costo_promedio';
+        $estado = "CASE WHEN r.vigente = 0 THEN 'versión anterior' WHEN r.activa = 0 THEN 'desactivada' ELSE 'vigente' END";
+
+        return new Fuente('recetas', 'Recetas de los productos fabricados: una fila por materia prima de cada versión, con la cantidad que lleva para producir la cantidad base. estado: vigente, desactivada o versión anterior (por defecto solo vigente). Costos con el costo promedio actual de cada materia prima: es costo de materiales, sin mano de obra ni gastos indirectos; costo_por_unidad = costo de la línea ÷ cantidad base. Fecha principal: creación de la versión.',
+            true,
+            fn () => DB::table('receta_items as ri')
+                ->join('recetas as r', fn (JoinClause $j) => $j->on('r.id', '=', 'ri.receta_id')->on('r.empresa_id', '=', 'ri.empresa_id'))
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'r.producto_id')->on('p.empresa_id', '=', 'r.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('productos as m', fn (JoinClause $j) => $j->on('m.id', '=', 'ri.producto_id')->on('m.empresa_id', '=', 'ri.empresa_id'))
+                ->join('unidades_medida as mu', 'mu.id', '=', 'm.unidad_medida_id')
+                ->leftJoin('users as us', 'us.id', '=', 'r.usuario_id')
+                ->where('ri.empresa_id', $this->empresaId),
+            [
+                $this->campo('producto', __('Producto'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('sku', __('SKU'), 'string', 'p.sku'),
+                $this->campo('version', __('Versión'), 'integer', 'r.version'),
+                $this->campo('estado', __('Estado'), 'string', $estado),
+                $this->campo('cantidad_base', __('Cantidad base'), 'number', 'r.cantidad_base'),
+                $this->campo('unidad_producto', __('Unidad del producto'), 'string', 'u.nombre'),
+                $this->campo('materia_prima', __('Materia prima'), 'string', Producto::sqlNombreCompleto('m', 'mu')),
+                $this->campo('codigo_materia', __('Código de la materia prima'), 'string', 'm.sku'),
+                $this->campo('cantidad', __('Cantidad'), 'number', 'ri.cantidad'),
+                $this->campo('unidad', __('Unidad'), 'string', 'mu.nombre'),
+                $this->campo('estado_materia', __('Estado de la materia prima'), 'string', "CASE WHEN m.activo = 1 THEN 'activa' ELSE 'inactiva' END"),
+                $this->campo('costo_promedio', __('Costo promedio'), 'money', 'm.costo_promedio'),
+                $this->campo('costo_linea', __('Costo de la línea'), 'money', $costoLinea),
+                $this->campo('costo_por_unidad', __('Costo por unidad producida'), 'money', "{$costoLinea} / NULLIF(r.cantidad_base, 0)"),
+                $this->campo('nota', __('Nota'), 'string', 'LEFT(r.nota, 200)'),
+                $this->campo('creada_por', __('Creada por'), 'string', 'us.name'),
+                ...$this->fechas('r.created_at'),
+                Campo::medida('conteo', __('Líneas'), 'integer', 'COUNT(*)'),
+                Campo::medida('recetas', __('Recetas'), 'integer', 'COUNT(DISTINCT r.id)'),
+                Campo::medida('productos', __('Productos'), 'integer', 'COUNT(DISTINCT r.producto_id)'),
+                Campo::medida('materias', __('Materias primas'), 'integer', 'COUNT(DISTINCT ri.producto_id)'),
+                Campo::medida('costo_receta', __('Costo de la receta'), 'money', "SUM({$costoLinea})"),
+                Campo::medida('costo_unitario_receta', __('Costo por unidad producida'), 'money', "SUM({$costoLinea} / NULLIF(r.cantidad_base, 0))"),
+            ],
+            ['producto', 'version', 'cantidad_base', 'materia_prima', 'cantidad', 'unidad', 'costo_linea'],
+            ['producto', 'asc'],
+            'r.created_at',
+            soloActivos: 'r.vigente = 1 AND r.activa = 1',
+        );
+    }
+
+    /**
+     * Órdenes de producción en todos sus estados (§ 5.2), para el control: atrasos, anulaciones, quién emitió. Lo
+     * producido está en la fuente produccion (solo finalizadas), así el modelo no cuenta como hecho lo emitido.
+     */
+    private function ordenesProduccion(): Fuente
+    {
+        $abierta = "o.estado IN ('emitida', 'aprobada')";
+        $atrasada = "{$abierta} AND o.fecha_programada < referencia.hoy";
+        $finalizada = "o.estado = 'finalizada'";
+
+        return new Fuente('ordenes_produccion', 'Órdenes de producción en todos sus estados: emitida (todavía no descontó materia prima ni la reserva), aprobada (ya descontó la materia prima), finalizada (ya ingresó lo obtenido) o anulada. dias_atraso = días desde la fecha programada de una emitida o aprobada. Para cuánto se produjo usa la fuente produccion. Fecha principal: emisión.',
+            true,
+            fn () => DB::table('ordenes_produccion as o')
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'o.producto_id')->on('p.empresa_id', '=', 'o.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'o.sucursal_id')->on('s.empresa_id', '=', 'o.empresa_id'))
+                ->leftJoin('recetas as r', fn (JoinClause $j) => $j->on('r.id', '=', 'o.receta_id')->on('r.empresa_id', '=', 'o.empresa_id'))
+                ->leftJoin('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'o.lote_id')->on('l.empresa_id', '=', 'o.empresa_id'))
+                ->leftJoin('users as ue', 'ue.id', '=', 'o.emitida_por')
+                ->leftJoin('users as uf', 'uf.id', '=', 'o.finalizada_por')
+                ->where('o.empresa_id', $this->empresaId),
+            [
+                $this->campo('orden', __('Orden'), 'string', self::ORDEN, orden: 'o.numero'),
+                ...$this->fechas('o.created_at'),
+                $this->campo('estado', __('Estado'), 'string', 'o.estado'),
+                $this->campo('producto', __('Producto'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('sku', __('SKU'), 'string', 'p.sku'),
+                $this->campo('unidad', __('Unidad'), 'string', 'u.nombre'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('fecha_programada', __('Fecha programada'), 'date', 'o.fecha_programada'),
+                $this->campo('fecha_aprobacion', __('Fecha de aprobación'), 'date', "DATE({$this->local('o.aprobada_en')})"),
+                $this->campo('fecha_finalizacion', __('Fecha de finalización'), 'date', "DATE({$this->local('o.finalizada_en')})"),
+                $this->campo('fecha_anulacion', __('Fecha de anulación'), 'date', "DATE({$this->local('o.anulada_en')})"),
+                $this->campo('dias_atraso', __('Días de atraso'), 'integer', "CASE WHEN {$atrasada} THEN DATEDIFF(referencia.hoy, o.fecha_programada) ELSE 0 END"),
+                $this->campo('planificado', __('Planificado'), 'number', 'o.cantidad_planificada'),
+                $this->campo('obtenido', __('Obtenido'), 'number', "CASE WHEN {$finalizada} THEN o.cantidad_obtenida END"),
+                $this->campo('rendimiento', __('Rendimiento'), 'percent', "CASE WHEN {$finalizada} THEN 100 * o.cantidad_obtenida / NULLIF(o.cantidad_planificada, 0) END"),
+                $this->campo('costo_total', __('Costo de materiales'), 'money', "CASE WHEN {$finalizada} THEN o.costo_total END"),
+                $this->campo('version_receta', __('Versión de receta'), 'integer', 'r.version'),
+                $this->campo('emitida_por', __('Emitida por'), 'string', 'ue.name'),
+                $this->campo('finalizada_por', __('Finalizada por'), 'string', 'uf.name'),
+                $this->campo('nota', __('Nota'), 'string', 'LEFT(o.nota, 200)'),
+                $this->campo('motivo_anulacion', __('Motivo de anulación'), 'string', 'LEFT(o.motivo_anulacion, 200)'),
+                $this->campo('lote', __('Lote'), 'string', 'l.numero'),
+                Campo::medida('conteo', __('Órdenes'), 'integer', 'COUNT(*)'),
+                Campo::medida('emitidas', __('Emitidas'), 'integer', "SUM(CASE WHEN o.estado = 'emitida' THEN 1 ELSE 0 END)"),
+                Campo::medida('aprobadas', __('Aprobadas'), 'integer', "SUM(CASE WHEN o.estado = 'aprobada' THEN 1 ELSE 0 END)"),
+                Campo::medida('finalizadas', __('Finalizadas'), 'integer', "SUM(CASE WHEN {$finalizada} THEN 1 ELSE 0 END)"),
+                Campo::medida('anuladas', __('Anuladas'), 'integer', "SUM(CASE WHEN o.estado = 'anulada' THEN 1 ELSE 0 END)"),
+                Campo::medida('atrasadas', __('Atrasadas'), 'integer', "SUM(CASE WHEN {$atrasada} THEN 1 ELSE 0 END)"),
+                Campo::medida('planificado_total', __('Planificado'), 'number', 'SUM(o.cantidad_planificada)'),
+            ],
+            ['orden', 'fecha', 'estado', 'producto', 'sucursal', 'fecha_programada', 'planificado'],
+            ['fecha', 'desc'],
+            'o.created_at',
+        );
+    }
+
+    /**
+     * Lo producido (§ 5.2): órdenes finalizadas por su fecha de finalización, los mismos criterios y sumas que
+     * Producción › Reportes de producción (ReporteProduccion).
+     */
+    private function produccionFinalizada(): Fuente
+    {
+        return new Fuente('produccion', 'Lo producido: solo órdenes finalizadas, por su fecha de finalización (las mismas cifras de Reportes de producción). rendimiento = obtenido ÷ planificado × 100: menos de 100 es merma, más es excedente. costo = costo de materiales (materias primas a costo promedio al aprobar), sin mano de obra ni gastos indirectos. Las cantidades están en la unidad de cada producto: agrupa por producto antes de sumarlas. El lote de lo producido es el número de la orden.',
+            true,
+            fn () => DB::table('ordenes_produccion as o')
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'o.producto_id')->on('p.empresa_id', '=', 'o.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'o.sucursal_id')->on('s.empresa_id', '=', 'o.empresa_id'))
+                ->leftJoin('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'o.lote_id')->on('l.empresa_id', '=', 'o.empresa_id'))
+                ->leftJoin('users as uf', 'uf.id', '=', 'o.finalizada_por')
+                ->where('o.empresa_id', $this->empresaId)
+                ->where('o.estado', 'finalizada'),
+            [
+                $this->campo('orden', __('Orden'), 'string', self::ORDEN, orden: 'o.numero'),
+                ...$this->fechas('o.finalizada_en'),
+                $this->campo('producto', __('Producto'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('sku', __('SKU'), 'string', 'p.sku'),
+                $this->campo('unidad', __('Unidad'), 'string', 'u.nombre'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('planificado', __('Planificado'), 'number', 'o.cantidad_planificada'),
+                $this->campo('obtenido', __('Obtenido'), 'number', 'o.cantidad_obtenida'),
+                $this->campo('diferencia', __('Diferencia'), 'number', 'o.cantidad_obtenida - o.cantidad_planificada'),
+                $this->campo('rendimiento', __('Rendimiento'), 'percent', '100 * o.cantidad_obtenida / NULLIF(o.cantidad_planificada, 0)'),
+                $this->campo('costo_total', __('Costo de materiales'), 'money', 'o.costo_total'),
+                $this->campo('costo_unitario', __('Costo unitario'), 'money', 'o.costo_unitario'),
+                $this->campo('lote', __('Lote'), 'string', 'l.numero'),
+                $this->campo('finalizada_por', __('Finalizada por'), 'string', 'uf.name'),
+                $this->campo('nota', __('Nota'), 'string', 'LEFT(o.nota, 200)'),
+                Campo::medida('conteo', __('Órdenes'), 'integer', 'COUNT(*)'),
+                Campo::medida('cantidad_planificada', __('Planificado'), 'number', 'SUM(o.cantidad_planificada)'),
+                Campo::medida('cantidad_obtenida', __('Obtenido'), 'number', 'SUM(o.cantidad_obtenida)'),
+                Campo::medida('rendimiento_total', __('Rendimiento'), 'percent', '100 * SUM(o.cantidad_obtenida) / NULLIF(SUM(o.cantidad_planificada), 0)'),
+                Campo::medida('costo_produccion', __('Costo de materiales'), 'money', 'SUM(o.costo_total)'),
+                Campo::medida('costo_por_unidad', __('Costo por unidad'), 'money', 'SUM(o.costo_total) / NULLIF(SUM(o.cantidad_obtenida), 0)'),
+                Campo::medida('con_merma', __('Órdenes con merma'), 'integer', 'SUM(CASE WHEN o.cantidad_obtenida < o.cantidad_planificada THEN 1 ELSE 0 END)'),
+                Campo::medida('productos', __('Productos'), 'integer', 'COUNT(DISTINCT o.producto_id)'),
+            ],
+            ['orden', 'fecha', 'producto', 'sucursal', 'planificado', 'obtenido', 'rendimiento', 'costo_total'],
+            ['fecha', 'desc'],
+            'o.finalizada_en',
+        );
+    }
+
+    /**
+     * Consumo real de materias primas de las órdenes finalizadas (§ 5.2): teórico (receta escalada), usado y su costo
+     * con el costo guardado al aprobar, como la pestaña Materias primas de Reportes de producción.
+     */
+    private function consumosProduccion(): Fuente
+    {
+        $diferencia = '(i.cantidad_real - i.cantidad_teorica)';
+
+        return new Fuente('consumos_produccion', 'Materias primas usadas por cada orden finalizada, por la fecha de finalización de la orden: teórico (lo de la receta escalada), usado (lo real), diferencia (positiva = se usó de más), desvío % y costo con el costo unitario guardado al aprobar. Las cantidades están en la unidad de cada materia prima: agrupa por materia prima antes de sumarlas.',
+            true,
+            fn () => DB::table('orden_produccion_items as i')
+                ->join('ordenes_produccion as o', fn (JoinClause $j) => $j->on('o.id', '=', 'i.orden_id')->on('o.empresa_id', '=', 'i.empresa_id'))
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'o.producto_id')->on('p.empresa_id', '=', 'o.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('productos as m', fn (JoinClause $j) => $j->on('m.id', '=', 'i.producto_id')->on('m.empresa_id', '=', 'i.empresa_id'))
+                ->join('unidades_medida as mu', 'mu.id', '=', 'm.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'o.sucursal_id')->on('s.empresa_id', '=', 'o.empresa_id'))
+                ->where('i.empresa_id', $this->empresaId)
+                ->where('o.estado', 'finalizada'),
+            [
+                $this->campo('orden', __('Orden'), 'string', self::ORDEN, orden: 'o.numero'),
+                ...$this->fechas('o.finalizada_en'),
+                $this->campo('producto', __('Producto fabricado'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('materia_prima', __('Materia prima'), 'string', Producto::sqlNombreCompleto('m', 'mu')),
+                $this->campo('codigo_materia', __('Código de la materia prima'), 'string', 'm.sku'),
+                $this->campo('unidad', __('Unidad'), 'string', 'mu.nombre'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('teorico', __('Teórico'), 'number', 'i.cantidad_teorica'),
+                $this->campo('usado', __('Usado'), 'number', 'i.cantidad_real'),
+                $this->campo('diferencia', __('Diferencia'), 'number', $diferencia),
+                $this->campo('desvio', __('Desvío'), 'percent', "100 * {$diferencia} / NULLIF(i.cantidad_teorica, 0)"),
+                $this->campo('costo_unitario', __('Costo unitario'), 'money', 'i.costo_unitario'),
+                $this->campo('costo_usado', __('Costo de lo usado'), 'money', 'i.cantidad_real * i.costo_unitario'),
+                $this->campo('costo_diferencia', __('Costo de la diferencia'), 'money', "{$diferencia} * i.costo_unitario"),
+                Campo::medida('conteo', __('Líneas'), 'integer', 'COUNT(*)'),
+                Campo::medida('ordenes', __('Órdenes'), 'integer', 'COUNT(DISTINCT o.id)'),
+                Campo::medida('teorico_total', __('Teórico'), 'number', 'SUM(i.cantidad_teorica)'),
+                Campo::medida('usado_total', __('Usado'), 'number', 'SUM(i.cantidad_real)'),
+                Campo::medida('diferencia_total', __('Diferencia'), 'number', "SUM({$diferencia})"),
+                Campo::medida('desvio_total', __('Desvío'), 'percent', "100 * SUM({$diferencia}) / NULLIF(SUM(i.cantidad_teorica), 0)"),
+                Campo::medida('costo_total', __('Costo de lo usado'), 'money', 'SUM(i.cantidad_real * i.costo_unitario)'),
+                Campo::medida('costo_diferencia_total', __('Costo de la diferencia'), 'money', "SUM({$diferencia} * i.costo_unitario)"),
+            ],
+            ['orden', 'fecha', 'producto', 'materia_prima', 'teorico', 'usado', 'diferencia', 'costo_usado'],
+            ['fecha', 'desc'],
+            'o.finalizada_en',
+        );
+    }
+
+    /**
+     * Presentaciones obtenidas en cada envasado (§ 5.2). Usa el índice (empresa_id, created_at) de envasados.
+     */
+    private function envasados(): Fuente
+    {
+        return new Fuente('envasados', 'Envasados: una fila por presentación obtenida al envasar granel (las presentaciones llevan el mismo número de lote que el granel). unidades = unidades buenas; costo = granel y envases a costo promedio (costo de materiales). Fecha principal: fecha del envasado.',
+            true,
+            fn () => DB::table('envasado_items as ei')
+                ->join('envasados as e', fn (JoinClause $j) => $j->on('e.id', '=', 'ei.envasado_id')->on('e.empresa_id', '=', 'ei.empresa_id'))
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'ei.producto_id')->on('p.empresa_id', '=', 'ei.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('productos as g', fn (JoinClause $j) => $j->on('g.id', '=', 'e.granel_id')->on('g.empresa_id', '=', 'e.empresa_id'))
+                ->join('unidades_medida as gu', 'gu.id', '=', 'g.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'e.sucursal_id')->on('s.empresa_id', '=', 'e.empresa_id'))
+                ->leftJoin('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'e.lote_id')->on('l.empresa_id', '=', 'e.empresa_id'))
+                ->leftJoin('users as us', 'us.id', '=', 'e.usuario_id')
+                ->where('ei.empresa_id', $this->empresaId),
+            [
+                $this->campo('envasado', __('Envasado'), 'string', $this->codigo('ENV', 'e.numero'), orden: 'e.numero'),
+                ...$this->fechas('e.created_at'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('granel', __('Granel'), 'string', Producto::sqlNombreCompleto('g', 'gu')),
+                $this->campo('lote', __('Lote'), 'string', 'l.numero'),
+                $this->campo('presentacion', __('Presentación'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('sku', __('SKU'), 'string', 'p.sku'),
+                $this->campo('unidades', __('Unidades'), 'number', 'ei.unidades'),
+                $this->campo('granel_por_unidad', __('Granel por unidad'), 'number', 'ei.granel_por_unidad'),
+                $this->campo('granel_necesario', __('Granel necesario'), 'number', 'ei.unidades * ei.granel_por_unidad'),
+                $this->campo('costo_unitario', __('Costo unitario'), 'money', 'ei.costo_unitario'),
+                $this->campo('costo_total', __('Costo de materiales'), 'money', 'ei.costo_total'),
+                $this->campo('usuario', __('Usuario'), 'string', 'us.name'),
+                $this->campo('nota', __('Nota'), 'string', 'LEFT(e.nota, 200)'),
+                Campo::medida('conteo', __('Líneas'), 'integer', 'COUNT(*)'),
+                Campo::medida('envasados', __('Envasados'), 'integer', 'COUNT(DISTINCT e.id)'),
+                Campo::medida('unidades_total', __('Unidades'), 'number', 'SUM(ei.unidades)'),
+                Campo::medida('costo_total_envasado', __('Costo de materiales'), 'money', 'SUM(ei.costo_total)'),
+                Campo::medida('costo_unitario_promedio', __('Costo unitario promedio'), 'money', 'SUM(ei.costo_total) / NULLIF(SUM(ei.unidades), 0)'),
+                Campo::medida('presentaciones', __('Presentaciones'), 'integer', 'COUNT(DISTINCT ei.producto_id)'),
+            ],
+            ['envasado', 'fecha', 'sucursal', 'granel', 'lote', 'presentacion', 'unidades', 'costo_total'],
+            ['fecha', 'desc'],
+            'e.created_at',
+        );
+    }
+
+    /**
+     * Materiales de cada envasado (§ 5.2): el granel y cada envase, con lo necesario, lo usado y la merma
+     * (MaterialesEnvasado). El período filtra por la fecha del envasado.
+     */
+    private function materialesEnvasado(): Fuente
+    {
+        $merma = '(mx.usado - mx.necesario)';
+
+        return new Fuente('materiales_envasado', 'Materiales de cada envasado: el granel y cada envase (botellas, tapas, etiquetas). necesario = lo que piden las unidades obtenidas; usado = lo real; merma = usado − necesario (positiva = se perdió material). Costo con el costo guardado en el envasado. Las cantidades están en la unidad de cada material: agrupa por material antes de sumarlas. Fecha principal: fecha del envasado.',
+            true,
+            fn () => DB::query()->fromSub(MaterialesEnvasado::consulta($this->empresaId), 'mx')
+                ->join('envasados as e', fn (JoinClause $j) => $j->on('e.id', '=', 'mx.envasado_id')->where('e.empresa_id', '=', $this->empresaId))
+                ->join('productos as m', fn (JoinClause $j) => $j->on('m.id', '=', 'mx.producto_id')->where('m.empresa_id', '=', $this->empresaId))
+                ->join('unidades_medida as mu', 'mu.id', '=', 'm.unidad_medida_id')
+                ->join('productos as g', fn (JoinClause $j) => $j->on('g.id', '=', 'e.granel_id')->on('g.empresa_id', '=', 'e.empresa_id'))
+                ->join('unidades_medida as gu', 'gu.id', '=', 'g.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'e.sucursal_id')->on('s.empresa_id', '=', 'e.empresa_id'))
+                ->leftJoin('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'e.lote_id')->on('l.empresa_id', '=', 'e.empresa_id')),
+            [
+                $this->campo('envasado', __('Envasado'), 'string', $this->codigo('ENV', 'e.numero'), orden: 'e.numero'),
+                ...$this->fechas('e.created_at'),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('granel', __('Granel envasado'), 'string', Producto::sqlNombreCompleto('g', 'gu')),
+                $this->campo('lote', __('Lote'), 'string', 'l.numero'),
+                $this->campo('material', __('Material'), 'string', Producto::sqlNombreCompleto('m', 'mu')),
+                $this->campo('tipo', __('Tipo'), 'string', 'mx.tipo'),
+                $this->campo('unidad', __('Unidad'), 'string', 'mu.nombre'),
+                $this->campo('necesario', __('Necesario'), 'number', 'mx.necesario'),
+                $this->campo('usado', __('Usado'), 'number', 'mx.usado'),
+                $this->campo('merma', __('Merma'), 'number', $merma),
+                $this->campo('merma_pct', __('Merma %'), 'percent', "100 * {$merma} / NULLIF(mx.necesario, 0)"),
+                $this->campo('costo_unitario', __('Costo unitario'), 'money', 'mx.costo_unitario'),
+                $this->campo('costo_usado', __('Costo de lo usado'), 'money', 'mx.usado * mx.costo_unitario'),
+                $this->campo('costo_merma', __('Costo de la merma'), 'money', "{$merma} * mx.costo_unitario"),
+                Campo::medida('conteo', __('Líneas'), 'integer', 'COUNT(*)'),
+                Campo::medida('envasados', __('Envasados'), 'integer', 'COUNT(DISTINCT mx.envasado_id)'),
+                Campo::medida('necesario_total', __('Necesario'), 'number', 'SUM(mx.necesario)'),
+                Campo::medida('usado_total', __('Usado'), 'number', 'SUM(mx.usado)'),
+                Campo::medida('merma_total', __('Merma'), 'number', "SUM({$merma})"),
+                Campo::medida('merma_pct_total', __('Merma %'), 'percent', "100 * SUM({$merma}) / NULLIF(SUM(mx.necesario), 0)"),
+                Campo::medida('costo_merma_total', __('Costo de la merma'), 'money', "SUM({$merma} * mx.costo_unitario)"),
+            ],
+            ['envasado', 'fecha', 'material', 'tipo', 'necesario', 'usado', 'merma', 'costo_merma'],
+            ['fecha', 'desc'],
+            'e.created_at',
+        );
+    }
+
+    /**
+     * Lotes con stock por sucursal (§ 5.2), como Inventario › Vencimientos (ReporteVencimientos): solo productos que
+     * controlan vencimiento. El vendedor ve su sucursal, sin costos ni materias primas. Fecha principal: vencimiento.
+     */
+    private function lotesConStock(): Fuente
+    {
+        $vencido = 'l.vencimiento < referencia.hoy';
+        $dias = 'DATEDIFF(l.vencimiento, referencia.hoy)';
+
+        return new Fuente('lotes', 'Lotes con stock por sucursal (Inventario › Vencimientos), solo productos que controlan vencimiento. estado: vencido, vence en 30 días, vence en 60 días, vence en 90 días, vigente o sin fecha (stock de regularización, sin número ni vencimiento). dias_para_vencer negativo = días vencido. El día del vencimiento todavía se puede vender. Fecha principal: vencimiento (date_from y date_to filtran por vencimiento).'
+            .($this->administrador() ? ' clase: venta o materia prima.' : ''),
+            false,
+            fn () => $this->conSucursal(DB::table('stock_lotes as sl')
+                ->join('lotes as l', fn (JoinClause $j) => $j->on('l.id', '=', 'sl.lote_id')->on('l.empresa_id', '=', 'sl.empresa_id'))
+                ->join('productos as p', fn (JoinClause $j) => $j->on('p.id', '=', 'sl.producto_id')->on('p.empresa_id', '=', 'sl.empresa_id'))
+                ->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+                ->join('sucursales as s', fn (JoinClause $j) => $j->on('s.id', '=', 'sl.sucursal_id')->on('s.empresa_id', '=', 'sl.empresa_id'))
+                ->where('sl.empresa_id', $this->empresaId)
+                ->where('p.controla_vencimiento', true)
+                ->where('sl.cantidad', '>', 0)
+                ->when(! $this->administrador(), fn (Builder $q) => $q->where('p.clase', Producto::CLASE_VENTA)), 'sl.sucursal_id'),
+            [
+                $this->campo('producto', __('Producto'), 'string', Producto::sqlNombreCompleto('p', 'u')),
+                $this->campo('sku', __('SKU'), 'string', 'p.sku'),
+                $this->campo('clase', __('Clase'), 'string', "CASE WHEN p.clase = 'materia_prima' THEN 'materia prima' ELSE 'venta' END", administrador: true),
+                $this->campo('lote', __('Lote'), 'string', "COALESCE(l.numero, 'sin número (regularización)')"),
+                $this->campo('vencimiento', __('Vencimiento'), 'date', 'l.vencimiento'),
+                $this->campo('dias_para_vencer', __('Días para vencer'), 'integer', $dias),
+                $this->campo('estado', __('Estado'), 'string', "CASE WHEN l.vencimiento IS NULL THEN 'sin fecha' WHEN {$vencido} THEN 'vencido'
+                    WHEN {$dias} <= 30 THEN 'vence en 30 días' WHEN {$dias} <= 60 THEN 'vence en 60 días' WHEN {$dias} <= 90 THEN 'vence en 90 días' ELSE 'vigente' END"),
+                $this->campo('sucursal', __('Sucursal'), 'string', 's.nombre'),
+                $this->campo('cantidad', __('Cantidad'), 'number', 'sl.cantidad'),
+                $this->campo('unidad', __('Unidad'), 'string', 'u.nombre'),
+                $this->campo('costo_promedio', __('Costo promedio'), 'money', 'p.costo_promedio', administrador: true),
+                $this->campo('valor_costo', __('Valor a costo'), 'money', 'sl.cantidad * p.costo_promedio', administrador: true),
+                ...$this->fechas('l.vencimiento', false),
+                Campo::medida('conteo', __('Registros'), 'integer', 'COUNT(*)'),
+                Campo::medida('lotes', __('Lotes'), 'integer', 'COUNT(DISTINCT l.id)'),
+                Campo::medida('productos', __('Productos'), 'integer', 'COUNT(DISTINCT p.id)'),
+                Campo::medida('cantidad_total', __('Cantidad'), 'number', 'SUM(sl.cantidad)'),
+                Campo::medida('vencidos', __('Vencidos'), 'integer', "SUM(CASE WHEN {$vencido} THEN 1 ELSE 0 END)"),
+                Campo::medida('por_vencer_30', __('Vencen en 30 días'), 'integer', "SUM(CASE WHEN {$dias} BETWEEN 0 AND 30 THEN 1 ELSE 0 END)"),
+                Campo::medida('valor_costo_total', __('Valor a costo'), 'money', 'SUM(sl.cantidad * p.costo_promedio)', true),
+                Campo::medida('valor_vencido', __('Valor vencido a costo'), 'money', "SUM(CASE WHEN {$vencido} THEN sl.cantidad * p.costo_promedio ELSE 0 END)", true),
+            ],
+            ['producto', 'lote', 'vencimiento', 'estado', 'sucursal', 'cantidad'],
+            ['vencimiento', 'asc'],
+            'l.vencimiento',
+            false,
         );
     }
 
@@ -855,6 +1357,17 @@ final class CatalogoDatos
     private function codigo(string $serie, string $columna): string
     {
         return self::sqlCodigo($serie, $columna);
+    }
+
+    /**
+     * Campos que solo existen con Producción (administrador con la capacidad).
+     *
+     * @param  list<Campo>  $campos
+     * @return list<Campo>
+     */
+    private function conProduccion(array $campos): array
+    {
+        return $this->produccion ? $campos : [];
     }
 
     private function conSucursal(Builder $consulta, string $columna): Builder

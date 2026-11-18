@@ -31,6 +31,18 @@
 .agente-historial-item:hover{background:var(--panel-soft)}
 .agente-historial-item.active{border-color:var(--accent-border);background:var(--sidebar-active)}
 .agente-historial-item.active span{color:var(--brand-bright)}
+.agente-historial-fila{display:flex;align-items:center;gap:4px}
+.agente-acciones-msg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.agente-acciones-msg .btn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:var(--accent-border);color:var(--brand-bright);text-decoration:none}
+.agente-historial-fila .agente-historial-item{flex:1;min-width:0}
+.agente-borrar{flex:none;cursor:pointer}
+.agente-historial-fila .agente-borrar{border-color:transparent;background:transparent;opacity:.6}
+.agente-historial-fila:hover .agente-borrar,.agente-borrar:focus-visible{opacity:1}
+.agente-borrar:hover,.agente-borrar:focus-visible{color:var(--red);border-color:var(--border)}
+.agente-borrar:disabled{opacity:.4;cursor:not-allowed}
+.agente-eliminar-titulo{margin:0;overflow-wrap:anywhere;color:var(--text-strong);font-size:13px;font-weight:600}
+.agente .modal .btn.danger{border-color:rgba(240,141,129,.55);color:var(--red)}
+.agente .modal .btn.danger:hover{background:rgba(240,141,129,.12)}
 .agente-historial-vacio{margin:0;padding:14px 10px;color:var(--muted);font-size:12px}
 
 .agente-mensajes{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px 18px 18px;scrollbar-width:thin;scrollbar-color:var(--scroll) transparent}

@@ -2,6 +2,7 @@
 
 namespace App\Domain\AgenteMozi\Herramientas;
 
+use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Datos\SaldosPorCobrar;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
@@ -109,7 +110,7 @@ final class AnalizarCobranza extends HerramientaNegocio
             ->orderByRaw('CASE WHEN pc.max_atraso > 30 THEN 0 WHEN pc.vencido > 0 THEN 1 ELSE 2 END')
             ->orderByDesc('pc.vencido')->orderByDesc('pc.saldo')
             ->limit($top)
-            ->select([DB::raw("COALESCE(c.nombre, 'Sin cliente') AS cliente"), 'c.documento', 'c.telefono', 'pc.saldo', 'pc.vencido', 'pc.documentos',
+            ->select(['pc.cliente_id', DB::raw("COALESCE(c.nombre, 'Sin cliente') AS cliente"), 'c.documento', 'c.telefono', 'pc.saldo', 'pc.vencido', 'pc.documentos',
                 'pc.max_atraso', 'pc.proximo_vencimiento', DB::raw('COALESCE(pu.a_tiempo, 0) AS cobros_a_tiempo'),
                 DB::raw('COALESCE(pu.atrasados, 0) AS cobros_atrasados'), DB::raw("{$prioridad} AS prioridad")])
             ->selectRaw('DATE('.$this->local('ul.ultima').') AS ultimo_cobro', [$desfase])
@@ -138,13 +139,15 @@ final class AnalizarCobranza extends HerramientaNegocio
             $this->dataset('antiguedad', [$this->col('tramo', __('Antigüedad'), 'string'), $saldo('saldo', __('Saldo')), $this->col('documentos', __('Documentos'), 'integer')],
                 array_map(fn (string $tramo) => ['tramo' => $tramo, 'saldo' => $tramos->get($tramo)->saldo ?? '0', 'documentos' => $tramos->get($tramo)->documentos ?? 0], self::TRAMOS),
                 $meta, 'Saldo pendiente por tramo de atraso (en orden). «sin vencimiento» nunca se considera vencido.'),
-            $this->dataset('clientes', [
+            // Acción (§ UC-11): abrir «Registrar cobro» con el cliente elegido. El agente nunca registra cobros.
+            $this->conAcciones($this->dataset('clientes', [
                 $this->col('cliente', __('Cliente'), 'string'), $this->col('documento', __('Documento'), 'string'), $this->col('telefono', __('Teléfono'), 'string'),
                 $saldo('saldo', __('Saldo')), $saldo('vencido', __('Vencido')), $this->col('documentos', __('Documentos'), 'integer'),
                 $this->col('max_atraso', __('Máximo atraso (días)'), 'integer'), $this->col('proximo_vencimiento', __('Próximo vencimiento'), 'date'),
                 $this->col('ultimo_cobro', __('Último cobro'), 'date'), $this->col('cobros_a_tiempo', __('Cobros a tiempo'), 'integer'),
                 $this->col('cobros_atrasados', __('Cobros atrasados'), 'integer'), $this->col('prioridad', __('Prioridad'), 'string'),
             ], $clientes, $meta, "Hasta {$top} clientes con saldo, ordenados por prioridad, vencido y saldo. Cobros a tiempo/atrasados: aplicaciones a cuotas pagadas hasta su vencimiento o después."),
+                $clientes->whereNotNull('cliente_id')->map(fn (object $c) => CatalogoAcciones::crear('registrar_cobro', (int) $c->cliente_id, __('Registrar cobro · :cliente', ['cliente' => $c->cliente])))),
             $this->dataset('proximos', [
                 $this->col('documento', __('Documento'), 'string'), $this->col('cliente', __('Cliente'), 'string'), $this->col('vencimiento', __('Vencimiento'), 'date'),
                 $saldo('saldo', __('Saldo')), $this->col('dias_para_vencer', __('Días para vencer'), 'integer'),

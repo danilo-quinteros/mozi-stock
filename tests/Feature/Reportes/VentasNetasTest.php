@@ -136,3 +136,19 @@ test('returns follow the branch filter and never show another company', function
         ->set('desde', '2026-10-20')->set('hasta', '2026-10-20')
         ->assertSee('Bs 20,00')->assertDontSee('Bs 35,00')->assertDontSee('Empresa B');
 });
+
+test('«Reportes por categoría» shows Ventas first and opens on it, also in the CSV without a tab', function () {
+    Livewire::test(Panel::class)
+        ->assertSet('pestana', 'ventas')
+        ->assertSeeHtmlInOrder(["\$set('pestana', 'ventas')", "\$set('pestana', 'cobros')", "\$set('pestana', 'inventario')", "\$set('pestana', 'creditos')"])
+        ->assertSee('Vendido ≠ cobrado')
+        // Una pestaña inventada desde el navegador vuelve a Ventas en vez de romper la vista.
+        ->set('pestana', 'otra')
+        ->assertSet('pestana', 'ventas')
+        ->assertSee('Vendido ≠ cobrado');
+
+    Livewire::withQueryParams(['pestana' => 'otra'])->test(Panel::class)->assertSet('pestana', 'ventas');
+
+    $csv = $this->get(route('reportes.exportar', ['desde' => '2026-10-19', 'hasta' => '2026-10-19']));
+    expect($csv->headers->get('content-disposition'))->toContain('ventas-2026-10-19_2026-10-19.csv');
+});

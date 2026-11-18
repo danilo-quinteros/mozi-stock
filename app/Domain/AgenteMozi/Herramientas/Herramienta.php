@@ -3,12 +3,14 @@
 namespace App\Domain\AgenteMozi\Herramientas;
 
 use App\Domain\AgenteMozi\ContextoAgente;
+use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 
 /**
  * Herramienta empresarial que el modelo puede pedir (§ 5): nombre estable, esquema de argumentos,
  * permiso necesario y resultados trazables como datasets. Nunca recibe empresa ni sucursal del modelo:
- * las toma de ContextoAgente. Las herramientas de esta etapa son de solo lectura.
+ * las toma de ContextoAgente. Las herramientas de esta etapa son de solo lectura: a lo sumo ofrecen
+ * acciones, enlaces a pantallas existentes de la lista cerrada de CatalogoAcciones (IA-P3).
  */
 interface Herramienta
 {
@@ -39,7 +41,7 @@ interface Herramienta
 
     /**
      * @param  array<string, mixed>  $argumentos  ya validados
-     * @return list<array{dataset: DatasetPropuesto, descripcion: string}>
+     * @return list<array{dataset: DatasetPropuesto, descripcion: string, acciones?: list<AccionPropuesta>}>
      */
     public function ejecutar(ContextoAgente $contexto, array $argumentos): array;
 }
