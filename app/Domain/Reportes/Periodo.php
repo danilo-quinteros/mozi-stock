@@ -3,6 +3,7 @@
 namespace App\Domain\Reportes;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 
 /**
  * Rango de días de negocio (America/La_Paz). Los timestamps se guardan en UTC; un día de
@@ -38,6 +39,47 @@ final class Periodo
         $hoy = CarbonImmutable::now(self::zona())->startOfDay();
 
         return new self($hoy->startOfMonth(), $hoy);
+    }
+
+    /**
+     * Rangos predefinidos del selector de fechas de Reportes (clave => etiqueta). Los «hasta hoy» terminan hoy; los
+     * «pasados» son el período calendario completo anterior. La semana empieza el lunes.
+     */
+    public const PREAJUSTES = [
+        'hoy' => 'Hoy',
+        'ayer' => 'Ayer',
+        'semana' => 'Esta semana hasta hoy',
+        'semana_pasada' => 'La semana pasada',
+        'mes' => 'Este mes hasta hoy',
+        'mes_pasado' => 'El mes pasado',
+        'trimestre' => 'Este trimestre hasta hoy',
+        'trimestre_pasado' => 'El trimestre pasado',
+        'anio' => 'Este año hasta hoy',
+        'anio_pasado' => 'El año pasado',
+    ];
+
+    /**
+     * Rango de un preajuste calculado hoy en la zona de negocio; null si la clave no existe.
+     */
+    public static function preajuste(string $clave): ?self
+    {
+        $hoy = CarbonImmutable::now(self::zona())->startOfDay();
+        $lunes = $hoy->startOfWeek(CarbonInterface::MONDAY);
+        $trimestre = $hoy->startOfQuarter();
+
+        return match ($clave) {
+            'hoy' => new self($hoy, $hoy),
+            'ayer' => new self($hoy->subDay(), $hoy->subDay()),
+            'semana' => new self($lunes, $hoy),
+            'semana_pasada' => new self($lunes->subWeek(), $lunes->subDay()),
+            'mes' => new self($hoy->startOfMonth(), $hoy),
+            'mes_pasado' => new self($hoy->startOfMonth()->subMonthNoOverflow(), $hoy->startOfMonth()->subDay()),
+            'trimestre' => new self($trimestre, $hoy),
+            'trimestre_pasado' => new self($trimestre->subMonthsNoOverflow(3), $trimestre->subDay()),
+            'anio' => new self($hoy->startOfYear(), $hoy),
+            'anio_pasado' => new self($hoy->startOfYear()->subYearNoOverflow(), $hoy->startOfYear()->subDay()),
+            default => null,
+        };
     }
 
     public static function dia(?string $fecha): self

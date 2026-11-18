@@ -224,6 +224,9 @@ class Panel extends Component
                 Decimal::normalizar($this->electronico === '' ? '0' : $this->electronico, 2) ?? '0',
                 Decimal::ESCALA_DINERO,
             ),
+            'avisoCaja' => $this->formEgreso && $this->condicion !== 'pendiente'
+                ? $this->avisoCajaNegativa($this->parteEfectivo($this->metodo, $this->condicion === 'parcial' ? $this->pagado : $this->monto, $this->efectivo))
+                : null,
         ]);
     }
 

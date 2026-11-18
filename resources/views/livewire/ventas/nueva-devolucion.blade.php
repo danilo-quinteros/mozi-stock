@@ -126,6 +126,9 @@
                 @endif
             </div>
             <p class="subtle">{{ __('Motivo: :motivo', ['motivo' => $motivo]) }}</p>
+            @if ($avisoCaja !== null)
+                @include('livewire.partials.caja-negativa')
+            @endif
             <div class="modal-actions">
                 <button type="button" class="btn ghost" wire:click="$set('confirmando', false)">{{ __('Volver a editar') }}</button>
                 <button type="button" class="btn primary" wire:click="confirmar" wire:loading.attr="disabled" wire:target="confirmar"><x-icon name="check" /> {{ __('Confirmar devolución') }}</button>

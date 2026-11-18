@@ -61,10 +61,13 @@ class Detalle extends Component
             'pagos' => fn ($q) => $q->with(['sucursal:id,nombre', 'pagador:id,name', 'anuladoPor:id,name'])->orderBy('fecha_pago')->orderBy('id'),
         ])->findOrFail($this->cuentaId);
 
+        $pendiente = ! $cuenta->estaAnulado() && Decimal::comparar($cuenta->saldo_pendiente, '0', 2) > 0;
+
         return view('livewire.cuentas-pagar.detalle', [
             'cuenta' => $cuenta,
             'estado' => $cuenta->estado(),
-            'pendiente' => ! $cuenta->estaAnulado() && Decimal::comparar($cuenta->saldo_pendiente, '0', 2) > 0,
+            'pendiente' => $pendiente,
+            'avisoCaja' => $pendiente ? $this->avisoCajaNegativa($this->parteEfectivo($this->metodo, $this->monto, $this->efectivo)) : null,
             'sumaMixta' => $this->sumaMixta(),
             'administra' => true,
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),

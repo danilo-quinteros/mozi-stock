@@ -147,7 +147,12 @@ class Anular extends Component
 
     public function render(): View
     {
-        return view('livewire.cuentas.anular');
+        // Anular un cobro en efectivo saca ese efectivo de la caja elegida (la anulación de un pago lo devuelve).
+        $cobro = $this->abierto && $this->tipo === 'cobro' ? $this->registro($this->tipo, $this->registroId) : null;
+
+        return view('livewire.cuentas.anular', [
+            'avisoCaja' => $cobro instanceof Cobro ? $this->avisoCajaNegativa((string) $cobro->monto_efectivo) : null,
+        ]);
     }
 
     /**

@@ -130,6 +130,9 @@
             @if ($vencidos !== [])
                 <div class="notice" role="alert" data-test="lotes-vencidos"><x-icon name="info" /><div><b>{{ __('Lotes ya vencidos') }}</b><p>{{ __('Se ingresarán al stock, pero quedarán bloqueados para la venta desde el primer momento:') }} {{ implode('; ', $vencidos) }}.</p></div></div>
             @endif
+            @if ($avisoCaja !== null)
+                @include('livewire.partials.caja-negativa')
+            @endif
             @if ($sobreMaximo !== [])
                 <div class="notice" role="alert" data-test="sobre-maximo"><x-icon name="info" /><div><b>{{ __('Sobre el stock máximo') }}</b><p>{{ __('La compra se puede confirmar igual:') }} {{ implode('; ', $sobreMaximo) }}.</p></div></div>
             @endif

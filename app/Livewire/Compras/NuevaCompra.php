@@ -416,7 +416,14 @@ class NuevaCompra extends Component
             Decimal::ESCALA_DINERO,
         );
 
+        $aPagar = match ($this->condicion) {
+            'contado' => $total,
+            'parcial' => Decimal::normalizar($this->pagado, 2) ?? '0.00',
+            default => '0.00',
+        };
+
         return view('livewire.compras.nueva-compra', [
+            'avisoCaja' => $this->condicion === 'credito' ? null : $this->avisoCajaNegativa($this->parteEfectivo($this->metodo, $aPagar, $this->efectivo)),
             'sinPrecio' => $this->productosSinPrecio(),
             'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
             'proveedores' => Proveedor::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
@@ -427,11 +434,7 @@ class NuevaCompra extends Component
             'total' => $total,
             'valido' => $valido,
             'mixto' => $mixto,
-            'aPagar' => match ($this->condicion) {
-                'contado' => $total,
-                'parcial' => Decimal::normalizar($this->pagado, 2) ?? '0.00',
-                default => '0.00',
-            },
+            'aPagar' => $aPagar,
         ]);
     }
 }

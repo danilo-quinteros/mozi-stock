@@ -182,6 +182,31 @@ class TurnoCaja extends Model
     }
 
     /**
+     * Efectivo que, según el sistema, hay ahora en el turno: fondo + cobros − salidas en efectivo
+     * (la misma cuenta que «Debe haber» en calcularArqueo), con una sola suma en SQL. Lo usa el
+     * aviso de salidas que dejarían la caja en negativo; no reemplaza al arqueo.
+     *
+     * @return numeric-string
+     */
+    public function efectivoEnCaja(): string
+    {
+        $sumas = MovimientoCaja::withoutGlobalScopes()
+            ->where('empresa_id', $this->empresa_id)
+            ->where('turno_caja_id', $this->id)
+            ->where('metodo', 'efectivo')
+            ->toBase()
+            ->selectRaw("COALESCE(SUM(CASE WHEN sentido = 'ingreso' THEN monto ELSE 0 END), 0) AS ingresos")
+            ->selectRaw("COALESCE(SUM(CASE WHEN sentido = 'ingreso' THEN 0 ELSE monto END), 0) AS egresos")
+            ->first();
+
+        return Decimal::restar(
+            Decimal::sumar((string) $this->monto_apertura, (string) ($sumas->ingresos ?? '0'), Decimal::ESCALA_DINERO),
+            (string) ($sumas->egresos ?? '0'),
+            Decimal::ESCALA_DINERO
+        );
+    }
+
+    /**
      * @return array{
      *   monto_apertura: string,
      *   ingresos_efectivo: string,

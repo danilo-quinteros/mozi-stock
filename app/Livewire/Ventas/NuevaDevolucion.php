@@ -119,12 +119,15 @@ class NuevaDevolucion extends Component
             Decimal::ESCALA_DINERO,
         );
 
+        $reembolso = Decimal::restar($importe, $deuda, Decimal::ESCALA_DINERO);
+
         return view('livewire.ventas.nueva-devolucion', [
             'venta' => $venta,
             'filas' => $filas,
             'importe' => $importe,
             'deuda' => $deuda,
-            'reembolso' => Decimal::restar($importe, $deuda, Decimal::ESCALA_DINERO),
+            'reembolso' => $reembolso,
+            'avisoCaja' => $this->avisoCajaNegativa($this->parteEfectivo($this->metodo, $reembolso, $this->efectivo)),
             'mixto' => $mixto,
             'hayLineas' => collect($filas)->contains(fn (array $f) => $f['cantidad'] !== null && Decimal::comparar($f['cantidad'], '0') > 0),
             // Despachos § 5.5: antes del despacho la mercadería no salió del almacén; RegistrarDevolucion fuerza el reingreso.

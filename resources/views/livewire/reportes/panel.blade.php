@@ -14,9 +14,62 @@
 
     <section class="card card-pad">
         <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="search" /></span>{{ __('Filtros generales') }}</div></div>
-        <div class="fields three">
-            <div class="field"><label class="field-label" for="desde">{{ __('Fecha desde') }}</label><input id="desde" class="input" type="date" wire:model.live="desde"></div>
-            <div class="field"><label class="field-label" for="hasta">{{ __('Fecha hasta') }}</label><input id="hasta" class="input" type="date" wire:model.live="hasta"></div>
+        <div class="fields reportes-filtros">
+            {{-- Rango de fechas: preajustes (se aplican al tocarlos) o un rango personalizado con «Aplicar». La elección
+                 se guarda en una cookie (Panel::COOKIE_RANGO). Sin «Comparar con». --}}
+            <div class="field rango" x-data="{ abierto: false, pestana: @js($rango === 'personalizado' ? 'personalizado' : 'preajustes') }"
+                @click.outside="abierto = false" @keydown.escape="abierto = false" @rango-aplicado.window="abierto = false">
+                <span class="field-label" id="rango-etiqueta">{{ __('Rango de fechas') }}</span>
+                <button type="button" class="rango-boton" :class="{ 'abierto': abierto }" @click="abierto = ! abierto" data-test="rango-boton"
+                    aria-haspopup="dialog" aria-controls="rango-panel" :aria-expanded="abierto ? 'true' : 'false'" aria-labelledby="rango-etiqueta rango-actual">
+                    <span class="rango-boton-icono"><x-icon name="calendar" /></span>
+                    <span class="rango-boton-texto" id="rango-actual"><b>{{ $etiquetaRango }}</b><small>{{ $textoRango }}</small></span>
+                    <x-icon name="chevron-down" class="rango-chevron" />
+                </button>
+
+                <div class="rango-panel" id="rango-panel" role="dialog" aria-label="{{ __('Selecciona un rango de fechas') }}" data-test="rango-panel"
+                    x-show="abierto" x-transition.opacity.duration.120ms x-cloak>
+                    <div class="rango-pestanas" role="tablist">
+                        <button type="button" role="tab" class="rango-pestana" :class="{ 'active': pestana === 'preajustes' }"
+                            :aria-selected="pestana === 'preajustes' ? 'true' : 'false'" @click="pestana = 'preajustes'">{{ __('Preajustes') }}</button>
+                        <button type="button" role="tab" class="rango-pestana" :class="{ 'active': pestana === 'personalizado' }"
+                            :aria-selected="pestana === 'personalizado' ? 'true' : 'false'" @click="pestana = 'personalizado'">{{ __('Personalizado') }}</button>
+                    </div>
+
+                    <div class="rango-opciones" role="tabpanel" x-show="pestana === 'preajustes'">
+                        @foreach ($preajustes as $clave => $opcion)
+                            <button type="button" wire:key="rango-{{ $clave }}" @class(['rango-opcion', 'active' => $rango === $clave])
+                                wire:click="elegirRango('{{ $clave }}')" @click="abierto = false" aria-pressed="{{ $rango === $clave ? 'true' : 'false' }}">
+                                <span class="rango-opcion-nombre">{{ $opcion['etiqueta'] }}</span>
+                                <small>{{ $opcion['texto'] }}</small>
+                                @if ($rango === $clave)<x-icon name="check" size="sm" class="rango-opcion-check" />@endif
+                            </button>
+                        @endforeach
+                    </div>
+
+                    <div class="rango-personalizado" role="tabpanel" x-show="pestana === 'personalizado'">
+                        <div class="fields">
+                            <div class="field">
+                                <label class="field-label" for="rango-desde">{{ __('Desde') }}</label>
+                                <input id="rango-desde" class="input" type="date" wire:model="personalDesde" max="{{ $hoy }}">
+                                @error('personalDesde')<small class="danger-text">{{ $message }}</small>@enderror
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="rango-hasta">{{ __('Hasta') }}</label>
+                                <input id="rango-hasta" class="input" type="date" wire:model="personalHasta" max="{{ $hoy }}">
+                                @error('personalHasta')<small class="danger-text">{{ $message }}</small>@enderror
+                            </div>
+                        </div>
+                        <p class="rango-nota">{{ __('Hasta un año por consulta.') }}</p>
+                        <div class="rango-acciones">
+                            <button type="button" class="btn ghost sm" @click="abierto = false">{{ __('Cancelar') }}</button>
+                            <button type="button" class="btn primary sm" wire:click="aplicarPersonalizado" wire:loading.attr="disabled" wire:target="aplicarPersonalizado">
+                                <x-icon name="check" size="sm" /> {{ __('Aplicar') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="field">
                 <label class="field-label" for="sucursal">{{ __('Sucursal') }}</label>
                 <select id="sucursal" class="select" wire:model.live="sucursal" @disabled($sucursalFija)>
