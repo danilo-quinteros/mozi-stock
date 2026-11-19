@@ -194,8 +194,22 @@ test('solo el administrador de una empresa habilitada o el superadmin entran a f
     $vendedor = User::factory()->vendedor($datos['sucursal'])->create();
     $superadmin = User::factory()->superadmin()->create();
 
+    // Sin SIAT en el plan, el administrador ve la pestaña con el aviso para cambiar de plan; nada de SIAT se abre.
+    $this->actingAs($adminSinSiat)->get(route('facturacion'))->assertOk()
+        ->assertSee('data-test="plan-requerido"', false)
+        ->assertSee('La facturación SIAT no está incluida en tu plan')
+        ->assertSee(route('suscripcion', ['planes' => 1]), false)
+        ->assertDontSee('Secciones de facturación')
+        ->assertDontSee('Catálogos del SIN');
+    Livewire::actingAs($adminSinSiat)->test(Asistente::class, ['empresaId' => $deshabilitada->id])->assertForbidden();
+    expect(fn () => Livewire::actingAs($adminSinSiat)->test(Panel::class)->set('sinPlan', false))->toThrow(Exception::class);
+    $this->actingAs($adminSinSiat)->get(route('configuracion'))->assertOk()->assertSee('No habilitada')->assertSee(route('facturacion'))
+        ->assertSee(route('suscripcion', ['planes' => 1]), false);
+    // En standalone no hay planes: sin SIAT la pestaña no existe y la ruta sigue cerrada.
+    config(['mozistock.deployment_mode' => 'standalone']);
+    $this->actingAs($adminSinSiat)->get(route('configuracion'))->assertOk()->assertDontSee(route('facturacion'));
     $this->actingAs($adminSinSiat)->get(route('facturacion'))->assertForbidden();
-    $this->actingAs($adminSinSiat)->get(route('configuracion'))->assertOk()->assertSee('No habilitada')->assertDontSee(route('facturacion'));
+    config(['mozistock.deployment_mode' => 'saas']);
     $this->actingAs($vendedor)->get(route('facturacion'))->assertForbidden();
     $this->actingAs($datos['admin'])->get(route('facturacion'))->assertOk()->assertSee('Datos fiscales')->assertSee(route('facturacion'));
     $this->actingAs($superadmin)->get(route('admin.empresas.facturacion', $datos['empresa']))->assertOk()->assertSee($datos['empresa']->nombre);

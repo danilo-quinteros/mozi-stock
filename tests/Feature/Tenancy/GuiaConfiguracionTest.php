@@ -215,3 +215,42 @@ test('la guía embebe el asistente SIAT y el popup de sucursal solo existe con l
     expect(SiatPuntoVenta::withoutGlobalScopes()->where('empresa_id', $empresa->id)->where('codigo', 0)->exists())->toBeTrue()
         ->and(GuiaConfiguracion::para($admin)['siat']['pasos'][2]['listo'])->toBeTrue();
 });
+
+test('con SIAT, si solo falta su configuración el Inicio muestra el panel y la guía resumida encima', function () {
+    [$empresa, $admin, $matriz] = empresaRecienCreada();
+    $empresa->forceFill(['siat_habilitado' => true])->save();
+    $this->actingAs($admin);
+    $producto = productoDe($empresa);
+    cargarStock($admin, $matriz, $producto, '10');
+
+    // Falta la venta además de SIAT: todavía es solo la guía completa.
+    $this->get(route('dashboard'))->assertOk()->assertSee('¡Bienvenido a MoziStock!')->assertSee('3 de 5 completados')
+        ->assertDontSee('data-test="guia-resumida"', false)->assertDontSee('Hola, Administradora');
+
+    confirmarVenta($admin, crearPedido($admin, $matriz, [['producto_id' => $producto->id, 'cantidad' => '2']]), ['metodo' => 'efectivo']);
+
+    $guia = GuiaConfiguracion::para($admin);
+    expect($guia['soloSiat'])->toBeTrue()->and($guia['completados'])->toBe(4);
+
+    // Ahora: el panel normal (como si hubiera terminado) con la guía resumida y la configuración SIAT arriba.
+    $this->get(route('dashboard'))->assertOk()
+        ->assertSee('Hola, Administradora')
+        ->assertDontSee('¡Bienvenido a MoziStock!')
+        ->assertSee('data-test="guia-resumida"', false)
+        ->assertSee('Te falta configurar la facturación SIAT')
+        ->assertSee('4 de 5 completados')
+        ->assertSee('Configuración de facturación SIAT')
+        ->assertSeeHtmlInOrder(['data-test="guia-resumida"', 'inicio-kpis'])
+        ->assertDontSee(route('productos.crear'));
+
+    // La guía sigue pendiente: SIAT no se da por hecho.
+    expect($empresa->fresh()->guia_completada_en)->toBeNull();
+
+    // Sin SIAT habilitado, el mismo avance termina la guía y no queda nada encima del panel.
+    $empresa->forceFill(['siat_habilitado' => false])->save();
+    $this->get(route('dashboard'))->assertOk()->assertSee('Hola, Administradora')->assertDontSee('data-test="guia-resumida"', false);
+    expect($empresa->fresh()->guia_completada_en)->not->toBeNull();
+
+    // Encima del panel, al terminar no ofrece «Ver mi panel»: solo confirma.
+    Livewire::test(Guia::class, ['conPanel' => true])->assertSee('¡Facturación SIAT configurada!')->assertDontSee('Ver mi panel');
+});

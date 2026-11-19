@@ -58,6 +58,11 @@ class SiatServiceProvider extends ServiceProvider
         Gate::define('facturacion-siat', fn (User $user, Empresa $empresa): bool => $user->esSuperadmin()
             || ($user->esAdministrador() && $user->empresa_id === $empresa->id && $empresa->siat_habilitado));
 
+        // Facturación fuera del plan (solo SaaS): el administrador ve la pestaña en Mi empresa con el aviso para
+        // cambiar de plan. No abre nada de SIAT.
+        Gate::define('ofrecer-facturacion', fn (User $user, Empresa $empresa): bool => config('mozistock.deployment_mode') === 'saas'
+            && $user->esAdministrador() && $user->empresa_id === $empresa->id && ! $empresa->siat_habilitado);
+
         // Cambiar datos fiscales, token, sucursales y puntos de venta: lo mismo, pero nunca durante
         // «Entrar como» (decisión D6).
         Gate::define('configurar-facturacion', fn (User $user, Empresa $empresa): bool => ! Impersonacion::activa()

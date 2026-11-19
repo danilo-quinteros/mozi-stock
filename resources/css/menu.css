@@ -13,7 +13,7 @@
     html[data-sidebar="collapsed"] .sidebar-toggle{margin-left:0}
     html[data-sidebar="collapsed"] .sidebar-toggle .ico{transform:scaleX(-1)}
     html[data-sidebar="collapsed"] .workspace{justify-content:center;padding:8px}
-    html[data-sidebar="collapsed"] :is(.brand-text,.workspace-info,.workspace>.ico,.nav-label,.nav-text,.nav-group-title,.group-chevron,.side-help,.mini-profile>span:not(.avatar),.btn-text){display:none}
+    html[data-sidebar="collapsed"] :is(.brand-text,.workspace-info,.workspace>.ico,.nav-label,.nav-text,.nav-candado,.nav-group-title,.group-chevron,.side-help,.mini-profile>span:not(.avatar),.btn-text){display:none}
     html[data-sidebar="collapsed"] .nav-scroll{margin-top:14px;scrollbar-width:none;display:grid;gap:4px;align-content:start}
 
     /* Entradas del rail: enlaces sueltos y grupos, con el mismo aspecto. */
@@ -74,3 +74,5 @@ button.mini-profile[aria-expanded="true"] .profile-arrow{transform:rotate(180deg
 /* Agente Mozi: el icono lleva el acento naranja aunque la entrada no esté activa, sin colores nuevos. */
 .nav-agente .nav-symbol{color:var(--brand-bright)}
 .nav-agente .nav-symbol .ico{filter:drop-shadow(0 0 6px rgba(241,146,77,.35))}
+.nav-candado{margin-left:auto;display:grid;place-items:center;color:var(--faint)}
+.nav-candado .ico{width:13px;height:13px}

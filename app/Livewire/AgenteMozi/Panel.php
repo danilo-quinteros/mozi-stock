@@ -84,8 +84,18 @@ class Panel extends Component
     #[Locked]
     public ?int $eliminandoId = null;
 
+    /** El plan de la empresa no incluye el agente: la pantalla solo muestra el aviso para cambiar de plan. */
+    #[Locked]
+    public bool $sinPlan = false;
+
     public function mount(): void
     {
+        if (Gate::denies('usar-agente-mozi') && Gate::allows('ofrecer-agente-mozi')) {
+            $this->sinPlan = true;
+
+            return;
+        }
+
         $this->authorize('usar-agente-mozi');
     }
 
@@ -180,6 +190,11 @@ class Panel extends Component
 
     public function render(): View
     {
+        // Sin el agente en el plan no se lee nada del agente; el menú lateral queda como en el resto del sistema.
+        if ($this->sinPlan) {
+            return view('livewire.agente-mozi.sin-plan')->layout('layouts::app', ['sidebarAuto' => null]);
+        }
+
         $actor = $this->actor();
         $mensajes = $this->mensajes();
         $sucursalId = $actor->sucursalActivaId();

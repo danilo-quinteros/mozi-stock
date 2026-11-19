@@ -8,6 +8,35 @@
         @php($actual = collect($guia['pasos'])->search(fn (array $paso): bool => ! $paso['listo']))
         @php($siat = $guia['siat'] !== null && ! $guia['siat']['listo'] ? $guia['siat'] : null)
 
+        @if ($guia['soloSiat'])
+            {{-- Solo falta SIAT: la guía resumida va sobre el panel. Los pasos hechos quedan en una línea; solo SIAT se despliega. --}}
+            @php($pasoSiat = collect($guia['pasos'])->firstWhere('clave', 'siat'))
+            <section class="card guia guia-resumida" aria-labelledby="guia-titulo" data-test="guia-resumida">
+                <div class="guia-head">
+                    <div>
+                        <h2 id="guia-titulo">{{ __('Te falta configurar la facturación SIAT') }}</h2>
+                        <p>{{ __('Completaste los demás pasos y tu panel ya muestra los indicadores del negocio. Configura SIAT para emitir facturas desde tus ventas.') }}</p>
+                    </div>
+                    <div class="guia-progreso">
+                        <span>{{ __(':hechos de :total completados', ['hechos' => $guia['completados'], 'total' => $total]) }}</span>
+                        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ $total }}" aria-valuenow="{{ $guia['completados'] }}" aria-label="{{ __('Progreso de configuración') }}"><span style="width:{{ intdiv($guia['completados'] * 100, $total) }}%"></span></div>
+                    </div>
+                </div>
+                <ul class="guia-hechos" aria-label="{{ __('Pasos completados') }}">
+                    @foreach ($guia['pasos'] as $paso)
+                        @continue(! $paso['listo'])
+                        <li data-paso="{{ $paso['clave'] }}"><x-icon name="check" size="sm" /> {{ $paso['titulo'] }}</li>
+                    @endforeach
+                </ul>
+                <div class="guia-lista">
+                    <div class="guia-paso current" data-paso="siat" wire:key="paso-siat">
+                        <span class="guia-icono"><x-icon :name="$pasoSiat['icono']" /></span>
+                        <div class="grow"><b>{{ $pasoSiat['titulo'] }}</b><small>{{ $pasoSiat['detalle'] }}</small></div>
+                        <button type="button" class="guia-accion" x-on:click="verSiat()"><span>{{ $pasoSiat['accion'] }}</span><x-icon name="arrow" size="sm" /></button>
+                    </div>
+                </div>
+            </section>
+        @else
         <section class="card guia" aria-labelledby="guia-titulo">
             <div class="guia-head">
                 <div>
@@ -46,6 +75,7 @@
                 @endif
             </div>
         </section>
+        @endif
 
         @if ($siat)
             {{-- El mismo asistente de Facturación → Datos fiscales, embebido: cada guardado avisa a la guía para que se recalcule. --}}
@@ -64,6 +94,9 @@
                 <livewire:facturacion.puntos :empresa-id="$empresaId" :embebido="true" :key="'guia-sucursal-siat'" />
             </x-modal>
         @endif
+    @elseif ($conPanel)
+        {{-- SIAT quedó listo en esta visita: el panel ya está a la vista, solo se confirma. --}}
+        <div class="notice guia-resumida-ok" data-test="guia-siat-lista"><x-icon name="status-ok" /><div><b>{{ __('¡Facturación SIAT configurada!') }}</b><p>{{ __('Terminaste la configuración inicial de tu negocio.') }}</p></div></div>
     @else
         {{-- El último paso se terminó en esta misma visita: el Inicio muestra el panel al recargar. --}}
         <section class="card card-pad guia-completa">

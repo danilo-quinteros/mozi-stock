@@ -5,7 +5,8 @@
     $pestanas = array_filter([
         ['Empresa', 'configuracion', 'configuracion', 'store', $usuario->esAdministrador()],
         ['Mi suscripción', 'suscripcion', 'suscripcion|suscripcion.*', 'subscription', $usuario->esAdministrador() && config('mozistock.deployment_mode') === 'saas'],
-        ['Facturación', 'facturacion', 'facturacion', 'receipt', $usuario->esAdministrador() && $usuario->empresa?->siat_habilitado],
+        // En SaaS se muestra siempre: sin SIAT en el plan, la pestaña abre el aviso para cambiar de plan.
+        ['Facturación', 'facturacion', 'facturacion', 'receipt', $usuario->esAdministrador() && ($usuario->empresa?->siat_habilitado || config('mozistock.deployment_mode') === 'saas')],
         // Tallas y colores (V1): solo con la capacidad «variantes».
         ['Tallas y colores', 'configuracion.tallas-colores', 'configuracion.tallas-colores', 'tag', $usuario->esAdministrador() && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::Variantes)],
     ], fn ($p) => $p[4]);

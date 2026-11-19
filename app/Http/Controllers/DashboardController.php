@@ -43,7 +43,10 @@ class DashboardController extends Controller
         }
 
         // Se calcula completa (no solo pendiente()) para que al terminar el último paso el panel aparezca en la misma visita.
-        if (GuiaConfiguracion::para($user) !== null) {
+        // Si solo falta la facturación SIAT, el panel se muestra igual, con la guía resumida encima.
+        $guia = GuiaConfiguracion::para($user);
+
+        if ($guia !== null && ! $guia['soloSiat']) {
             return view('dashboard', ['empresa' => $user->empresa, 'guiaPendiente' => true]);
         }
 
@@ -53,6 +56,7 @@ class DashboardController extends Controller
         return view('dashboard', [
             'empresa' => $user->empresa,
             'guiaPendiente' => false,
+            'guiaSiat' => $guia !== null,
             'suscripcion' => $suscripcion,
             'comprobanteEnRevision' => $suscripcion !== null && PagoSaas::query()->where('estado', EstadoPagoSaas::Pendiente)->exists(),
             'panel' => $user->esVendedor() ? $this->vendedor($user) : $this->administrador($user),

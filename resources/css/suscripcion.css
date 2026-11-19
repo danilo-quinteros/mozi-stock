@@ -93,3 +93,17 @@
 .sub-empresa p{margin:3px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
 .sub-empresa-pronto{font-size:11.5px;color:var(--faint);text-align:right}
 @media(max-width:520px){.sub-bill-row{grid-template-columns:auto 1fr;gap:10px 12px;padding:13px 14px}.sub-bill-row .sub-bill-what{grid-column:1/-1}.sub-bill-row:first-child{grid-template-columns:minmax(0,1fr) auto}.sub-bill-row:first-child .sub-bill-what{grid-column:auto}.sub-empresa{flex-wrap:wrap}.sub-empresa .btn{width:100%}.sub-extras-actions .btn{flex:1}}
+
+/* Función fuera del plan (Agente Mozi, Facturación SIAT): aviso con acceso directo al cambio de plan. */
+.plan-requerido{display:flex;align-items:flex-start;gap:22px;max-width:760px;background:linear-gradient(150deg,var(--accent-soft),transparent 58%),var(--panel);border:1px solid var(--accent-border);border-radius:20px;padding:clamp(22px,3.2vw,34px);box-shadow:var(--shadow)}
+.plan-requerido-icono{height:57px;width:57px;flex:none;display:grid;place-items:center;border-radius:17px;background:var(--accent-soft);color:var(--brand-bright);border:1px solid var(--accent-border)}
+.plan-requerido-icono svg{width:28px;height:28px}
+.plan-requerido-cuerpo{min-width:0}
+.plan-requerido-tag{display:inline-flex;align-items:center;gap:6px;color:var(--brand-bright);font-size:11px;font-weight:780;margin-bottom:10px}
+.plan-requerido h2{font-size:clamp(20px,2.1vw,26px);line-height:1.2;letter-spacing:-.045em;margin:0 0 9px;color:var(--text-strong);font-weight:820}
+.plan-requerido p{font-size:13px;color:var(--muted);line-height:1.65;margin:0}
+.plan-requerido-lista{list-style:none;margin:17px 0 0;padding:0;display:grid;gap:8px}
+.plan-requerido-lista li{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--text);line-height:1.5}
+.plan-requerido-lista svg{color:var(--green);flex:none;margin-top:2px}
+.plan-requerido-acciones{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+@media(max-width:560px){.plan-requerido{flex-direction:column;gap:14px}.plan-requerido-icono{height:48px;width:48px;border-radius:14px}.plan-requerido-acciones .btn{flex:1 1 100%;justify-content:center}}

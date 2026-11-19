@@ -26,6 +26,10 @@ class Guia extends Component
     #[Locked]
     public ?string $popup = null;
 
+    /** Va encima del panel del Inicio (solo faltaba SIAT): al terminar no ofrece «Ver mi panel», porque ya está a la vista. */
+    #[Locked]
+    public bool $conPanel = false;
+
     public function mount(): void
     {
         abort_unless($this->actor()->esAdministrador(), 403);

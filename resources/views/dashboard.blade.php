@@ -40,6 +40,11 @@
             </div>
         </div>
 
+        {{-- Solo falta la facturación SIAT: la guía resumida queda arriba y el panel se muestra como si hubiera terminado. --}}
+        @if ($guiaSiat ?? false)
+            <livewire:inicio.guia :con-panel="true" />
+        @endif
+
         @if ($suscripcion && $suscripcion->estado() !== \App\Enums\EstadoSuscripcion::AlDia)
             @php($dias = $suscripcion->diasHastaVencimiento())
             <div class="notice" style="margin-bottom:18px"><x-icon name="calendar" /><div>

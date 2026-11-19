@@ -49,6 +49,9 @@
                     <a class="btn soft sm" href="{{ route('facturacion') }}" wire:navigate style="margin-top:14px"><x-icon name="receipt" size="sm" /> {{ __('Abrir facturación') }}</a>
                 @else
                     <div class="notice"><x-icon name="info" /><div><b>{{ __('SIAT Bolivia · No habilitada') }}</b><p>{{ __('MoziStudios habilita la facturación de cada empresa cuando cuenta con su autorización del SIN.') }}</p></div></div>
+                    @can('cambiarPlan', \App\Models\Suscripcion::class)
+                        <a class="btn soft sm" href="{{ route('suscripcion', ['planes' => 1]) }}" style="margin-top:14px"><x-icon name="subscription" size="sm" /> {{ __('Cambiar de plan') }}</a>
+                    @endcan
                 @endif
             </section>
         </div>

@@ -60,15 +60,17 @@
     // Con Despachos abierto, Pedidos no se marca como activo.
     $esActivo = fn (array $item): bool => request()->routeIs(...explode('|', $item['patron'])) && ! ($despachosActivo && $item['ruta'] === 'pedidos.index');
     $agenteActivo = request()->routeIs('agente-mozi');
+    $agenteSinPlan = \Illuminate\Support\Facades\Gate::denies('usar-agente-mozi') && \Illuminate\Support\Facades\Gate::allows('ofrecer-agente-mozi');
     $cuentaActiva = request()->routeIs('*.edit');
     $empresaActiva = request()->routeIs('configuracion', 'configuracion.*', 'suscripcion', 'suscripcion.*', 'facturacion');
 @endphp
 <nav class="nav-scroll nav-groups" aria-label="{{ __('Navegación principal') }}">
     <div class="nav-label">{{ __('Inicio') }}</div>
     <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}" title="{{ __('Resumen') }}"><span class="nav-symbol"><x-icon name="dashboard" /></span><span class="nav-text">{{ __('Resumen') }}</span><span class="nav-short">{{ __('Inicio') }}</span></a>
-    @can('usar-agente-mozi')
-        <a class="nav-item nav-agente {{ $agenteActivo ? 'active' : '' }}" href="{{ route('agente-mozi') }}" title="{{ __('Agente Mozi') }}" @if ($agenteActivo) aria-current="page" @endif><span class="nav-symbol"><x-icon name="sparkles" /></span><span class="nav-text">{{ __('Agente Mozi') }}</span><span class="nav-short">{{ __('Mozi') }}</span></a>
-    @endcan
+    {{-- Sin el agente en el plan, el administrador lo sigue viendo (con candado) y al abrirlo recibe el aviso para cambiar de plan. --}}
+    @if ($agenteSinPlan || \Illuminate\Support\Facades\Gate::allows('usar-agente-mozi'))
+        <a class="nav-item nav-agente {{ $agenteActivo ? 'active' : '' }}" href="{{ route('agente-mozi') }}" title="{{ $agenteSinPlan ? __('Agente Mozi · No incluido en tu plan') : __('Agente Mozi') }}" @if ($agenteActivo) aria-current="page" @endif><span class="nav-symbol"><x-icon name="sparkles" /></span><span class="nav-text">{{ __('Agente Mozi') }}</span><span class="nav-short">{{ __('Mozi') }}</span>@if ($agenteSinPlan && ! $agenteActivo)<span class="nav-candado" data-test="nav-agente-sin-plan"><x-icon name="lock" size="sm" /></span>@endif</a>
+    @endif
     @if ($conDespachos)
         <a class="nav-item {{ $despachosActivo ? 'active' : '' }}" href="{{ route('pedidos.index', ['pestana' => 'despachos']) }}" title="{{ __('Despachos') }}" @if ($despachosActivo) aria-current="page" @endif data-test="nav-despachos"><span class="nav-symbol"><x-icon name="truck" /></span><span class="nav-text">{{ __('Despachos') }}</span><span class="nav-short">{{ __('Despachos') }}</span></a>
     @endif

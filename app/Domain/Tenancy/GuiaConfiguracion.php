@@ -40,7 +40,7 @@ final class GuiaConfiguracion
     /**
      * Null si el usuario no es administrador o la empresa ya terminó la guía.
      *
-     * @return array{pasos: list<array{clave: string, titulo: string, detalle: string, icono: string, accion: string, url: string|null, listo: bool}>, completados: int, siat: array{pasos: list<array{titulo: string, detalle: string, listo: bool, puntos: list<array{clave: string, punto: string, detalle: string, listo: bool, automatico: bool}>}>, listo: bool, actual: int}|null}|null
+     * @return array{pasos: list<array{clave: string, titulo: string, detalle: string, icono: string, accion: string, url: string|null, listo: bool}>, completados: int, siat: array{pasos: list<array{titulo: string, detalle: string, listo: bool, puntos: list<array{clave: string, punto: string, detalle: string, listo: bool, automatico: bool}>}>, listo: bool, actual: int}|null, soloSiat: bool}|null
      */
     public static function para(User $usuario): ?array
     {
@@ -79,7 +79,10 @@ final class GuiaConfiguracion
             return null;
         }
 
-        return ['pasos' => $pasos, 'completados' => $completados, 'siat' => $siat];
+        // Solo falta la facturación SIAT: el Inicio muestra el panel con la guía resumida encima.
+        $soloSiat = $siat !== null && $completados === count($pasos) - 1 && ! $siat['listo'];
+
+        return ['pasos' => $pasos, 'completados' => $completados, 'siat' => $siat, 'soloSiat' => $soloSiat];
     }
 
     /**

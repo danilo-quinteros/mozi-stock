@@ -42,6 +42,10 @@ Click nbfs://nbhost/SystemFileSystem/Templates/Other/CascadeStyleSheet.css to ed
     color: var(--text-strong)
 }
 
+.sub-overview .row{
+    flex-wrap: wrap
+}
+
 /* ==========================================================================
    Formulario de Productos (productos/nuevo y productos/editar) - Responsive
    ========================================================================== */

@@ -22,6 +22,7 @@ use App\Support\Decimal;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -89,6 +90,11 @@ class MiSuscripcion extends Component
         $this->authorize('create', PagoSaas::class);
         $this->clave = (string) Str::uuid();
         $this->sincronizarExtras();
+
+        // «Cambiar de plan» desde el aviso de una función fuera del plan (?planes=1): el selector abre de una vez.
+        if (request()->boolean('planes') && Gate::allows('cambiarPlan', Suscripcion::class)) {
+            $this->modalPlanesAbierto = true;
+        }
     }
 
     public function abrir(): void

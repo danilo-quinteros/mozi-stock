@@ -107,7 +107,7 @@
                 <label>{{ __('Plan actual') }}</label>
                 <div class="row between">
                     <b>{{ $suscripcion->plan?->titulo ?? __('Plan configurado') }}</b>
-                    <button class="btn ghost sm" type="button" wire:click="abrirModalPlanes" style="padding:2px 8px;min-height:28px">{{ __('Cambiar') }}</button>
+                    <button class="btn soft sm" type="button" wire:click="abrirModalPlanes" style="padding:2px 8px;min-height:28px">{{ __('Cambiar de plan') }}</button>
                 </div>
             </div>
             <div class="sub-fact">
@@ -120,7 +120,7 @@
                 @endif
             </div>
             <div class="sub-fact"><label>{{ $vista['fecha'] }}</label><b>{{ $suscripcion->vencimiento->format('d/m/Y') }}</b></div>
-            <div class="sub-fact"><label>{{ __('Acceso al sistema') }}</label><b class="sub-access">{{ __('● Habilitado') }}</b></div>
+            
         </div>
 
 
@@ -401,14 +401,16 @@
                                         <span class="badge success">{{ __('Plan actual') }}</span>
                                     @elseif ($esSiguiente)
                                         <span class="badge warning">{{ __('Programado') }}</span>
-                                    @elseif ($p->siat_habilitado)
-                                        <span class="badge info">{{ __('Facturación SIAT') }}</span>
-                                    @else
-                                        <span class="badge">{{ __('Solo inventario') }}</span>
                                     @endif
                                 </div>
                                 <div class="stat-value" style="font-size:22px;margin:6px 0">{{ Decimal::bs((string) $p->precio_mensual) }}<small style="font-size:11px;color:var(--faint)"> / mes</small></div>
                                 <p class="lead" style="font-size:11.5px;line-height:1.55;margin:0 0 10px">{{ $p->descripcion }}</p>
+                                {{-- Qué incluye: así se ve a qué plan cambiar desde el aviso de Agente Mozi o Facturación. --}}
+                                <div class="row" style="gap:6px;flex-wrap:wrap" data-test="plan-incluye">
+                                    @if ($p->siat_habilitado)<span class="badge info"><x-icon name="receipt" size="sm" /> {{ __('Facturación SIAT') }}</span>@endif
+                                    @if ($p->agente_ia)<span class="badge warning"><x-icon name="sparkles" size="sm" /> {{ __('Agente Mozi') }}</span>@endif
+                                    @unless ($p->siat_habilitado || $p->agente_ia)<span class="badge">{{ __('Solo inventario') }}</span>@endunless
+                                </div>
                             </div>
                             <div style="margin-top:10px">
                                 @if ($esActual)

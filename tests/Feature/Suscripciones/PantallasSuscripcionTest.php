@@ -268,5 +268,6 @@ test('the subscription screen shows the design of its real state, without a stat
     // Vencida hace 8 días: el acceso sigue habilitado y el pago se muestra directamente.
     Livewire::actingAs($this->admin)->test(MiSuscripcion::class)
         ->assertSee('data-status="vencida"', false)->assertSee('Tienes un pago pendiente')->assertSee('8 días de atraso')
-        ->assertSee('Venció el')->assertSee('Habilitado')->assertSee('Enviar comprobante para revisión');
+        // Sin el dato «Acceso al sistema · Habilitado»: el propietario lo quitó de la pantalla.
+        ->assertSee('Venció el')->assertSee('Enviar comprobante para revisión');
 });

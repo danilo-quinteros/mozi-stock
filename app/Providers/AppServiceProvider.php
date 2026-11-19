@@ -82,6 +82,13 @@ class AppServiceProvider extends ServiceProvider
             && (bool) config('agente_mozi.habilitado')
             && app(AccesoPorPlan::class)->permite($user->empresa_id));
 
+        // Agente Mozi fuera del plan (solo SaaS): el administrador lo sigue viendo en el menú y, al abrirlo, recibe el
+        // aviso para cambiar de plan. No da acceso a nada del agente; los vendedores no lo ven.
+        Gate::define('ofrecer-agente-mozi', fn (User $user): bool => $user->esAdministrador() && $user->empresa_id !== null
+            && config('mozistock.deployment_mode') === 'saas'
+            && (bool) config('agente_mozi.habilitado')
+            && ! app(AccesoPorPlan::class)->permite($user->empresa_id));
+
         // Motor, modelo y cuotas de Agente Mozi: solo el superadministrador.
         Gate::define('configurar-agente-mozi', fn (User $user): bool => $user->esSuperadmin());
 
