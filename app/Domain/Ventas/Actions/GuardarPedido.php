@@ -7,7 +7,7 @@ use App\Domain\Tenancy\ResolverSucursal;
 use App\Domain\Ventas\CalculadoraPedido;
 use App\Enums\EstadoPedido;
 use App\Enums\MetodoPago;
-use App\Enums\Rol;
+use App\Enums\Permiso;
 use App\Enums\TipoPrecio;
 use App\Models\Pedido;
 use App\Models\Producto;
@@ -143,22 +143,23 @@ final class GuardarPedido
     }
 
     /**
-     * El vendedor queda como responsable de sus pedidos; el administrador puede asignar
-     * a otro administrador o a un vendedor activo de la sucursal del pedido.
+     * Sin ventas.asignar_vendedor, quien vende queda como responsable de sus pedidos. Con él puede asignar a un
+     * administrador o a un usuario activo con ventas.vender cuyo alcance incluya la sucursal del pedido
+     * (ESPECIFICACION_PERMISOS.md § 6.6).
      */
     private function vendedor(User $actor, ?Pedido $pedido, ?int $solicitado, int $sucursalId): int
     {
-        if ($actor->esVendedor()) {
+        if (! $actor->tienePermiso(Permiso::VentasAsignarVendedor)) {
             return $pedido->vendedor_id ?? $actor->id;
         }
 
         $vendedorId = $solicitado ?? $pedido->vendedor_id ?? $actor->id;
-        $valido = DB::table('users')
+        $valido = User::query()
             ->where('empresa_id', $actor->empresa_id)
-            ->where('id', $vendedorId)
+            ->whereKey($vendedorId)
             ->where('activo', true)
-            ->where(fn ($q) => $q->where('rol', Rol::Administrador->value)
-                ->orWhere(fn ($q) => $q->where('rol', Rol::Vendedor->value)->where('sucursal_id', $sucursalId)))
+            ->conPermiso(Permiso::VentasVender)
+            ->alcanzanSucursal($sucursalId)
             ->exists();
 
         return $valido ? $vendedorId : throw ValidationException::withMessages(['vendedor_id' => __('Elige un vendedor activo de la sucursal del pedido.')]);

@@ -57,7 +57,7 @@ final class RevisarVencimientosLotes extends HerramientaProduccion
 
     public function permiso(): string
     {
-        return 'analizar-lotes';
+        return 'analizar-lotes-empresa';
     }
 
     public function avance(): string

@@ -11,8 +11,8 @@ use App\Domain\Tenancy\Actions\ActualizarEmpresa;
 use App\Domain\Tenancy\Actions\CambiarAccesoEmpresa;
 use App\Domain\Tenancy\Actions\CrearEmpresa;
 use App\Domain\Tenancy\DatosEmpresa;
-use App\Enums\Rol;
 use App\Enums\Rubro;
+use App\Enums\TipoCuenta;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\CatalogoExternoProducto;
 use App\Models\Empresa;
@@ -393,7 +393,7 @@ class Empresas extends Component
             'empresas' => $empresas,
             // Administrador activo más antiguo de cada empresa de la página, para «Entrar como».
             'administradores' => User::query()->whereIn('empresa_id', $empresas->pluck('id'))
-                ->where('rol', Rol::Administrador)->where('activo', true)->orderBy('id')
+                ->where('tipo', TipoCuenta::Administrador)->where('activo', true)->orderBy('id')
                 ->get(['id', 'empresa_id'])->unique('empresa_id')->pluck('id', 'empresa_id'),
             'confirmando' => $this->confirmandoAccesoId === null ? null : Empresa::query()->find($this->confirmandoAccesoId),
             'confirmandoSiat' => $this->confirmandoSiatId === null ? null : Empresa::query()->find($this->confirmandoSiatId),

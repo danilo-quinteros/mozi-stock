@@ -6,6 +6,7 @@ use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 use App\Domain\AgenteMozi\Ia\DTOs\LlamadaHerramienta;
+use App\Enums\Permiso;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
@@ -55,7 +56,12 @@ final class RegistroHerramientas
     {
         $disponibles = [];
         // Funciones activas de la empresa (§ 5.2): la consulta genérica ofrece las fuentes de producción y de lotes.
-        $parametros = ['administrador' => $usuario->esAdministrador(), 'capacidades' => ContextoAgente::capacidadesDe($usuario)];
+        // Vista amplia y producción salen de los permisos efectivos del usuario (ESPECIFICACION_PERMISOS.md § 6.7).
+        $parametros = [
+            'administrador' => ContextoAgente::amplio($usuario),
+            'capacidades' => ContextoAgente::capacidadesDe($usuario),
+            'produccion' => $usuario->tienePermiso(Permiso::ProduccionGestionar),
+        ];
 
         foreach (self::CATALOGO as $clase) {
             $herramienta = app()->makeWith($clase, $parametros);

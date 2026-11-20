@@ -209,7 +209,7 @@
                 <tbody>
                     @forelse ($responsables as $r)
                         <tr wire:key="resp-{{ $r->id }}">
-                            <td><b>{{ $r->nombre }}</b><small>{{ \App\Enums\Rol::tryFrom($r->rol)?->etiqueta() ?? $r->rol }}</small></td>
+                            <td><b>{{ $r->nombre }}</b><small>{{ $r->rol }}</small></td>
                             <td>{{ $r->cajas !== '' ? $r->cajas : '—' }}</td>
                             <td class="num">{{ $r->cobros }}</td>
                             <td class="num">{{ $corto($r->efectivo) }}</td>

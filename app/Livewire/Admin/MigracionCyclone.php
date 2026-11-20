@@ -6,7 +6,7 @@ use App\Domain\Migracion\Cyclone\FotosCyclone;
 use App\Domain\Migracion\Cyclone\MigrarCyclone;
 use App\Domain\Migracion\Cyclone\PlanMigracionCyclone;
 use App\Domain\Migracion\Cyclone\RespaldoSqlCyclone;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Empresa;
 use App\Models\User;
@@ -203,7 +203,11 @@ class MigracionCyclone extends Component
         }
 
         // La migración real tarda unos segundos; si el navegador se cierra, igual termina (o se deshace entera).
-        @set_time_limit(300);
+        // En las pruebas no: el límite valdría para todo el proceso de la suite y la cortaría a mitad.
+        if (! app()->runningUnitTests()) {
+            @set_time_limit(300);
+        }
+
         ignore_user_abort(true);
 
         try {
@@ -275,7 +279,10 @@ class MigracionCyclone extends Component
         }
 
         try {
-            @set_time_limit(120);
+            if (! app()->runningUnitTests()) {
+                @set_time_limit(120);
+            }
+
             $pendientes = array_diff_key(FotosCyclone::pendientes($empresa), array_flip($this->fotosIntentadas));
             $tanda = array_slice($pendientes, 0, self::FOTOS_POR_TANDA, true);
 
@@ -343,7 +350,7 @@ class MigracionCyclone extends Component
 
     private function administrador(Empresa $empresa): ?User
     {
-        return User::query()->where('empresa_id', $empresa->id)->where('rol', Rol::Administrador)
+        return User::query()->where('empresa_id', $empresa->id)->where('tipo', TipoCuenta::Administrador)
             ->where('activo', true)->orderBy('id')->first();
     }
 

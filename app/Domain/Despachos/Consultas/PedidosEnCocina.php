@@ -7,6 +7,7 @@ use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Domain\Ventas\Actions\RegistrarDevolucion;
 use App\Enums\Capacidad;
 use App\Enums\EstadoEntrega;
+use App\Enums\Permiso;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
@@ -49,21 +50,27 @@ final class PedidosEnCocina
             return false;
         }
 
-        if ($usuario->esAdministrador()) {
+        // El panel de cocina es parte de ventas.ver (ESPECIFICACION_PERMISOS.md § 4.2). Quien supervisa cajas lo ve
+        // siempre; quien usa su caja, mientras tenga un turno abierto en su sucursal.
+        if (! $usuario->tienePermiso(Permiso::VentasVer)) {
+            return false;
+        }
+
+        if ($usuario->supervisaCajas()) {
             return true;
         }
 
-        return $usuario->esVendedor() && $usuario->sucursal_id !== null
+        return $usuario->sucursal_id !== null
             && $this->cajas->turnoDe($usuario, (int) $usuario->sucursal_id) !== null;
     }
 
     /**
-     * Sucursal cuyos pedidos ve el usuario. El vendedor no elige; el administrador solo puede pedir una
-     * sucursal de su empresa (otra se trata como «todas», que igual se limita a su empresa).
+     * Sucursal cuyos pedidos ve el usuario. Quien no trabaja en todas las sucursales no elige; el resto solo
+     * puede pedir una sucursal de su empresa (otra se trata como «todas», que igual se limita a su empresa).
      */
     public static function sucursalDe(User $usuario, ?int $pedida): ?int
     {
-        if (! $usuario->esAdministrador()) {
+        if (! $usuario->veTodasLasSucursales()) {
             return $usuario->sucursal_id;
         }
 
@@ -190,8 +197,8 @@ final class PedidosEnCocina
      */
     private static function base(User $usuario, ?int $sucursalId): Builder
     {
-        // Fuera del administrador, solo la sucursal asignada; sin una, ningún pedido (nunca toda la empresa).
-        $sucursalId = $usuario->esAdministrador() ? $sucursalId : ($usuario->sucursal_id ?? 0);
+        // Sin «todas las sucursales», solo la asignada; sin una, ningún pedido (nunca toda la empresa).
+        $sucursalId = $usuario->veTodasLasSucursales() ? $sucursalId : ($usuario->sucursal_id ?? 0);
 
         return Venta::query()
             ->where('ventas.empresa_id', $usuario->empresa_id)

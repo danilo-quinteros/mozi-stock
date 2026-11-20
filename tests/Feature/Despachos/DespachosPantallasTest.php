@@ -7,6 +7,7 @@ use App\Domain\Tenancy\Actions\CambiarFuncionesEmpresa;
 use App\Domain\Ventas\Actions\ConfirmarVenta;
 use App\Enums\Capacidad;
 use App\Enums\EstadoEntrega;
+use App\Enums\Permiso;
 use App\Enums\Rubro;
 use App\Livewire\Catalogo\Productos;
 use App\Livewire\Empresa\Usuarios;
@@ -27,6 +28,7 @@ use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 
@@ -54,9 +56,9 @@ function pantallaVender(object $t, string $cantidad, ?Sucursal $sucursal = null,
 function pantallaVendedor(Sucursal $sucursal, bool $almacen = false): User
 {
     $usuario = User::factory()->vendedor($sucursal)->create();
-    $usuario->forceFill(['puede_despachar' => $almacen])->save();
 
-    return $usuario;
+    // El antiguo permiso de almacén es el extra despachos.autorizar (ESPECIFICACION_PERMISOS.md § 9).
+    return $almacen ? darExtras($usuario, Permiso::DespachosAutorizar) : $usuario;
 }
 
 beforeEach(function () {
@@ -358,42 +360,41 @@ test('the export follows the screen filters, stays inside the company and forces
     $this->actingAs($adminB)->get(route('pedidos.despachos.exportar'))->assertNotFound();
 });
 
-test('the administrator grants the warehouse permission to a seller, and the change is audited', function () {
+test('the administrator grants «Autorizar despachos» as an extra permission, and the change is audited', function () {
     Livewire::actingAs($this->admin)->test(Usuarios::class)
         ->call('editar', $this->vendedor->id)
-        ->assertSet('puede_despachar', false)
-        ->assertSeeHtml('data-permiso-almacen')
-        ->set('caja_id', (string) $this->matriz->cajaPrincipal()->id)
-        ->set('puede_despachar', true)
+        ->assertSet('permisos_extra', [])
+        ->assertSeeHtml('data-permiso="despachos.autorizar"')
+        ->set('permisos_extra', ['despachos.autorizar'])
         ->call('guardar')
         ->assertHasNoErrors()
-        ->assertSee('Almacén');
+        ->assertSee('+1 extra');
 
-    expect($this->vendedor->fresh()->puede_despachar)->toBeTrue();
-    $registro = Auditoria::query()->where('accion', 'usuario.actualizado')->where('entidad_id', $this->vendedor->id)->sole();
-    expect($registro->antes['puede_despachar'])->toBeFalse()
-        ->and($registro->despues['puede_despachar'])->toBeTrue();
+    expect($this->vendedor->fresh()->tienePermiso(Permiso::DespachosAutorizar))->toBeTrue();
+    $registro = Auditoria::query()->where('accion', 'usuario.permisos_extra')->where('entidad_id', $this->vendedor->id)->sole();
+    expect($registro->antes['permisos_extra'])->toBe([])
+        ->and($registro->despues['permisos_extra'])->toBe(['despachos.autorizar']);
 
-    // El administrador siempre puede despachar: la marca no se guarda en administradores.
+    // El administrador ya tiene todos los permisos: al pasar a administrador no conserva extras.
     Livewire::actingAs($this->admin)->test(Usuarios::class)
         ->call('editar', $this->vendedor->id)
-        ->set('rol', 'administrador')
-        ->assertDontSeeHtml('data-permiso-almacen')
-        ->assertSee('Los administradores siempre pueden despachar.')
+        ->set('tipo', 'administrador')
+        ->assertDontSeeHtml('data-permiso="despachos.autorizar"')
+        ->assertSee('El administrador tiene todos los permisos')
         ->call('guardar')
         ->assertHasNoErrors();
-    expect($this->vendedor->fresh()->puede_despachar)->toBeFalse();
+    expect(DB::table('usuario_permisos')->where('user_id', $this->vendedor->id)->exists())->toBeFalse();
 
-    // Sin la capacidad, la casilla no aparece y una petición manipulada no cambia la marca.
+    // Sin la capacidad, la casilla se oculta con su nota; el extra guardado se conserva pero no cuenta (§ 4.5).
     app(CambiarFuncionesEmpresa::class)->ejecutar($this->admin, $this->empresa, Rubro::General, []);
     Livewire::actingAs($this->admin)->test(Usuarios::class)
         ->call('editar', $this->almacen->id)
-        ->assertDontSeeHtml('data-permiso-almacen')
-        ->assertDontSee('Almacén')
-        ->set('puede_despachar', false)
+        ->assertDontSeeHtml('data-permiso="despachos.autorizar"')
+        ->assertSee('requiere la función Despachos')
         ->call('guardar')
         ->assertHasNoErrors();
-    expect($this->almacen->fresh()->puede_despachar)->toBeTrue();
+    expect(DB::table('usuario_permisos')->where('user_id', $this->almacen->id)->pluck('permiso')->all())->toBe(['despachos.autorizar'])
+        ->and($this->almacen->fresh()->tienePermiso(Permiso::DespachosAutorizar))->toBeFalse();
 });
 
 test('products, the adjustment screen and the return screen show what is reserved by dispatch', function () {

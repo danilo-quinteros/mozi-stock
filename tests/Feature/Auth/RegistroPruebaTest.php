@@ -1,8 +1,8 @@
 <?php
 
 use App\Domain\Tenancy\Actions\RegistrarEmpresaPrueba;
-use App\Enums\Rol;
 use App\Enums\Rubro;
+use App\Enums\TipoCuenta;
 use App\Livewire\Auth\Registro;
 use App\Models\Auditoria;
 use App\Models\Caja;
@@ -91,7 +91,7 @@ test('a visitor signs up in three steps and gets a ready company on a 15-day tri
     $empresa = Empresa::query()->findOrFail($usuario->empresa_id);
     $suscripcion = sinEscopo(Suscripcion::class)->where('empresa_id', $empresa->id)->sole();
 
-    expect($usuario->rol)->toBe(Rol::Administrador)
+    expect($usuario->tipo)->toBe(TipoCuenta::Administrador)
         ->and($usuario->email_verified_at)->toBeNull()
         ->and($empresa->nombre)->toBe('Ferretería El Constructor')
         ->and($empresa->telefono)->toBe('59171234567')

@@ -183,7 +183,7 @@ test('a seller is never offered tools that expose costs, debts or other branches
         ->and($respuesta->estado)->toBe(AgenteMensaje::COMPLETADO)
         ->and($respuesta->artefactos)->toHaveCount(0)
         ->and(AgenteDataset::query()->count())->toBe(0)
-        ->and(geminiCuerpo($primera)['systemInstruction']['parts'][0]['text'])->toContain('Rol del usuario: vendedor');
+        ->and(geminiCuerpo($primera)['systemInstruction']['parts'][0]['text'])->toContain('Rol del usuario: usuario de sucursal');
 });
 
 test('tool arguments outside the schema, like empresa_id, or out of range are rejected and nothing runs', function () {

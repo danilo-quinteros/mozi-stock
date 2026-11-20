@@ -7,6 +7,7 @@ use App\Domain\Creditos\Actions\RegistrarCobro;
 use App\Domain\Creditos\Consultas\HistorialPagos;
 use App\Domain\Creditos\Consultas\PendientesCobro;
 use App\Domain\Creditos\PlanCuotas;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\FormularioPago;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\CobroAplicacion;
@@ -61,10 +62,10 @@ class Historial extends Component
 
     public function mount(Venta $venta): void
     {
-        $this->authorize('cobrar', $venta);
+        $this->authorize('verCredito', $venta);
         $this->ventaId = $venta->id;
         $actor = $this->actor();
-        $this->sucursal_id = (string) ($actor->esVendedor() ? $actor->sucursal_id : ($actor->sucursalActivaId() ?? $venta->sucursal_id));
+        $this->sucursal_id = (string) (! $actor->veTodasLasSucursales() ? $actor->sucursal_id : ($actor->sucursalActivaId() ?? $venta->sucursal_id));
         $this->iniciarPago();
 
         if (is_string($mensaje = session('aviso'))) {
@@ -154,8 +155,12 @@ class Historial extends Component
                 && ! CobroAplicacion::query()->whereIn('venta_cuota_id', $venta->cuotas->modelKeys())->exists(),
             'sumaPlan' => array_reduce($this->plan, fn (string $suma, array $fila) => Decimal::sumar($suma, Decimal::normalizar((string) ($fila['monto'] ?? ''), 2) ?? '0', 2), '0.00'),
             'sumaMixta' => $this->sumaMixta(),
-            'administra' => $actor->esAdministrador(),
-            'sucursales' => $actor->esAdministrador()
+            'anula' => $actor->tienePermiso(Permiso::CobrosAnular),
+            'cobra' => $actor->can('cobrar', $venta),
+            'definirCondiciones' => $actor->can('condicionesCredito', $venta),
+            // Sin «Trabajar en todas las sucursales» cobra en la suya; el servidor la vuelve a imponer.
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
         ])->title(__('Cuenta por cobrar · :codigo', ['codigo' => $venta->codigo()]));

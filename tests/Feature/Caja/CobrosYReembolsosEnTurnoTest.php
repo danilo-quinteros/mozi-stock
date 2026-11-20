@@ -97,7 +97,7 @@ test('sin turno abierto el efectivo se rechaza, lo electrónico y el crédito si
     expect(fn () => confirmarVenta($vendedor, $suyo, ['metodo' => 'efectivo']))
         ->toThrow(ValidationException::class, 'Abre tu caja en la barra superior')
         ->and(fn () => confirmarVenta($vendedor, $suyo, ['metodo' => 'efectivo', 'externo' => true]))
-        ->toThrow(ValidationException::class, 'Solo un administrador registra efectivo fuera de caja');
+        ->toThrow(ValidationException::class, 'Solo quien supervisa cajas registra efectivo fuera de caja');
 });
 
 test('el vendedor cobra en el turno de su propia caja aunque la solicitud indique otro turno', function () {

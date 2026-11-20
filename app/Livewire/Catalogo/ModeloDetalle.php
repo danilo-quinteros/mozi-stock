@@ -144,7 +144,7 @@ class ModeloDetalle extends Component
             'conPrecioPropio' => $celdas->where('activo', true)->where('precio_propio', true)->count(),
             'alertasStock' => $celdas->where('activo', true)->whereIn('alerta', ['sin_stock', 'bajo'])->count(),
             'sucursalVista' => $sucursal,
-            'sucursales' => $actor->esAdministrador() ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
+            'sucursales' => $actor->veTodasLasSucursales() ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
             'administra' => $actor->can('update', $modelo),
             'varianteEditada' => $this->varianteId === null ? null : $celdas->firstWhere('id', $this->varianteId),
         ])->title($modelo->nombre);

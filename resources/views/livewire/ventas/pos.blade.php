@@ -27,7 +27,7 @@
         </div>
         <div class="pos-head-right">
             @if ($cajaActual)
-                {{-- El administrador elige con qué caja vende; puede tener varias abiertas a la vez. --}}
+                {{-- Quien supervisa cajas elige con qué caja vende; puede tener varias abiertas a la vez. --}}
                 @php
                     $eligeCaja = $cajasDisponibles->count() > 1;
                 @endphp
@@ -59,7 +59,7 @@
             <button type="button" class="pos-pill" @click="atajos = true"><x-icon name="info" size="sm" /> {{ __('Atajos') }}</button>
             <label class="pos-pill pos-branch">
                 <x-icon name="store" size="sm" />
-                @if ($administra && $sucursales->count() > 1)
+                @if ($eligeSucursal && $sucursales->count() > 1)
                     <select wire:model.live="sucursal_id" aria-label="{{ __('Sucursal de venta') }}">
                         @foreach ($sucursales as $opcion)
                             <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>

@@ -3,7 +3,6 @@
 namespace App\Domain\AgenteMozi\Ia;
 
 use App\Domain\AgenteMozi\ContextoAgente;
-use App\Enums\Rol;
 
 /**
  * Instrucciones de sistema, iguales para cualquier proveedor (§ 4.1: los prompts de negocio no se
@@ -22,10 +21,10 @@ final class InstruccionesSistema
     {
         $fecha = $contexto->fechaReferencia;
         $idioma = str_starts_with($contexto->idioma, 'en') ? 'inglés' : 'español';
-        $administrador = $contexto->rol === Rol::Administrador;
+        $administrador = $contexto->amplio;
         $rol = $administrador
             ? 'administrador de la empresa. Ve todas las sucursales.'
-            : 'vendedor. Solo ve su sucursal: productos, precios, stock, pedidos y ventas (sin saldos ni cobrado) y su propia caja. No puede ver costos, márgenes, compras, gastos, cuentas por cobrar o por pagar ni otras sucursales: si los pide, explícale que su rol no tiene ese permiso y que puede consultarlo con un administrador.';
+            : 'usuario de sucursal. Solo ve su sucursal: productos, precios, stock, pedidos y ventas (sin saldos ni cobrado) y su propia caja. No puede ver costos, márgenes, compras, gastos, cuentas por cobrar o por pagar ni otras sucursales: si los pide, explícale que su rol no tiene ese permiso y que puede consultarlo con un administrador.';
         $especificas = $this->especificas($herramientas, $administrador);
         $usaEspecificas = $especificas === '' ? '' : "Usa la herramienta específica cuando la pregunta coincide con una: {$especificas}. ";
 

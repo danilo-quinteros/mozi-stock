@@ -16,6 +16,7 @@ use App\Domain\Ventas\Actions\RegistrarDevolucion;
 use App\Domain\Ventas\Actions\VenderEnPos;
 use App\Enums\Capacidad;
 use App\Enums\EstadoEntrega;
+use App\Enums\Permiso;
 use App\Enums\Rubro;
 use App\Models\Cliente;
 use App\Models\Devolucion;
@@ -86,9 +87,9 @@ function despachoDevolver(User $admin, Venta $venta, string $cantidad, bool $rei
 function despachoVendedor(Sucursal $sucursal, bool $almacen = false): User
 {
     $usuario = User::factory()->vendedor($sucursal)->create();
-    $usuario->forceFill(['puede_despachar' => $almacen])->save();
 
-    return $usuario;
+    // El antiguo permiso de almacén es el extra despachos.autorizar (ESPECIFICACION_PERMISOS.md § 9).
+    return $almacen ? darExtras($usuario, Permiso::DespachosAutorizar) : $usuario;
 }
 
 /**

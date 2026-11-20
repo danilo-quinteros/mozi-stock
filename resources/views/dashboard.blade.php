@@ -13,7 +13,8 @@
     @else
         @php
             $usuario = auth()->user();
-            $esVendedor = $usuario->esVendedor();
+            // Panel de administración con reportes.ver (acotado a su alcance); el resto ve su actividad (ESPECIFICACION_PERMISOS.md § 10).
+            $esVendedor = ! $usuario->tienePermiso(\App\Enums\Permiso::ReportesVer);
             $zona = config('mozistock.business_timezone');
             $codigo = fn (int|string $numero) => 'V-'.str_pad((string) $numero, 5, '0', STR_PAD_LEFT);
         @endphp
@@ -32,11 +33,11 @@
             </div>
             <div class="page-actions">
                 @if ($esVendedor)
-                    <a class="btn ghost" href="{{ route('pedidos.index') }}"><x-icon name="receipt" /> {{ __('Pedidos y ventas') }}</a>
+                    @can('viewAny', \App\Models\Pedido::class)<a class="btn ghost" href="{{ route('pedidos.index') }}"><x-icon name="receipt" /> {{ __('Pedidos y ventas') }}</a>@endcan
                 @else
                     <a class="btn ghost" href="{{ route('reportes') }}"><x-icon name="chart" /> {{ __('Ver reportes') }}</a>
                 @endif
-                <a class="btn primary" href="{{ route('pos') }}"><x-icon name="plus" /> {{ __('Nueva venta') }}</a>
+                @can('create', \App\Models\Pedido::class)<a class="btn primary" href="{{ route('pos') }}"><x-icon name="plus" /> {{ __('Nueva venta') }}</a>@endcan
             </div>
         </div>
 

@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Empresa\Usuarios;
 use App\Models\Auditoria;
 use App\Models\Sucursal;
@@ -11,18 +11,23 @@ use Livewire\Livewire;
 test('an administrator creates a seller fixed to an active branch', function () {
     [$empresa, $admin] = empresaConAdministrador();
     $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id]);
+    $rolVendedor = rolPorDefecto($empresa);
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
+        // El rol Vendedor viene elegido por defecto.
+        ->assertSet('tipo', 'usuario')->assertSet('rol_id', (string) $rolVendedor)
         ->set('name', 'Juan Pérez')->set('email', 'JUAN@example.test')
-        ->set('rol', 'vendedor')->set('sucursal_id', (string) $sucursal->id)
+        ->set('sucursal_id', (string) $sucursal->id)
         ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
         ->assertHasNoErrors();
 
     $vendedor = User::query()->where('email', 'juan@example.test')->sole();
     expect($vendedor->empresa_id)->toBe($empresa->id)
-        ->and($vendedor->rol)->toBe(Rol::Vendedor)
+        ->and($vendedor->tipo)->toBe(TipoCuenta::Usuario)
+        ->and($vendedor->rol_id)->toBe($rolVendedor)
+        ->and($vendedor->caja_id)->toBe($sucursal->cajaPrincipal()->id)
         ->and($vendedor->sucursal_id)->toBe($sucursal->id)
         ->and($vendedor->activo)->toBeTrue()
         ->and($vendedor->hasVerifiedEmail())->toBeTrue()
@@ -34,13 +39,14 @@ test('an administrator creates a seller fixed to an active branch', function () 
         ->and(json_encode($registro->despues))->not->toContain('ClaveSegura12345');
 });
 
-test('a seller requires a branch and an administrator never keeps one', function () {
+test('a user with a role requires a branch and an administrator never keeps one', function () {
     [$empresa, $admin] = empresaConAdministrador();
     $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id]);
+    rolPorDefecto($empresa);
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
-        ->set('name', 'Sin sucursal')->set('email', 'sin@example.test')->set('rol', 'vendedor')
+        ->set('name', 'Sin sucursal')->set('email', 'sin@example.test')->set('tipo', 'usuario')
         ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
         ->assertHasErrors(['sucursal_id' => 'required']);
@@ -48,12 +54,13 @@ test('a seller requires a branch and an administrator never keeps one', function
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
         ->set('name', 'Admin dos')->set('email', 'admin2@example.test')
-        ->set('rol', 'administrador')->set('sucursal_id', (string) $sucursal->id)
+        ->set('tipo', 'administrador')->set('sucursal_id', (string) $sucursal->id)
         ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
         ->assertHasNoErrors();
 
-    expect(User::query()->where('email', 'admin2@example.test')->sole()->sucursal_id)->toBeNull();
+    $admin2 = User::query()->where('email', 'admin2@example.test')->sole();
+    expect($admin2->sucursal_id)->toBeNull()->and($admin2->rol_id)->toBeNull()->and($admin2->tipo)->toBe(TipoCuenta::Administrador);
 });
 
 test('a manipulated request cannot grant the superadmin role', function () {
@@ -61,12 +68,12 @@ test('a manipulated request cannot grant the superadmin role', function () {
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
-        ->set('name', 'Intruso')->set('email', 'intruso@example.test')->set('rol', 'superadmin')
+        ->set('name', 'Intruso')->set('email', 'intruso@example.test')->set('tipo', 'superadmin')
         ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
-        ->assertHasErrors('rol');
+        ->assertHasErrors('tipo');
 
-    expect(User::query()->where('rol', Rol::Superadmin)->exists())->toBeFalse();
+    expect(User::query()->where('tipo', TipoCuenta::Superadmin)->exists())->toBeFalse();
 });
 
 test('weak or unconfirmed passwords are rejected', function () {
@@ -74,7 +81,7 @@ test('weak or unconfirmed passwords are rejected', function () {
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
-        ->set('name', 'Débil')->set('email', 'debil@example.test')->set('rol', 'administrador')
+        ->set('name', 'Débil')->set('email', 'debil@example.test')->set('tipo', 'administrador')
         ->set('password', 'corta')->set('password_confirmation', 'otra')
         ->call('guardar')
         ->assertHasErrors('password');
@@ -87,15 +94,15 @@ test('an administrator can neither demote nor deactivate the own account', funct
         ->call('editar', $admin->id)
         ->set('activo', false)
         ->call('guardar')
-        ->assertHasErrors('rol');
+        ->assertHasErrors('tipo');
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('editar', $admin->id)
-        ->set('rol', 'vendedor')
+        ->set('tipo', 'usuario')
         ->call('guardar')
         ->assertHasErrors();
 
-    expect($admin->refresh()->rol)->toBe(Rol::Administrador)->and($admin->activo)->toBeTrue();
+    expect($admin->refresh()->tipo)->toBe(TipoCuenta::Administrador)->and($admin->activo)->toBeTrue();
 });
 
 test('role, branch and status changes are audited without passwords', function () {

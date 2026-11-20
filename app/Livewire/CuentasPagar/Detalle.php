@@ -69,8 +69,11 @@ class Detalle extends Component
             'pendiente' => $pendiente,
             'avisoCaja' => $pendiente ? $this->avisoCajaNegativa($this->parteEfectivo($this->metodo, $this->monto, $this->efectivo)) : null,
             'sumaMixta' => $this->sumaMixta(),
-            'administra' => true,
-            'sucursales' => Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']),
+            // Sin «Trabajar en todas las sucursales» paga desde la suya; RegistrarPagoCuenta la vuelve a imponer.
+            'eligeSucursal' => $this->actor()->veTodasLasSucursales(),
+            'sucursales' => $this->actor()->veTodasLasSucursales()
+                ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
+                : Sucursal::query()->whereKey($this->actor()->sucursal_id)->get(['id', 'nombre']),
             'cambios' => $this->cambios($cuenta),
         ])->title(__('Cuenta por pagar · :codigo', ['codigo' => $cuenta->codigo()]));
     }

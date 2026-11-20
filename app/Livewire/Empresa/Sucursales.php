@@ -6,7 +6,7 @@ use App\Domain\Caja\Actions\GuardarCaja;
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
 use App\Domain\Suscripciones\CupoSuscripcion;
 use App\Domain\Tenancy\Actions\GuardarSucursal;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Caja;
 use App\Models\Sucursal;
@@ -298,7 +298,7 @@ class Sucursales extends Component
     public function asignar(int $vendedorId): void
     {
         $vendedor = User::query()->where('empresa_id', $this->actor()->empresa_id)
-            ->where('rol', Rol::Vendedor)->findOrFail($vendedorId);
+            ->where('tipo', TipoCuenta::Usuario)->findOrFail($vendedorId);
         $this->authorize('update', $vendedor);
         $this->resetValidation();
         $this->asignandoVendedorId = $vendedor->id;
@@ -342,7 +342,7 @@ class Sucursales extends Component
             ->get();
         $vendedores = User::query()
             ->where('empresa_id', $actor->empresa_id)
-            ->where('rol', Rol::Vendedor)
+            ->where('tipo', TipoCuenta::Usuario)
             ->where('activo', true)
             ->orderBy('name')
             ->get(['id', 'name', 'sucursal_id', 'caja_id']);

@@ -1,14 +1,18 @@
 <?php
 
 use App\Domain\AgenteMozi\Actions\EnviarMensaje;
+use App\Domain\Identidad\Actions\CrearRolesPorDefecto;
+use App\Domain\Identidad\PermisosUsuario;
 use App\Domain\Inventario\Actions\RegistrarAjuste;
 use App\Domain\Ventas\Actions\ConfirmarVenta;
 use App\Domain\Ventas\Actions\GuardarPedido;
+use App\Enums\Permiso;
 use App\Models\AgenteMensaje;
 use App\Models\Empresa;
 use App\Models\Pedido;
 use App\Models\Plan;
 use App\Models\Producto;
+use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Models\Venta;
@@ -84,6 +88,39 @@ function empresaConAdministrador(array $empresa = []): array
     $registro = Empresa::factory()->create($empresa);
 
     return [$registro, User::factory()->administrador($registro)->create()];
+}
+
+/**
+ * Id de un rol por defecto de la empresa (vendedor | encargado), creándolos si faltan.
+ */
+function rolPorDefecto(Empresa|int $empresa, string $plantilla = Rol::PLANTILLA_VENDEDOR): int
+{
+    $empresaId = $empresa instanceof Empresa ? $empresa->id : $empresa;
+    app(CrearRolesPorDefecto::class)->ejecutar($empresaId);
+
+    return (int) DB::table('roles')->where('empresa_id', $empresaId)->where('plantilla', $plantilla)->value('id');
+}
+
+/**
+ * Permisos extra escritos directo para preparar un test (en la app los asigna el administrador con
+ * GuardarUsuarioEmpresa). Agrega los requeridos y olvida lo memorizado del usuario.
+ */
+function darExtras(User $usuario, Permiso ...$permisos): User
+{
+    // Como GuardarUsuarioEmpresa: un extra que el rol ya da no se guarda.
+    $delRol = $usuario->rol_id === null ? [] : DB::table('rol_permisos')->where('rol_id', $usuario->rol_id)->pluck('permiso')->all();
+
+    foreach (Permiso::conRequeridos($permisos) as $permiso) {
+        if (in_array($permiso->value, $delRol, true)) {
+            continue;
+        }
+
+        DB::table('usuario_permisos')->insertOrIgnore(['user_id' => $usuario->id, 'permiso' => $permiso->value, 'created_at' => now()]);
+    }
+
+    app(PermisosUsuario::class)->olvidar($usuario->id);
+
+    return $usuario;
 }
 
 /**

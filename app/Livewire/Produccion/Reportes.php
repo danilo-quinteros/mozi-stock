@@ -64,7 +64,7 @@ class Reportes extends Component
         $actor = Auth::user();
         $empresaId = (int) $actor->empresa_id;
         $periodo = Periodo::rango($this->desde, $this->hasta);
-        $sucursalId = ctype_digit($this->sucursal) ? (int) $this->sucursal : null;
+        $sucursalId = $this->sucursalFiltro();
         $pestana = in_array($this->pestana, ReporteProduccion::PESTANAS, true) ? $this->pestana : 'productos';
 
         $filas = match ($pestana) {

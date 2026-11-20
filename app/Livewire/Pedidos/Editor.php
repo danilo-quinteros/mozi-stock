@@ -11,7 +11,7 @@ use App\Domain\Ventas\CalculadoraPedido;
 use App\Domain\Ventas\ValidadorPago;
 use App\Enums\EstadoPedido;
 use App\Enums\ModoFacturacion;
-use App\Enums\Rol;
+use App\Enums\Permiso;
 use App\Enums\TipoPrecio;
 use App\Livewire\Concerns\CapturaFactura;
 use App\Livewire\Concerns\CapturaProductos;
@@ -24,7 +24,6 @@ use App\Models\Sucursal;
 use App\Models\User;
 use App\Support\Decimal;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -300,14 +299,15 @@ class Editor extends Component
             'calculo' => $calculo,
             'pago' => $pago,
             'erroresVivos' => $errores,
-            'administra' => $actor->esAdministrador(),
-            'sucursales' => $actor->esAdministrador()
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'asignaVendedor' => $actor->tienePermiso(Permiso::VentasAsignarVendedor),
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
-            'vendedores' => $actor->esAdministrador() ? User::query()
+            'vendedores' => $actor->tienePermiso(Permiso::VentasAsignarVendedor) ? User::query()
                 ->where('empresa_id', $actor->empresa_id)->where('activo', true)
-                ->where(fn (Builder $q) => $q->where('rol', Rol::Administrador)
-                    ->orWhere(fn (Builder $q) => $q->where('rol', Rol::Vendedor)->where('sucursal_id', $sucursalId)))
+                ->conPermiso(Permiso::VentasVender)
+                ->alcanzanSucursal((int) $sucursalId)
                 ->orderBy('name')->get(['id', 'name']) : collect(),
             'cliente' => $this->clienteActual(),
             'clientesEncontrados' => $this->clientesEncontrados(),

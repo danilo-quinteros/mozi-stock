@@ -2,13 +2,14 @@
 
 namespace App\Policies;
 
+use App\Enums\Permiso;
 use App\Models\Cliente;
 use App\Models\User;
 
 /**
- * Decisión del propietario (23/10/2026): cualquier usuario de la empresa consulta, registra y
- * edita clientes (el vendedor ya los crea desde el pedido). Activar o desactivar es del
- * administrador. El historial de ventas visible sigue la regla de sucursal de VentaPolicy.
+ * Consultar clientes es la base de todo usuario de la empresa (ESPECIFICACION_PERMISOS.md § 4.1). Registrarlos y
+ * editarlos exige clientes.gestionar; activarlos o desactivarlos, clientes.desactivar. El historial de ventas visible
+ * sigue la regla de alcance de VentaPolicy.
  */
 class ClientePolicy
 {
@@ -24,16 +25,16 @@ class ClientePolicy
 
     public function create(User $user): bool
     {
-        return $user->perteneceAEmpresa();
+        return $user->tienePermiso(Permiso::ClientesGestionar);
     }
 
     public function update(User $user, Cliente $cliente): bool
     {
-        return $this->view($user, $cliente);
+        return $this->create($user) && $this->view($user, $cliente);
     }
 
     public function cambiarEstado(User $user, Cliente $cliente): bool
     {
-        return $user->esAdministrador() && $user->empresa_id === $cliente->empresa_id;
+        return $user->tienePermiso(Permiso::ClientesDesactivar) && $this->view($user, $cliente);
     }
 }

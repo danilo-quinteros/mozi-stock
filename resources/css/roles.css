@@ -1,0 +1,23 @@
+/* Roles y permisos (ESPECIFICACION_PERMISOS.md § 8): casillas del formulario de rol y permisos extra del usuario. */
+.rol-grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 18px; align-items: start; }
+.rol-grupo { display: grid; align-content: start; gap: 8px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.rol-grupo legend { margin-bottom: 6px; padding: 0; }
+.rol-permiso { display: flex; align-items: flex-start; gap: 12px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); cursor: pointer; }
+.rol-permiso:has(input:checked) { border-color: var(--brand); background: var(--accent-soft); }
+.rol-permiso:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.rol-permiso.fijo { cursor: default; }
+.rol-permiso input { flex: none; margin-top: 2px; width: 17px; height: 17px; accent-color: var(--brand); }
+.rol-permiso > span { display: grid; gap: 3px; min-width: 0; }
+.rol-permiso b { font-size: 12.5px; }
+.rol-permiso b .badge { margin-left: 6px; vertical-align: 1px; }
+.rol-permiso small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.rol-permiso small.rol-requerido { color: var(--brand); }
+.rol-modal .rol-grupos { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 12px; }
+.permisos-extra { margin-top: 16px; border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; }
+.permisos-extra > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; cursor: pointer; font-weight: 600; list-style: none; }
+.permisos-extra > summary::-webkit-details-marker { display: none; }
+.permisos-extra > summary::after { content: '⌄'; color: var(--muted); transition: transform .15s; }
+.permisos-extra[open] > summary::after { transform: rotate(180deg); }
+.permisos-extra[open] { padding-bottom: 14px; }
+.permisos-extra > summary small { color: var(--muted); font-weight: 400; margin-left: auto; }
+.modal.rol-modal { width: min(760px, 100%); }

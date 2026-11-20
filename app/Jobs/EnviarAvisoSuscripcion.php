@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\EstadoAviso;
 use App\Enums\EstadoPagoSaas;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Mail\AvisoVencimientoSuscripcion;
 use App\Models\AjusteGlobal;
 use App\Models\AvisoSuscripcion;
@@ -79,7 +79,7 @@ class EnviarAvisoSuscripcion implements ShouldQueue
             ->where('estado', EstadoPagoSaas::Pendiente)->exists();
 
         // Un solo correo para todos: sale en el idioma elegido por algún administrador, o el predeterminado.
-        $idioma = User::query()->where('empresa_id', $empresa->id)->where('rol', Rol::Administrador)
+        $idioma = User::query()->where('empresa_id', $empresa->id)->where('tipo', TipoCuenta::Administrador)
             ->where('activo', true)->whereNotNull('idioma')->value('idioma');
 
         try {
@@ -110,7 +110,7 @@ class EnviarAvisoSuscripcion implements ShouldQueue
      */
     private function destinatarios(Empresa $empresa): array
     {
-        $correos = User::query()->where('empresa_id', $empresa->id)->where('rol', Rol::Administrador)
+        $correos = User::query()->where('empresa_id', $empresa->id)->where('tipo', TipoCuenta::Administrador)
             ->where('activo', true)->pluck('email')->prepend((string) $empresa->email);
 
         return array_values($correos->map(fn (string $correo) => Str::lower(trim($correo)))

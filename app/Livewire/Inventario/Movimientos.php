@@ -55,7 +55,7 @@ class Movimientos extends Component
         return [
             'buscar' => $this->buscar,
             'tipo' => in_array($this->tipo, array_column(TipoOperacionInventario::cases(), 'value'), true) ? $this->tipo : '',
-            'sucursal_id' => ctype_digit($this->sucursal) ? (int) $this->sucursal : null,
+            'sucursal_id' => $this->sucursalFiltro(),
         ];
     }
 

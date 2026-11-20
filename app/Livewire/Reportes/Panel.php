@@ -162,7 +162,7 @@ class Panel extends Component
         $actor = Auth::user();
         $empresaId = (int) $actor->empresa_id;
         $periodo = Periodo::rango($this->desde, $this->hasta);
-        $sucursalId = ctype_digit($this->sucursal) ? (int) $this->sucursal : null;
+        $sucursalId = $this->sucursalFiltro();
 
         $filas = match ($this->pestana) {
             'ventas' => $this->vista === 'devoluciones'

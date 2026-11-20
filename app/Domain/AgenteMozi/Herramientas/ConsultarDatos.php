@@ -21,7 +21,7 @@ final class ConsultarDatos extends HerramientaNegocio
     /**
      * @param  list<string>  $capacidades  funciones activas de la empresa, leídas en el servidor
      */
-    public function __construct(private readonly bool $administrador = false, private readonly array $capacidades = []) {}
+    public function __construct(private readonly bool $administrador = false, private readonly array $capacidades = [], private readonly ?bool $produccion = null) {}
 
     public function nombre(): string
     {
@@ -30,7 +30,7 @@ final class ConsultarDatos extends HerramientaNegocio
 
     public function descripcion(): string
     {
-        $catalogo = CatalogoDatos::paraDescribir($this->administrador, $this->capacidades);
+        $catalogo = CatalogoDatos::paraDescribir($this->administrador, $this->capacidades, $this->produccion);
         $nombres = fn (array $campos) => implode(', ', array_map(fn (Campo $c) => $c->tipo === 'string' ? $c->nombre : "{$c->nombre}:{$c->tipo}", $campos));
         $fuentes = array_map(function (string $nombre) use ($catalogo, $nombres): string {
             $fuente = $catalogo->fuente($nombre);
@@ -54,7 +54,7 @@ final class ConsultarDatos extends HerramientaNegocio
         return [
             'type' => 'object',
             'properties' => [
-                'source' => ['type' => 'string', 'enum' => CatalogoDatos::paraDescribir($this->administrador, $this->capacidades)->fuentesPermitidas(), 'description' => 'Fuente de datos.'],
+                'source' => ['type' => 'string', 'enum' => CatalogoDatos::paraDescribir($this->administrador, $this->capacidades, $this->produccion)->fuentesPermitidas(), 'description' => 'Fuente de datos.'],
                 'fields' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo listar: campos a devolver (hasta 20).'],
                 'group_by' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo agregar: hasta 2 campos para agrupar.'],
                 'measures' => ['type' => 'array', 'items' => $texto, 'description' => 'Modo agregar: hasta 6 medidas de la fuente.'],

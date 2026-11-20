@@ -19,7 +19,8 @@ class SucursalActivaController extends Controller
     {
         /** @var User $usuario */
         $usuario = $request->user();
-        abort_unless($usuario->esAdministrador(), 403);
+        // Solo quien trabaja en todas las sucursales elige la activa (ESPECIFICACION_PERMISOS.md § 6.2).
+        abort_unless($usuario->veTodasLasSucursales(), 403);
 
         $valor = (string) $request->input('sucursal_id', '');
 

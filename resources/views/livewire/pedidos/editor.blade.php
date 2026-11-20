@@ -25,7 +25,7 @@
                     <input class="input" type="text" readonly value="{{ $pedido?->codigo() ?? __('Se asigna al guardar') }}">
                 </div>
                 <x-campo etiqueta="Sucursal" campo="sucursal_id">
-                    <select id="sucursal_id" class="select" wire:model.live="sucursal_id" @disabled(! $administra)>
+                    <select id="sucursal_id" class="select" wire:model.live="sucursal_id" @disabled(! $eligeSucursal)>
                         @foreach ($sucursales as $opcion)
                             <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
                         @endforeach
@@ -60,7 +60,7 @@
                     @error('cliente_id')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
                 </div>
                 <x-campo etiqueta="Vendedor" campo="vendedor_id">
-                    @if ($administra)
+                    @if ($asignaVendedor)
                         <select id="vendedor_id" class="select" wire:model="vendedor_id">
                             @foreach ($vendedores as $opcion)
                                 <option value="{{ $opcion->id }}">{{ $opcion->name }}</option>

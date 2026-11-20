@@ -35,7 +35,7 @@ class TrazabilidadLote extends Component
 
     public function mount(Lote $lote): void
     {
-        $this->authorize('viewAny', OperacionInventario::class);
+        $this->authorize('analizar-lotes');
         $this->loteId = $lote->id;
     }
 

@@ -9,7 +9,7 @@ test('public registration is closed', function () {
     $this->get('/register')->assertNotFound();
     $this->post('/register', [
         'name' => 'Intruso', 'email' => 'intruso@example.test',
-        'password' => 'Password123456', 'empresa_id' => 1, 'rol' => 'superadmin',
+        'password' => 'Password123456', 'empresa_id' => 1, 'tipo' => 'superadmin',
     ])->assertNotFound();
     $this->assertDatabaseCount('users', 0);
 });

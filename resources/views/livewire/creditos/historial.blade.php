@@ -35,7 +35,7 @@
             <section class="card card-pad">
                 <div class="card-head">
                     <div><div class="heading">{{ __('Condiciones del crédito') }}</div><p class="subtle" style="margin-top:8px">{{ __('Sin vencimiento, una fecha única o un plan de cuotas. Una venta sin vencimiento nunca figura como vencida.') }}</p></div>
-                    @if ($pendiente && $planEditable && ! $formCondiciones)
+                    @if ($pendiente && $planEditable && ! $formCondiciones && $definirCondiciones)
                         <button class="btn ghost sm" type="button" wire:click="editarCondiciones"><x-icon name="edit" size="sm" /> {{ __('Definir') }}</button>
                     @endif
                 </div>
@@ -137,7 +137,7 @@
                                         <b>{{ $fila['concepto'] }}</b> · {{ $fila['metodo'] }}@if ($fila['anulado']) <span class="badge">{{ __('Anulado') }}</span>@endif
                                         <small style="display:block;color:var(--faint);margin-top:4px">{{ $fila['sucursal'] }} · {{ $fila['receptor'] }}@if ($fila['nota']) · {{ $fila['nota'] }}@endif @if ($fila['comprobante']) · <a class="link" href="{{ route('cobros.comprobante', $fila['cobro_id']) }}" target="_blank">{{ __('Comprobante') }}</a>@endif</small>
                                         @if ($fila['anulado'])<small style="display:block;color:var(--faint);margin-top:4px">{{ $fila['anulado'] }}</small>@endif
-                                        @if ($administra && $fila['cobro_id'] && ! $fila['anulado'])<button type="button" class="btn ghost sm" style="margin-top:6px" wire:click="$dispatch('anular', { tipo: 'cobro', id: {{ $fila['cobro_id'] }} })">{{ __('Anular cobro') }}</button>@endif
+                                        @if ($anula && $fila['cobro_id'] && ! $fila['anulado'])<button type="button" class="btn ghost sm" style="margin-top:6px" wire:click="$dispatch('anular', { tipo: 'cobro', id: {{ $fila['cobro_id'] }} })">{{ __('Anular cobro') }}</button>@endif
                                     </td>
                                     <td @if ($fila['anulado']) style="text-decoration:line-through" @endif>{{ Decimal::bs($fila['efectivo']) }}</td>
                                     <td @if ($fila['anulado']) style="text-decoration:line-through" @endif>{{ Decimal::bs($fila['electronico']) }}</td>
@@ -154,7 +154,7 @@
 
         <aside class="card card-pad credit-payment-card">
             <div class="heading">{{ __('Registrar cobro') }}</div>
-            @if ($pendiente)
+            @if ($pendiente && $cobra)
                 <p class="subtle" style="margin:8px 0 20px">{{ __('Registra únicamente el importe recibido. El saldo se actualiza al confirmar.') }}</p>
                 <form wire:submit="registrar">
                     @include('livewire.partials.pago', ['etiquetaMonto' => 'Monto cobrado (Bs)'])
@@ -177,13 +177,15 @@
                     <div class="credit-payment-hint">{{ __('Saldo actual :saldo_pendiente. El cobro se registra con la fecha y hora reales, una sola vez, y cuenta en los cobros de hoy.', ['saldo_pendiente' => Decimal::bs($venta->saldo_pendiente)]) }}</div>
                     <button class="btn primary" type="submit" style="width:100%" wire:loading.attr="disabled" wire:target="registrar,comprobante">{{ __('Registrar cobro') }}</button>
                 </form>
+            @elseif ($pendiente)
+                <div class="notice" style="margin-top:14px"><x-icon name="info" /><div><b>{{ __('Saldo pendiente :saldo', ['saldo' => Decimal::bs($venta->saldo_pendiente)]) }}</b><p>{{ __('Tu rol no permite registrar abonos.') }}</p></div></div>
             @else
                 <div class="notice" style="margin-top:14px"><x-icon name="check" /><div><b>{{ __('Crédito pagado') }}</b><p>{{ __('El saldo es Bs 0,00. No se admiten más cobros.') }}</p></div></div>
             @endif
         </aside>
     </div>
 
-    @if ($administra)
+    @if ($anula)
         <livewire:cuentas.anular :volver="route('creditos.historial', $venta)" />
     @endif
 

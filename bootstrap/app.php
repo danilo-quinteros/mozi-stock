@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureCapacidad;
 use App\Http\Middleware\EnsureCompanyUser;
 use App\Http\Middleware\EnsureNotImpersonating;
+use App\Http\Middleware\EnsurePermiso;
 use App\Http\Middleware\EnsureSaasMode;
 use App\Http\Middleware\EnsureSuperadmin;
 use App\Http\Middleware\SecurityHeaders;
@@ -32,6 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'saas' => EnsureSaasMode::class,
             'sin-impersonar' => EnsureNotImpersonating::class,
             'capacidad' => EnsureCapacidad::class,
+            // Permisos de la empresa (ESPECIFICACION_PERMISOS.md § 6.4): responde 403; la capacidad, antes, 404.
+            'permiso' => EnsurePermiso::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -11,7 +11,7 @@
             <p class="lead">{{ __('Ventas a crédito y cuentas manuales: lo pendiente, lo vencido y lo realmente cobrado.') }}</p>
         </div>
         <div class="page-actions">
-            @if ($administra)
+            @if ($creaCuentas)
                 <button class="btn ghost" type="button" wire:click="nuevaCuenta"><x-icon name="plus" /> {{ __('Cuenta manual') }}</button>
             @endif
             <a class="btn primary" href="{{ route('creditos.cobrar') }}"><x-icon name="wallet" /> {{ __('Registrar cobro') }}</a>

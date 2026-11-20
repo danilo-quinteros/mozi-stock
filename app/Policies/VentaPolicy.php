@@ -4,53 +4,65 @@ namespace App\Policies;
 
 use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Enums\Capacidad;
+use App\Enums\Permiso;
 use App\Models\User;
 use App\Models\Venta;
 
 class VentaPolicy
 {
+    /**
+     * Ventas de su alcance (ESPECIFICACION_PERMISOS.md § 6.2) con ventas.ver: toda la empresa para quien trabaja en
+     * todas las sucursales, su sucursal asignada para el resto.
+     */
     public function view(User $user, Venta $venta): bool
     {
         return $user->empresa_id === $venta->empresa_id
-            && ($user->esAdministrador() || ($user->esVendedor() && $user->sucursal_id === $venta->sucursal_id));
+            && $user->tienePermiso(Permiso::VentasVer)
+            && $user->alcanzaSucursal($venta->sucursal_id);
     }
 
     /**
-     * Decisión del propietario (23/10/2026): cualquier usuario de la empresa cobra cualquier
-     * crédito de ella; el cobro queda en su sucursal y a su nombre.
+     * Historial de pagos de un crédito (creditos.ver): cualquier venta de la empresa, como los cobros.
+     */
+    public function verCredito(User $user, Venta $venta): bool
+    {
+        return $user->tienePermiso(Permiso::CreditosVer) && $user->empresa_id === $venta->empresa_id;
+    }
+
+    /**
+     * Decisión del propietario (23/10/2026): quien registra abonos cobra cualquier crédito de la empresa,
+     * sin importar su alcance; el cobro queda en su sucursal y a su nombre.
      */
     public function cobrar(User $user, Venta $venta): bool
     {
-        return $user->perteneceAEmpresa() && $user->empresa_id === $venta->empresa_id;
+        return $user->tienePermiso(Permiso::CreditosCobrar) && $user->empresa_id === $venta->empresa_id;
     }
 
     /**
-     * Vencimiento único o plan de cuotas de un crédito: el administrador, o el vendedor que
-     * puede ver la venta (de su sucursal).
+     * Vencimiento único o plan de cuotas de un crédito: quien vende y puede ver la venta.
      */
     public function condicionesCredito(User $user, Venta $venta): bool
     {
-        return $this->view($user, $venta);
+        return $user->tienePermiso(Permiso::VentasVender) && $this->view($user, $venta);
     }
 
     /**
-     * Decisión del propietario (23/10/2026): solo el administrador registra devoluciones.
+     * Devoluciones de ventas de su alcance: permiso ventas.devolver.
      */
     public function devolver(User $user, Venta $venta): bool
     {
-        return $user->esAdministrador() && $user->empresa_id === $venta->empresa_id;
+        return $user->tienePermiso(Permiso::VentasDevolver) && $this->view($user, $venta);
     }
 
     /**
-     * Autorizar la salida del almacén (ESPECIFICACION_DESPACHOS.md § 5.2, decisión D4): un administrador,
-     * o un vendedor con permiso de almacén cuya sucursal asignada (inmutable para él) sea la de la venta.
+     * Autorizar la salida del almacén (ESPECIFICACION_DESPACHOS.md § 5.2): permiso despachos.autorizar (solo cuenta con
+     * la capacidad Despachos) en ventas de su alcance.
      */
     public function despachar(User $user, Venta $venta): bool
     {
-        return $user->empresa_id === $venta->empresa_id
-            && $this->conDespachos($user)
-            && ($user->esAdministrador()
-                || ($user->esVendedor() && $user->puede_despachar && $user->sucursal_id === $venta->sucursal_id));
+        return $this->conDespachos($user)
+            && $user->tienePermiso(Permiso::DespachosAutorizar)
+            && $this->view($user, $venta);
     }
 
     /**
@@ -62,12 +74,12 @@ class VentaPolicy
     }
 
     /**
-     * Deshacer el último cambio de entrega o cancelar una venta despachada y devuelta: solo el administrador
-     * (despachos § 3 y § 5.5, cocina § 5.3).
+     * Deshacer el último cambio de entrega o cancelar una venta despachada y devuelta (despachos § 3 y § 5.5,
+     * cocina § 5.3): permiso entregas.corregir en ventas de su alcance.
      */
     public function corregirEntrega(User $user, Venta $venta): bool
     {
-        return $user->esAdministrador() && $user->empresa_id === $venta->empresa_id && $this->conEntregas($user);
+        return $user->tienePermiso(Permiso::EntregasCorregir) && $this->view($user, $venta) && $this->conEntregas($user);
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Livewire\Caja;
 use App\Domain\Caja\Consultas\ReporteCaja;
 use App\Domain\Reportes\Consultas\Cobros;
 use App\Domain\Reportes\Periodo;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\UsaSucursalActiva;
 use App\Models\Caja;
 use App\Models\Sucursal;
@@ -67,10 +68,11 @@ class Arqueo extends Component
     public function mount(): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador() || $actor->esVendedor(), 403);
+        // ESPECIFICACION_PERMISOS.md § 6.3: Caja y arqueo con caja.supervisar (acotado a su alcance); Mi caja con caja.operar.
+        abort_unless($actor->supervisaCajas() || $actor->tienePermiso(Permiso::CajaOperar), 403);
 
-        if ($actor->esAdministrador()) {
-            $this->authorize('ver-reportes');
+        if ($actor->supervisaCajas()) {
+            $this->authorize('supervisar-cajas');
             $this->aplicarSucursalActiva();
         }
 
@@ -139,19 +141,19 @@ class Arqueo extends Component
     }
 
     /**
-     * «Abrir caja» en Cajas en este momento (administrador): cualquier caja activa de su empresa,
+     * «Abrir caja» en Cajas en este momento (quien supervisa cajas): cualquier caja activa de su alcance,
      * aunque ya tenga otra abierta. La barra superior muestra el modal y valida al confirmar.
      */
     public function abrirCaja(int $cajaId): void
     {
-        abort_unless($this->actor()->esAdministrador(), 403);
+        abort_unless($this->actor()->supervisaCajas(), 403);
         $this->dispatch('abrir-apertura-caja', cajaId: $cajaId)->to(ControlCajaTopbar::class);
     }
 
-    /** «Cerrar caja» en Cajas en este momento: el administrador cierra cualquier turno de su empresa. */
+    /** «Cerrar caja» en Cajas en este momento: quien supervisa cierra cualquier turno de su alcance. */
     public function cerrarTurno(int $turnoId): void
     {
-        abort_unless($this->actor()->esAdministrador(), 403);
+        abort_unless($this->actor()->supervisaCajas(), 403);
         $this->dispatch('abrir-cierre-caja', turnoId: $turnoId)->to(ControlCajaTopbar::class);
     }
 
@@ -169,7 +171,7 @@ class Arqueo extends Component
             'arqueoDetalle' => $turnoDetalle?->calcularArqueo(),
         ];
 
-        return $actor->esAdministrador()
+        return $actor->supervisaCajas()
             ? view('livewire.caja.arqueo', [...$comunes, ...$this->datosAdministrador($actor)])
             : view('livewire.caja.mi-caja', [...$comunes, ...$this->datosVendedor($actor)])->title(__('Mi caja'));
     }
@@ -181,8 +183,10 @@ class Arqueo extends Component
     {
         $empresaId = (int) $actor->empresa_id;
         $periodo = $this->periodoElegido();
-        $sucursales = Sucursal::query()->where('empresa_id', $empresaId)->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']);
-        $sucursalId = ctype_digit($this->sucursal) ? $sucursales->firstWhere('id', (int) $this->sucursal)?->id : null;
+        $sucursales = Sucursal::query()->where('empresa_id', $empresaId)->where('activa', true)
+            ->when(! $actor->veTodasLasSucursales(), fn ($q) => $q->whereKey($actor->sucursal_id))
+            ->orderBy('nombre')->get(['id', 'nombre']);
+        $sucursalId = $actor->acotarSucursal(ctype_digit($this->sucursal) ? $sucursales->firstWhere('id', (int) $this->sucursal)?->id : null);
         $cajas = Caja::query()->where('empresa_id', $empresaId)->where('activa', true)
             ->when($sucursalId !== null, fn ($q) => $q->where('sucursal_id', $sucursalId))
             ->with('sucursal:id,nombre')
@@ -287,16 +291,18 @@ class Arqueo extends Component
     }
 
     /**
-     * Administrador: turnos de su empresa (de su sucursal si la tiene fija). Vendedor: solo
-     * los turnos que abrió, en los que participó o en los que registró dinero.
+     * Quien supervisa cajas: turnos de su alcance (de una sola sucursal si la tiene fija). Quien usa su
+     * caja: solo los turnos que abrió, en los que participó o en los que registró dinero.
      */
     private function turnoVisible(int $turnoId): bool
     {
         $actor = $this->actor();
 
-        if ($actor->esAdministrador()) {
+        if ($actor->supervisaCajas()) {
+            $sucursalId = $actor->acotarSucursal($this->sucursalFija ? (int) $this->sucursal : null);
+
             return TurnoCaja::withoutGlobalScopes()->where('empresa_id', $actor->empresa_id)->whereKey($turnoId)
-                ->when($this->sucursalFija, fn ($q) => $q->where('sucursal_id', (int) $this->sucursal))
+                ->when($sucursalId !== null, fn ($q) => $q->where('sucursal_id', $sucursalId))
                 ->exists();
         }
 

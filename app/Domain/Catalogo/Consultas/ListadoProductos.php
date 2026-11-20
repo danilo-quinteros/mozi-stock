@@ -139,12 +139,12 @@ final class ListadoProductos
     }
 
     /**
-     * Sucursal cuyo stock se muestra: el vendedor siempre ve la suya (se ignora la
-     * solicitada); el administrador, la elegida si está activa o la primera activa.
+     * Sucursal cuyo stock se muestra: quien no trabaja en todas las sucursales siempre ve la suya
+     * (se ignora la solicitada); el resto, la elegida si está activa o la primera activa.
      */
     public static function sucursalParaVista(User $usuario, ?string $solicitada): ?Sucursal
     {
-        if ($usuario->esVendedor()) {
+        if (! $usuario->veTodasLasSucursales()) {
             return Sucursal::query()->find($usuario->sucursal_id);
         }
 

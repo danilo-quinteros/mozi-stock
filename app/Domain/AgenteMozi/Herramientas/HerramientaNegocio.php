@@ -8,7 +8,6 @@ use App\Domain\AgenteMozi\Datos\ConsultaDatos;
 use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
 use App\Domain\AgenteMozi\DTOs\DatasetPropuesto;
 use App\Domain\Reportes\Periodo;
-use App\Enums\Rol;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 
@@ -19,9 +18,10 @@ use Illuminate\Support\Facades\DB;
  */
 abstract class HerramientaNegocio implements Herramienta
 {
+    /** Análisis de toda la empresa: reportes.ver y todas las sucursales (ESPECIFICACION_PERMISOS.md § 6.7). */
     public function permiso(): ?string
     {
-        return 'ver-reportes';
+        return 'analizar-empresa';
     }
 
     /**
@@ -70,10 +70,10 @@ abstract class HerramientaNegocio implements Herramienta
         return Periodo::rango($hasta->subDays($dias)->format('Y-m-d'), $hasta->format('Y-m-d'));
     }
 
-    /** Sucursal fija del vendedor; null para el administrador (toda la empresa). */
+    /** Sucursal fija sin vista amplia; null con vista amplia (toda la empresa). */
     protected function sucursalVendedor(ContextoAgente $contexto): ?int
     {
-        return $contexto->rol === Rol::Administrador ? null : ($contexto->sucursalId ?? 0);
+        return $contexto->amplio ? null : ($contexto->sucursalId ?? 0);
     }
 
     protected function alcance(ContextoAgente $contexto): string

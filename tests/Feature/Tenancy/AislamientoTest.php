@@ -50,7 +50,7 @@ test('T02 an administrator cannot read or edit branches of another company by gu
 });
 
 test('T02 an administrator cannot read, edit or reassign users of another company', function () {
-    [, $adminA] = empresaConAdministrador();
+    [$empresaA, $adminA] = empresaConAdministrador();
     [$empresaB, $adminB] = empresaConAdministrador();
     $sucursalB = Sucursal::factory()->create(['empresa_id' => $empresaB->id]);
     $vendedorB = User::factory()->vendedor($sucursalB)->create(['name' => 'Vendedor Ajeno']);
@@ -65,10 +65,20 @@ test('T02 an administrator cannot read, edit or reassign users of another compan
     Livewire::actingAs($adminA)->test(Usuarios::class)
         ->call('crear')
         ->set('name', 'Intento cruzado')->set('email', 'cruzado@example.test')
-        ->set('rol', 'vendedor')->set('sucursal_id', (string) $sucursalB->id)
+        ->set('tipo', 'usuario')->set('rol_id', (string) rolPorDefecto($empresaA))->set('sucursal_id', (string) $sucursalB->id)
         ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
         ->call('guardar')
         ->assertHasErrors(['sucursal_id' => 'exists']);
+
+    // Ni un rol de B (ESPECIFICACION_PERMISOS.md § 6.4.3).
+    $sucursalA = Sucursal::factory()->create(['empresa_id' => $empresaA->id]);
+    Livewire::actingAs($adminA)->test(Usuarios::class)
+        ->call('crear')
+        ->set('name', 'Intento cruzado')->set('email', 'cruzado@example.test')
+        ->set('tipo', 'usuario')->set('rol_id', (string) $vendedorB->rol_id)->set('sucursal_id', (string) $sucursalA->id)
+        ->set('password', 'ClaveSegura12345')->set('password_confirmation', 'ClaveSegura12345')
+        ->call('guardar')
+        ->assertHasErrors(['rol_id' => 'exists']);
 
     expect(User::query()->where('email', 'cruzado@example.test')->exists())->toBeFalse()
         ->and($vendedorB->refresh()->empresa_id)->toBe($empresaB->id);
@@ -178,18 +188,33 @@ test('the database rejects inconsistent role, company and branch combinations', 
         'name' => 'X', 'email' => uniqid().'@example.test', 'password' => 'x', 'activo' => true,
     ]);
 
-    expect(fn () => $insertar(['rol' => 'vendedor', 'empresa_id' => $empresa->id]))->toThrow(QueryException::class)
-        ->and(fn () => $insertar(['rol' => 'superadmin', 'empresa_id' => $empresa->id]))->toThrow(QueryException::class)
-        ->and(fn () => $insertar(['rol' => 'administrador']))->toThrow(QueryException::class)
-        ->and(fn () => $insertar(['rol' => 'dueño', 'empresa_id' => $empresa->id]))->toThrow(QueryException::class);
+    $sucursal = Sucursal::factory()->create(['empresa_id' => $empresa->id]);
+    $rolId = rolPorDefecto($empresa);
+
+    // Usuario sin rol o sin sucursal, superadmin con empresa, administrador sin empresa, tipo inventado o rol en un administrador.
+    expect(fn () => $insertar(['tipo' => 'usuario', 'empresa_id' => $empresa->id, 'sucursal_id' => $sucursal->id]))->toThrow(QueryException::class)
+        ->and(fn () => $insertar(['tipo' => 'usuario', 'empresa_id' => $empresa->id, 'rol_id' => $rolId]))->toThrow(QueryException::class)
+        ->and(fn () => $insertar(['tipo' => 'superadmin', 'empresa_id' => $empresa->id]))->toThrow(QueryException::class)
+        ->and(fn () => $insertar(['tipo' => 'administrador']))->toThrow(QueryException::class)
+        ->and(fn () => $insertar(['tipo' => 'dueño', 'empresa_id' => $empresa->id]))->toThrow(QueryException::class)
+        ->and(fn () => $insertar(['tipo' => 'administrador', 'empresa_id' => $empresa->id, 'rol_id' => $rolId]))->toThrow(QueryException::class);
+
+    // El rol de otra empresa lo rechaza la FK compuesta.
+    $otra = Empresa::factory()->create();
+    $sucursalOtra = Sucursal::factory()->create(['empresa_id' => $otra->id]);
+    expect(fn () => $insertar(['tipo' => 'usuario', 'empresa_id' => $otra->id, 'sucursal_id' => $sucursalOtra->id, 'rol_id' => $rolId]))->toThrow(QueryException::class);
+
+    $insertar(['tipo' => 'usuario', 'empresa_id' => $empresa->id, 'sucursal_id' => $sucursal->id, 'rol_id' => $rolId]);
+    expect(DB::table('users')->where('rol_id', $rolId)->count())->toBe(1);
 });
 
 test('empresa_id, role and branch cannot be mass assigned', function () {
     $user = new User;
-    $user->fill(['name' => 'X', 'email' => 'x@example.test', 'password' => 'secreta', 'empresa_id' => 9, 'rol' => 'superadmin', 'sucursal_id' => 3, 'activo' => false]);
+    $user->fill(['name' => 'X', 'email' => 'x@example.test', 'password' => 'secreta', 'empresa_id' => 9, 'tipo' => 'superadmin', 'rol_id' => 4, 'sucursal_id' => 3, 'activo' => false]);
 
     expect($user->empresa_id)->toBeNull()
-        ->and($user->rol)->toBeNull()
+        ->and($user->tipo)->toBeNull()
+        ->and($user->rol_id)->toBeNull()
         ->and($user->sucursal_id)->toBeNull()
         ->and($user->activo)->toBeTrue();
 

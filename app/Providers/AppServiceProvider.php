@@ -7,8 +7,11 @@ use App\Domain\AgenteMozi\Contratos\Respondedor;
 use App\Domain\AgenteMozi\Demo\RespondedorDemo;
 use App\Domain\AgenteMozi\Ia\GestorProveedores;
 use App\Domain\AgenteMozi\Ia\Orquestador;
+use App\Domain\Identidad\PermisosUsuario;
 use App\Domain\Tenancy\CapacidadesEmpresa;
 use App\Enums\Capacidad;
+use App\Enums\Permiso;
+use App\Http\Middleware\EnsurePermiso;
 use App\Livewire\Hooks\ErroresValidacion;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -21,6 +24,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
         // Capacidades por empresa: una consulta por petición; la cola lo descarta entre jobs.
         $this->app->scoped(CapacidadesEmpresa::class);
         $this->app->scoped(AccesoPorPlan::class);
+        // Permisos efectivos (ESPECIFICACION_PERMISOS.md § 6.1): una consulta por usuario y petición.
+        $this->app->scoped(PermisosUsuario::class);
     }
 
     /**
@@ -50,13 +56,31 @@ class AppServiceProvider extends ServiceProvider
         // Aviso rojo de validación también para errores cuya clave no es una propiedad del componente (p. ej. `lineas`).
         ErroresValidacion::registrar();
 
+        // Las actualizaciones Livewire de una página con permiso:<clave> vuelven a pasar por el middleware: quitar el
+        // permiso surte efecto en la acción siguiente aunque el componente siga abierto (ESPECIFICACION_PERMISOS.md § 6.1).
+        Livewire::addPersistentMiddleware([EnsurePermiso::class]);
+
         // Exportaciones CSV (§ 6: límite en operaciones sensibles): recorren tablas enteras de la empresa,
         // así que se limitan por usuario. Las subidas de archivos ya pasan por el límite de Livewire (60/min).
         RateLimiter::for('exportaciones', fn (Request $request): Limit => Limit::perMinute(30)
             ->by('exportaciones|'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
-        // Decisión del propietario (23/10/2026): Caja, arqueo y reportes solo para administradores.
-        Gate::define('ver-reportes', fn (User $user): bool => $user->esAdministrador());
+        // Permisos de la empresa (ESPECIFICACION_PERMISOS.md): @can('permiso', Permiso::VentasDevolver) en Blade.
+        Gate::define('permiso', fn (User $user, Permiso|string $permiso): bool => $user->tienePermiso($permiso));
+
+        // Reportes generales, sus CSV y el panel de Inicio de administración, acotados al alcance (P7).
+        Gate::define('ver-reportes', fn (User $user): bool => $user->tienePermiso(Permiso::ReportesVer));
+
+        // Agente Mozi: herramientas de análisis de toda la empresa (cobranza, flujo, gastos, comparativas). Exigen
+        // reportes.ver y todas las sucursales porque calculan sobre la empresa completa (§ 6.7).
+        Gate::define('analizar-empresa', fn (User $user): bool => $user->tienePermiso(Permiso::ReportesVer) && $user->veTodasLasSucursales());
+
+        // Agente Mozi, UC-27: vencimientos y trazabilidad de lotes de toda la empresa (con valor a costo).
+        Gate::define('analizar-lotes-empresa', fn (User $user): bool => Gate::forUser($user)->allows('analizar-lotes')
+            && Gate::forUser($user)->allows('analizar-empresa'));
+
+        // Caja y arqueo: elegir cualquier caja de su alcance y ver o cerrar turnos ajenos (§ 6.3).
+        Gate::define('supervisar-cajas', fn (User $user): bool => $user->supervisaCajas());
 
         // Funciones por rubro (variantes, lotes, despachos, cocina): rutas, Livewire, exports y menú.
         // Siempre la empresa del usuario autenticado; el superadmin no opera módulos de una empresa.
@@ -67,13 +91,11 @@ class AppServiceProvider extends ServiceProvider
                 && app(CapacidadesEmpresa::class)->tiene($user->empresa_id, $capacidad);
         });
 
-        // Producción (ESPECIFICACION_PRODUCCION.md, PR16 y § 11): solo el administrador de una empresa con la capacidad.
-        Gate::define('usar-produccion', fn (User $user): bool => $user->esAdministrador()
-            && Gate::forUser($user)->allows('capacidad', Capacidad::Produccion));
+        // Producción (ESPECIFICACION_PRODUCCION.md): el permiso, que solo cuenta con la capacidad activa.
+        Gate::define('usar-produccion', fn (User $user): bool => $user->tienePermiso(Permiso::ProduccionGestionar));
 
-        // Agente Mozi, UC-27 (AGENTE_MOZI_IA.md § 2.1): vencimientos y trazabilidad para el administrador con Lotes.
-        Gate::define('analizar-lotes', fn (User $user): bool => $user->esAdministrador()
-            && Gate::forUser($user)->allows('capacidad', Capacidad::LotesVencimientos));
+        // Vencimientos, trazabilidad y análisis de lotes (también UC-27 de Agente Mozi): el permiso con la capacidad Lotes.
+        Gate::define('analizar-lotes', fn (User $user): bool => $user->tienePermiso(Permiso::InventarioVencimientos));
 
         // Agente Mozi: usuarios de empresa mientras la bandera del servidor esté activa y, en SaaS, solo si
         // el plan de su empresa lo incluye. Cada herramienta vuelve a autorizar con su propio permiso
@@ -95,15 +117,15 @@ class AppServiceProvider extends ServiceProvider
         // SEO del sitio web público (mozistock.com): solo el superadministrador.
         Gate::define('administrar-sitio-web', fn (User $user): bool => $user->esSuperadmin());
 
-        // «Entrar como»: superadmin a cualquier cuenta de empresa (solo SaaS); administrador a
-        // los vendedores de su empresa. Nunca a uno mismo ni a cuentas bloqueadas.
+        // «Entrar como»: superadmin a cualquier cuenta de empresa (solo SaaS); administrador a los usuarios con rol
+        // de su empresa, nunca a otro administrador (§ 6.4). Nunca a uno mismo ni a cuentas bloqueadas.
         Gate::define('impersonar', function (User $user, User $objetivo): bool {
             if ($objetivo->is($user) || ! $objetivo->perteneceAEmpresa() || $objetivo->motivoBloqueo() !== null) {
                 return false;
             }
 
             return ($user->esSuperadmin() && config('mozistock.deployment_mode') === 'saas')
-                || ($user->esAdministrador() && $objetivo->esVendedor() && $objetivo->empresa_id === $user->empresa_id);
+                || ($user->esAdministrador() && $objetivo->esUsuario() && $objetivo->empresa_id === $user->empresa_id);
         });
     }
 

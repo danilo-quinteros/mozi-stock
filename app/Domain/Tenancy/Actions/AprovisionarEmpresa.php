@@ -5,9 +5,10 @@ namespace App\Domain\Tenancy\Actions;
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\Actions\CrearCajaPrincipal;
 use App\Domain\Catalogo\ListasSugeridas;
+use App\Domain\Identidad\Actions\CrearRolesPorDefecto;
 use App\Enums\Capacidad;
-use App\Enums\Rol;
 use App\Enums\Rubro;
+use App\Enums\TipoCuenta;
 use App\Models\Categoria;
 use App\Models\CategoriaEgreso;
 use App\Models\Empresa;
@@ -30,6 +31,7 @@ final class AprovisionarEmpresa
         private readonly Auditor $auditor,
         private readonly CrearCajaPrincipal $crearCajaPrincipal,
         private readonly ListasSugeridas $listas,
+        private readonly CrearRolesPorDefecto $roles,
     ) {}
 
     /**
@@ -78,7 +80,7 @@ final class AprovisionarEmpresa
         $usuario->email = Str::lower($administrador['email']);
         $usuario->password = $administrador['password'];
         $usuario->empresa_id = $empresa->id;
-        $usuario->rol = Rol::Administrador;
+        $usuario->tipo = TipoCuenta::Administrador;
         $usuario->activo = true;
         // Una cuenta aprovisionada por MoziStudios no depende de la entrega de correo; un registro público sí.
         $usuario->email_verified_at = $correoVerificado ? Carbon::now() : null;
@@ -103,6 +105,8 @@ final class AprovisionarEmpresa
         }
 
         $this->crearCajaPrincipal->ejecutar($actor, $matriz);
+        // Roles Vendedor y Encargado de sucursal (ESPECIFICACION_PERMISOS.md § 5), editables por la empresa.
+        $this->roles->ejecutar($empresa->id);
 
         $this->auditor->registrar('empresa.creada', $empresa, $actor, $empresa->id,
             despues: $empresa->only(['nombre', 'razon_social', 'nit', 'email', 'telefono', 'activa'])
@@ -110,7 +114,7 @@ final class AprovisionarEmpresa
         $this->auditor->registrar('sucursal.creada', $matriz, $actor, $empresa->id,
             despues: $matriz->only(['nombre', 'codigo', 'direccion', 'activa']));
         $this->auditor->registrar('usuario.creado', $usuario, $actor, $empresa->id,
-            despues: ['name' => $usuario->name, 'email' => $usuario->email, 'rol' => Rol::Administrador->value]);
+            despues: ['name' => $usuario->name, 'email' => $usuario->email, 'tipo' => TipoCuenta::Administrador->value]);
 
         return [$empresa, $usuario];
     }

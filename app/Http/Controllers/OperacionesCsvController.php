@@ -30,7 +30,7 @@ class OperacionesCsvController extends Controller
     {
         $actor = $this->actor($request);
         Gate::forUser($actor)->authorize('viewAny', Compra::class);
-        $filas = ListadoCompras::consulta((int) $actor->empresa_id, (string) $request->query('q', ''), $this->sucursal($request))
+        $filas = ListadoCompras::consulta((int) $actor->empresa_id, (string) $request->query('q', ''), $actor->acotarSucursal($this->sucursal($request)))
             ->lazy(500);
 
         return Csv::descargar('compras.csv', [__('Compra'), __('Fecha'), __('Proveedor'), __('Sucursal'), __('Artículos'), __('Medio'), __('Efectivo'), __('Electrónico'), __('Total pagado'), __('Referencia'), __('Registró')],
@@ -47,7 +47,7 @@ class OperacionesCsvController extends Controller
     {
         $actor = $this->actor($request);
         Gate::forUser($actor)->authorize('viewAny', Egreso::class);
-        $filas = ListadoEgresos::consulta((int) $actor->empresa_id, (string) $request->query('q', ''), $this->sucursal($request))
+        $filas = ListadoEgresos::consulta((int) $actor->empresa_id, (string) $request->query('q', ''), $actor->acotarSucursal($this->sucursal($request)))
             ->lazy(500);
 
         return Csv::descargar('egresos.csv', [__('Egreso'), __('Fecha'), __('Categoría'), __('Descripción'), __('Sucursal'), __('Medio'), __('Monto'), __('Registró')],

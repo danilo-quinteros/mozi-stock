@@ -8,8 +8,8 @@
         </div>
         <div class="page-actions">
             <a class="btn ghost" href="{{ route('clientes.index') }}"><x-icon name="arrow-left" /> {{ __('Clientes') }}</a>
-            <button class="btn soft" type="button" wire:click="editar"><x-icon name="edit" /> {{ __('Editar') }}</button>
-            @if ($administra)
+            @can('update', $cliente)<button class="btn soft" type="button" wire:click="editar"><x-icon name="edit" /> {{ __('Editar') }}</button>@endcan
+            @if ($cambiaEstado)
                 <button class="btn ghost" type="button" wire:click="$set('confirmandoEstado', true)">{{ $cliente->activo ? __('Desactivar') : __('Activar') }}</button>
             @endif
         </div>
@@ -23,7 +23,7 @@
     </div>
 
     <section class="card card-pad">
-        <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Historial de ventas') }}</div>@if (auth()->user()->esVendedor())<span class="subtle">{{ __('Solo ventas de tu sucursal') }}</span>@endif</div>
+        <div class="card-head"><div class="heading"><span class="heading-icon"><x-icon name="store" /></span>{{ __('Historial de ventas') }}</div>@if (! auth()->user()->veTodasLasSucursales())<span class="subtle">{{ __('Solo ventas de tu sucursal') }}</span>@endif</div>
         <div class="table-wrap">
             <table>
                 <thead><tr><th>{{ __('Venta') }}</th><th>{{ __('Fecha') }}</th><th>{{ __('Sucursal') }}</th><th>{{ __('Vendedor') }}</th><th>{{ __('Vendido') }}</th><th>{{ __('Cobrado') }}</th><th>{{ __('Saldo') }}</th><th>{{ __('Acción') }}</th></tr></thead>

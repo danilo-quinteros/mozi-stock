@@ -67,7 +67,7 @@ final class ListadoDespachos
     private static function base(User $usuario, array $filtros): Builder
     {
         $sucursalId = match (true) {
-            $usuario->esVendedor() => $usuario->sucursal_id,
+            ! $usuario->veTodasLasSucursales() => $usuario->sucursal_id,
             array_key_exists('sucursal_id', $filtros) => $filtros['sucursal_id'],
             default => $usuario->sucursalActivaId(),
         };

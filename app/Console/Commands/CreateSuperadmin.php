@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Auditoria\Auditor;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -51,10 +51,10 @@ class CreateSuperadmin extends Command
             }
 
             DB::transaction(function () use ($existente, $auditor): void {
-                $existente->rol = Rol::Superadmin;
+                $existente->tipo = TipoCuenta::Superadmin;
                 $existente->save();
                 $auditor->registrar('usuario.rol_superadmin', $existente, null, null,
-                    ['rol' => null], ['rol' => Rol::Superadmin->value]);
+                    ['tipo' => null], ['tipo' => TipoCuenta::Superadmin->value]);
             });
             $this->info('Rol de superadministrador concedido.');
 
@@ -88,12 +88,12 @@ class CreateSuperadmin extends Command
             $user->name = (string) $name;
             $user->email = $email;
             $user->password = (string) $password;
-            $user->rol = Rol::Superadmin;
+            $user->tipo = TipoCuenta::Superadmin;
             $user->activo = true;
             $user->email_verified_at = Carbon::now();
             $user->save();
             $auditor->registrar('usuario.creado', $user, null, null,
-                despues: ['name' => $user->name, 'email' => $user->email, 'rol' => Rol::Superadmin->value]);
+                despues: ['name' => $user->name, 'email' => $user->email, 'tipo' => TipoCuenta::Superadmin->value]);
         });
 
         $this->info('Superadministrador creado. Ya puedes iniciar sesión.');

@@ -21,7 +21,7 @@ class ExportarUsuariosController extends Controller
 
         $usuarios = User::query()
             ->where('empresa_id', $actor->empresa_id)
-            ->with('sucursal:id,nombre')
+            ->with(['sucursal:id,nombre', 'rol:id,nombre'])
             ->buscar(trim((string) $request->query('buscar', '')))
             ->orderBy('name')
             ->lazy(500);
@@ -32,7 +32,7 @@ class ExportarUsuariosController extends Controller
                     yield [
                         $usuario->name,
                         $usuario->email,
-                        $usuario->rol?->etiqueta() ?? '',
+                        $usuario->nombreRol(),
                         $usuario->sucursal->nombre ?? __('Todas'),
                         $usuario->activo ? __('Activo') : __('Inactivo'),
                     ];

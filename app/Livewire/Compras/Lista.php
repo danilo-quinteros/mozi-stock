@@ -48,7 +48,7 @@ class Lista extends Component
         $empresaId = (int) $actor->empresa_id;
 
         return view('livewire.compras.lista', [
-            'compras' => ListadoCompras::consulta($empresaId, $this->buscar, ctype_digit($this->sucursal) ? (int) $this->sucursal : null)->paginate(25),
+            'compras' => ListadoCompras::consulta($empresaId, $this->buscar, $this->sucursalFiltro())->paginate(25),
             'mes' => ListadoCompras::totales($empresaId, Periodo::mesActual()),
             'registradas' => Compra::query()->count(),
             'proveedoresActivos' => Proveedor::query()->where('activo', true)->count(),

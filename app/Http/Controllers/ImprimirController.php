@@ -24,7 +24,7 @@ class ImprimirController extends Controller
 {
     public function credito(Request $request, Venta $venta): View
     {
-        Gate::forUser($this->actor($request))->authorize('cobrar', $venta);
+        Gate::forUser($this->actor($request))->authorize('verCredito', $venta);
 
         $venta->load(['empresa', 'cliente:id,nombre,documento', 'sucursal:id,nombre', 'pedido:id,numero', 'vendedor:id,name', 'cuotas']);
 
@@ -43,12 +43,14 @@ class ImprimirController extends Controller
     public function caja(Request $request): View
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('ver-reportes');
+        Gate::forUser($actor)->authorize('supervisar-cajas');
         $empresaId = (int) $actor->empresa_id;
         $fecha = (string) $request->query('fecha', '');
         $dia = Periodo::rango((string) $request->query('desde', $fecha), $fecha);
         $valor = (string) $request->query('sucursal', '');
-        $sucursal = ctype_digit($valor) ? Sucursal::query()->find((int) $valor) : null;
+        // Quien no trabaja en todas las sucursales imprime solo la suya (ESPECIFICACION_PERMISOS.md § 6.2).
+        $sucursalId = $actor->acotarSucursal(ctype_digit($valor) ? (int) $valor : null);
+        $sucursal = $sucursalId === null ? null : Sucursal::query()->find($sucursalId);
         $metodo = in_array($request->query('metodo'), ['efectivo', 'electronico'], true) ? (string) $request->query('metodo') : '';
         $cajaId = ReporteCaja::cajaElegida((string) $request->query('caja', ''));
         $caja = $cajaId ? Caja::query()->find($cajaId) : null;

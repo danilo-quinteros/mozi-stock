@@ -7,7 +7,7 @@
             <p class="lead">{{ __('Deuda registrada a mano: no es una venta ni movió stock.') }}</p>
         </div>
         <div class="page-actions">
-            @if ($administra && ! $cuenta->estaAnulado())
+            @if ($anula && ! $cuenta->estaAnulado())
                 <button class="btn ghost" type="button" wire:click="$dispatch('anular', { tipo: 'cuenta', id: {{ $cuenta->id }} })"><x-icon name="x" /> {{ __('Anular cuenta') }}</button>
             @endif
             <a class="btn ghost" href="{{ route('creditos.index') }}"><x-icon name="arrow-left" /> {{ __('Volver a Cuentas por cobrar') }}</a>
@@ -43,7 +43,7 @@
                                     <b>{{ __('Cobro :codigo', ['codigo' => $cobro->codigo()]) }}</b> · {{ $cobro->metodo->etiqueta() }}@if ($cobro->estaAnulado()) <span class="badge">{{ __('Anulado') }}</span>@endif
                                     <small style="display:block;color:var(--faint);margin-top:4px">{{ $cobro->sucursal->nombre }} · {{ $cobro->receptor->name }}@if ($cobro->externo) · {{ __('fuera de caja') }}@endif @if ($cobro->referencia) · {{ $cobro->referencia }}@endif @if ($cobro->comprobante_path) · <a class="link" href="{{ route('cobros.comprobante', $cobro) }}" target="_blank">{{ __('Comprobante') }}</a>@endif</small>
                                     @if ($cobro->estaAnulado())<small style="display:block;color:var(--faint);margin-top:4px">{{ $cobro->descripcionAnulacion() }}</small>@endif
-                                    @if ($administra && ! $cobro->estaAnulado())<button type="button" class="btn ghost sm" style="margin-top:6px" wire:click="$dispatch('anular', { tipo: 'cobro', id: {{ $cobro->id }} })">{{ __('Anular cobro') }}</button>@endif
+                                    @if ($anula && ! $cobro->estaAnulado())<button type="button" class="btn ghost sm" style="margin-top:6px" wire:click="$dispatch('anular', { tipo: 'cobro', id: {{ $cobro->id }} })">{{ __('Anular cobro') }}</button>@endif
                                 </td>
                                 <td @if ($cobro->estaAnulado()) style="text-decoration:line-through" @endif>{{ Decimal::bs($aplicacion->monto_efectivo) }}</td>
                                 <td @if ($cobro->estaAnulado()) style="text-decoration:line-through" @endif>{{ Decimal::bs($aplicacion->monto_electronico) }}</td>
@@ -74,7 +74,7 @@
         </aside>
     </div>
 
-    @if ($administra)
+    @if ($anula)
         <livewire:cuentas.anular :volver="route('creditos.cuenta', $cuenta)" />
     @endif
 

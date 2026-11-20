@@ -3,6 +3,7 @@
 namespace App\Domain\Caja\Actions;
 
 use App\Domain\Auditoria\Auditor;
+use App\Enums\Permiso;
 use App\Models\Caja;
 use App\Models\Scopes\EmpresaScope;
 use App\Models\Sucursal;
@@ -62,13 +63,20 @@ final class AbrirTurnoCaja
                 ]);
             }
 
-            if (! $actor->activo || ! ($actor->esAdministrador() || $actor->esVendedor())) {
+            // § 6.3: quien supervisa cajas abre una por caja de su alcance; quien usa su caja, solo la asignada.
+            if (! $actor->activo || ! ($actor->supervisaCajas() || $actor->tienePermiso(Permiso::CajaOperar))) {
                 throw ValidationException::withMessages([
                     'caja' => __('Tu usuario no puede abrir cajas.'),
                 ]);
             }
 
-            if ($actor->esVendedor()) {
+            if ($actor->supervisaCajas() && ! $actor->alcanzaSucursal((int) $bloqueada->sucursal_id)) {
+                throw ValidationException::withMessages([
+                    'caja' => __('No perteneces a la sucursal de esta caja.'),
+                ]);
+            }
+
+            if (! $actor->supervisaCajas()) {
                 if ((int) $actor->sucursal_id !== (int) $bloqueada->sucursal_id) {
                     throw ValidationException::withMessages([
                         'caja' => __('No perteneces a la sucursal de esta caja.'),
@@ -103,9 +111,9 @@ final class AbrirTurnoCaja
                 ]);
             }
 
-            // El vendedor atiende un solo cajón: no abre un segundo turno. El administrador sí,
+            // Quien usa su caja atiende un solo cajón: no abre un segundo turno. Quien supervisa sí,
             // en otra caja (la de esta ya se comprobó arriba y la protege el índice único).
-            $otroTurno = $actor->esVendedor() ? TurnoCaja::withoutGlobalScope(EmpresaScope::class)
+            $otroTurno = ! $actor->supervisaCajas() ? TurnoCaja::withoutGlobalScope(EmpresaScope::class)
                 ->where('empresa_id', (int) $actor->empresa_id)
                 ->where('usuario_apertura_id', $actor->id)
                 ->where('estado', 'abierto')

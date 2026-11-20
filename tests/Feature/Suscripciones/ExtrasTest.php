@@ -8,7 +8,7 @@ use App\Domain\Suscripciones\Actions\RevisarComprobantePago;
 use App\Domain\Suscripciones\CalculadoraExtras;
 use App\Domain\Tenancy\Actions\GuardarSucursal;
 use App\Enums\EstadoPagoSaas;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Admin\Suscripciones;
 use App\Livewire\Empresa\MiSuscripcion;
 use App\Livewire\Empresa\Sucursales as PantallaSucursales;
@@ -70,7 +70,7 @@ function nuevaSucursal(User $admin, string $codigo): Sucursal
 function nuevoUsuario(User $admin, string $correo, bool $activo = true): User
 {
     return app(GuardarUsuarioEmpresa::class)->crear($admin, [
-        'name' => 'Persona '.$correo, 'email' => $correo.'@ejemplo.bo', 'rol' => Rol::Administrador,
+        'name' => 'Persona '.$correo, 'email' => $correo.'@ejemplo.bo', 'tipo' => TipoCuenta::Administrador,
         'sucursal_id' => null, 'password' => 'clave-segura-123', 'activo' => $activo,
     ]);
 }
@@ -231,7 +231,7 @@ test('user limit counts active users only and blocks creating or reactivating be
     expect($inactivo->activo)->toBeFalse();
 
     expect(fn () => app(GuardarUsuarioEmpresa::class)->actualizar($this->admin, $inactivo, [
-        'name' => $inactivo->name, 'email' => $inactivo->email, 'rol' => Rol::Administrador, 'sucursal_id' => null, 'activo' => true,
+        'name' => $inactivo->name, 'email' => $inactivo->email, 'tipo' => TipoCuenta::Administrador, 'sucursal_id' => null, 'activo' => true,
     ]))->toThrow(ValidationException::class);
 
     Suscripcion::withoutGlobalScope(EmpresaScope::class)->where('empresa_id', $this->empresa->id)->update(['paquetes_usuarios' => 1]);

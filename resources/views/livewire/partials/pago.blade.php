@@ -1,11 +1,11 @@
-{{-- Campos de FormularioPago. Recibe $administra, $sucursales, $sumaMixta y $etiquetaMonto. --}}
+{{-- Campos de FormularioPago. Recibe $eligeSucursal (trabaja en todas las sucursales), $sucursales, $sumaMixta y $etiquetaMonto. --}}
 @use('App\Support\Decimal')
 <div class="field">
     <span class="field-label">{{ __('Fecha') }}</span>
     <input class="input" type="text" readonly value="{{ __('Hoy, :fecha (al registrar)', ['fecha' => now()->timezone(config('mozistock.business_timezone'))->format('d/m/Y')]) }}">
 </div>
 <x-campo etiqueta="Sucursal" campo="sucursal_id">
-    <select id="sucursal_id" class="select" wire:model.live="sucursal_id" @disabled(! $administra)>
+    <select id="sucursal_id" class="select" wire:model.live="sucursal_id" @disabled(! $eligeSucursal)>
         @foreach ($sucursales as $opcion)
             <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
         @endforeach

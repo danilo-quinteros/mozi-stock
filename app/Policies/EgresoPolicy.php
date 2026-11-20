@@ -2,20 +2,21 @@
 
 namespace App\Policies;
 
+use App\Enums\Permiso;
 use App\Models\User;
 
 /**
- * Decisión del propietario (23/10/2026): egresos solo para administradores.
+ * Egresos: permiso egresos.gestionar, dentro de su alcance de sucursales.
  */
 class EgresoPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->esAdministrador();
+        return $user->tienePermiso(Permiso::EgresosGestionar);
     }
 
     public function create(User $user): bool
     {
-        return $user->esAdministrador();
+        return $this->viewAny($user);
     }
 }

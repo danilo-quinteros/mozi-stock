@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Domain\Inventario\Consultas\ReporteVencimientos;
 use App\Domain\Inventario\DatosLote;
-use App\Models\OperacionInventario;
 use App\Models\Producto;
 use App\Models\User;
 use App\Support\Csv;
@@ -22,13 +21,13 @@ class ExportarVencimientosController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        Gate::forUser($actor)->authorize('viewAny', OperacionInventario::class);
+        Gate::forUser($actor)->authorize('analizar-lotes');
 
         $estado = (string) $request->query('estado', 'todos');
         $sucursal = (string) $request->query('sucursal', '');
         $filas = ReporteVencimientos::consulta((int) $actor->empresa_id, [
             'estado' => $estado,
-            'sucursal_id' => ctype_digit($sucursal) ? (int) $sucursal : null,
+            'sucursal_id' => $actor->acotarSucursal(ctype_digit($sucursal) ? (int) $sucursal : null),
             'buscar' => (string) $request->query('q', ''),
         ])->lazy(500);
 

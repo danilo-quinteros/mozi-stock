@@ -211,7 +211,7 @@ class Panel extends Component
         $categorias = CategoriaEgreso::query()->withCount('egresos')->orderByDesc('activa')->orderBy('nombre')->get();
 
         return view('livewire.egresos.panel', [
-            'egresos' => ListadoEgresos::consulta($empresaId, $this->buscar, ctype_digit($this->sucursal) ? (int) $this->sucursal : null)->paginate(25),
+            'egresos' => ListadoEgresos::consulta($empresaId, $this->buscar, $this->sucursalFiltro())->paginate(25),
             'delMes' => ListadoEgresos::total($empresaId, Periodo::mesActual()),
             'deHoy' => ListadoEgresos::total($empresaId, Periodo::hoy()),
             'categorias' => $categorias,

@@ -4,10 +4,10 @@ namespace App\Livewire\Creditos;
 
 use App\Domain\Creditos\Actions\RegistrarCuentaCobrar;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Cliente;
 use App\Models\CuentaCobrar;
-use App\Models\Pedido;
 use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -67,13 +67,15 @@ class Lista extends Component
 
     public function mount(): void
     {
-        $this->authorize('viewAny', Pedido::class);
+        $this->authorize('permiso', Permiso::CreditosVer);
 
         if (! in_array($this->estado, CuentasPorCobrar::ESTADOS, true)) {
             $this->estado = 'todas';
         }
 
-        $activa = $this->actor()->esAdministrador() ? $this->actor()->sucursalActivaId() : null;
+        // Los créditos de toda la empresa se consultan desde cualquier sucursal (decisión del 23/10/2026); quien
+        // trabaja en todas filtra por la sucursal que eligió en el menú lateral.
+        $activa = $this->actor()->veTodasLasSucursales() ? $this->actor()->sucursalActivaId() : null;
 
         if ($activa !== null && $this->sucursal === '') {
             $this->sucursal = (string) $activa;
@@ -129,7 +131,7 @@ class Lista extends Component
             'resumen' => CuentasPorCobrar::resumen($empresaId, $sucursalId),
             'sucursales' => Sucursal::query()->orderBy('nombre')->get(['id', 'nombre', 'activa']),
             'clientes' => $this->formCuenta ? Cliente::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'documento']) : collect(),
-            'administra' => $actor->esAdministrador(),
+            'creaCuentas' => $actor->can('create', CuentaCobrar::class),
         ]);
     }
 

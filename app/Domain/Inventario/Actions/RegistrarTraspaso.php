@@ -27,7 +27,7 @@ final class RegistrarTraspaso
      */
     public function ejecutar(User $actor, array $datos): OperacionInventario
     {
-        Gate::forUser($actor)->authorize('create', OperacionInventario::class);
+        Gate::forUser($actor)->authorize('traspasar', OperacionInventario::class);
 
         $origen = $this->resolverSucursal->paraOperacion($actor, $datos['sucursal_id']);
 

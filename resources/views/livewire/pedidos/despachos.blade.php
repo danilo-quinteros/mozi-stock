@@ -15,7 +15,7 @@
             <x-icon name="search" />
             <input class="input" type="search" wire:model.live.debounce.350ms="cliente" placeholder="{{ __('Buscar cliente o CI/NIT...') }}" aria-label="{{ __('Buscar cliente') }}">
         </div>
-        @if ($administra)
+        @if ($eligeSucursal)
             <select class="select" wire:model.live="sucursal" aria-label="{{ __('Filtrar sucursal') }}" @disabled($sucursalFija) @if ($sucursalFija) title="{{ __('Sucursal fijada en el menú lateral') }}" @endif>
                 <option value="">{{ __('Todas las sucursales') }}</option>
                 @foreach ($sucursales as $opcion)

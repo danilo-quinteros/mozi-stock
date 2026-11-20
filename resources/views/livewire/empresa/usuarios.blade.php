@@ -6,7 +6,11 @@
             <p class="lead">{{ __('Permisos, accesos y trazabilidad por vendedor.') }}</p>
         </div>
         <div class="page-actions">
-            <button class="btn primary" type="button" wire:click="crear"><x-icon name="plus" /> {{ __('Nuevo usuario') }}</button>
+            @if ($pestana === 'roles')
+                <a class="btn primary" href="{{ route('usuarios.roles.crear') }}"><x-icon name="plus" /> {{ __('Nuevo rol') }}</a>
+            @else
+                <button class="btn primary" type="button" wire:click="crear"><x-icon name="plus" /> {{ __('Nuevo usuario') }}</button>
+            @endif
         </div>
     </div>
 
@@ -27,13 +31,13 @@
         </article>
         <article class="card stat">
             <span class="stat-label">{{ __('Administradores') }}</span>
-            <div class="stat-value">{{ (int) $conteo->administradores }}</div>
-            <div class="stat-foot">{{ __('Gestionan todas las sucursales') }}</div>
+            <div class="stat-value">{{ $administradores }}</div>
+            <div class="stat-foot">{{ __('Todos los permisos y todas las sucursales') }}</div>
         </article>
         <article class="card stat">
-            <span class="stat-label">{{ __('Vendedores') }}</span>
-            <div class="stat-value">{{ (int) $conteo->vendedores }}</div>
-            <div class="stat-foot">{{ __('Cada uno con sucursal asignada') }}</div>
+            <span class="stat-label">{{ __('Usuarios con rol') }}</span>
+            <div class="stat-value">{{ (int) $conteo->con_rol }}</div>
+            <div class="stat-foot">{{ trans_choice('{0} Sin roles creados|{1} 1 rol en tu empresa|[2,*] :n roles en tu empresa', $roles->count(), ['n' => $roles->count()]) }}</div>
         </article>
     </div>
 
@@ -43,7 +47,7 @@
         </div>
         <div class="tabs" role="tablist">
             <button type="button" role="tab" class="tab {{ $pestana === 'usuarios' ? 'active' : '' }}" aria-selected="{{ $pestana === 'usuarios' ? 'true' : 'false' }}" wire:click="$set('pestana', 'usuarios')">{{ __('Usuarios') }}</button>
-            <button type="button" role="tab" class="tab {{ $pestana === 'permisos' ? 'active' : '' }}" aria-selected="{{ $pestana === 'permisos' ? 'true' : 'false' }}" wire:click="$set('pestana', 'permisos')">{{ __('Permisos') }}</button>
+            <button type="button" role="tab" class="tab {{ $pestana === 'roles' ? 'active' : '' }}" aria-selected="{{ $pestana === 'roles' ? 'true' : 'false' }}" wire:click="$set('pestana', 'roles')">{{ __('Roles') }}</button>
         </div>
 
         @if ($pestana === 'usuarios')
@@ -62,14 +66,20 @@
                             <tr wire:key="usuario-{{ $usuario->id }}">
                                 <td><div class="item-name"><span class="token">{{ $usuario->initials() }}</span><span><b>{{ $usuario->name }}</b>@if ($usuario->id === auth()->id())<small>{{ __('Tu cuenta') }}</small>@endif</span></div></td>
                                 <td>{{ $usuario->email }}</td>
-                                <td><span class="badge info">{{ $usuario->rol?->etiqueta() }}</span>@if ($conDespachos && $usuario->esVendedor() && $usuario->puede_despachar) <span class="badge warning" title="{{ __('Permiso de almacén (puede despachar)') }}">{{ __('Almacén') }}</span>@endif</td>
+                                <td>
+                                    <span class="badge info">{{ $usuario->nombreRol() }}</span>
+                                    @if ($usuario->esUsuario() && $usuario->permisosExtra->isNotEmpty())
+                                        @php($extras = collect(\App\Enums\Permiso::desdeClaves($usuario->permisosExtra->pluck('permiso')))->map(fn ($p) => $p->etiqueta())->implode(', '))
+                                        <span class="badge secondary" title="{{ $extras }}" data-test="extras-{{ $usuario->id }}">{{ __('+:n extra', ['n' => $usuario->permisosExtra->count()]) }}</span>
+                                    @endif
+                                </td>
                                 <td>{{ $usuario->sucursal->nombre ?? __('Todas') }}</td>
-                                <td><span class="badge secondary">{{ $usuario->caja->nombre ?? ($usuario->esVendedor() ? __('Sin caja') : __('Supervisa')) }}</span></td>
+                                <td><span class="badge secondary">{{ $usuario->caja->nombre ?? ($usuario->esUsuario() ? __('Sin caja') : __('Supervisa')) }}</span></td>
                                 <td><span class="badge {{ $usuario->activo ? 'success' : 'danger' }}">{{ $usuario->activo ? __('Activo') : __('Inactivo') }}</span></td>
                                 <td><span class="row" style="gap:6px;flex-wrap:nowrap">
                                     <button class="btn sm ghost" type="button" wire:click="editar({{ $usuario->id }})"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</button>
                                     {{-- Misma regla que el Gate «impersonar», sin consultas por fila; el controlador la vuelve a validar. --}}
-                                    @if ($usuario->esVendedor() && $usuario->activo)
+                                    @if ($usuario->esUsuario() && $usuario->activo)
                                         <form method="POST" action="{{ route('impersonar', $usuario) }}">@csrf
                                             <button class="btn sm ghost" type="submit" title="{{ __('Entrar como :name', ['name' => $usuario->name]) }}"><x-icon name="login" size="sm" /> {{ __('Entrar como') }}</button>
                                         </form>
@@ -77,7 +87,7 @@
                                 </span></td>
                             </tr>
                         @empty
-                            <tr><td colspan="6"><div class="empty">{{ __('No hay usuarios que coincidan con la búsqueda.') }}</div></td></tr>
+                            <tr><td colspan="7"><div class="empty">{{ __('No hay usuarios que coincidan con la búsqueda.') }}</div></td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -92,24 +102,47 @@
                 </div>
             @endif
         @else
+            <div class="tool-row">
+                <p class="subtle" style="margin:0">{{ __('Cada usuario tiene un rol. El administrador puede sumarle permisos extra desde su ficha.') }}</p>
+            </div>
+            @error('rol')<div class="notice" role="alert" style="margin-bottom:12px"><x-icon name="status-alert" /><div><p>{{ $message }}</p></div></div>@enderror
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>{{ __('Función') }}</th><th>{{ __('Administrador') }}</th><th>{{ __('Vendedor') }}</th></tr></thead>
+                    <thead><tr><th>{{ __('Rol') }}</th><th>{{ __('Usuarios') }}</th><th>{{ __('Permisos') }}</th><th>{{ __('Acción') }}</th></tr></thead>
                     <tbody>
-                        <tr><td>{{ __('Usuarios y sucursales') }}</td><td>{{ __('Administrar') }}</td><td>{{ __('Sin acceso') }}</td></tr>
-                        <tr><td>{{ __('Datos de la empresa') }}</td><td>{{ __('Editar') }}</td><td>{{ __('Sin acceso') }}</td></tr>
-                        <tr><td>{{ __('Sucursal de trabajo') }}</td><td>{{ __('Elige entre las sucursales activas') }}</td><td>{{ __('Fija, asignada por el administrador') }}</td></tr>
+                        <tr>
+                            <td><b>{{ __('Administrador') }}</b><small style="display:block" class="subtle">{{ __('Fijo: no se edita ni se elimina') }}</small></td>
+                            <td>{{ $administradores }}</td>
+                            <td><span class="badge success">{{ __('Todos los permisos') }}</span></td>
+                            <td>—</td>
+                        </tr>
+                        @foreach ($roles as $rol)
+                            <tr wire:key="rol-{{ $rol->id }}">
+                                <td>
+                                    <b>{{ $rol->nombre }}</b>
+                                    <small style="display:block" class="subtle">{{ $rol->descripcion ?: ($rol->plantilla ? __('Rol por defecto') : __('Creado por la empresa')) }}</small>
+                                </td>
+                                <td>{{ $rol->usuarios_count }}</td>
+                                <td>{{ trans_choice('{0} Sin permisos|{1} 1 permiso|[2,*] :n permisos', $rol->permisos_count, ['n' => $rol->permisos_count]) }}</td>
+                                <td><span class="row" style="gap:6px;flex-wrap:nowrap">
+                                    <a class="btn sm ghost" href="{{ route('usuarios.roles.editar', $rol) }}"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</a>
+                                    <button class="btn sm ghost" type="button" wire:click="duplicarRol({{ $rol->id }})" wire:loading.attr="disabled" wire:target="duplicarRol">{{ __('Duplicar') }}</button>
+                                    @if ($rol->usuarios_count === 0)
+                                        <button class="btn sm ghost" type="button" wire:click="eliminarRol({{ $rol->id }})" wire:confirm="{{ __('¿Eliminar el rol «:nombre»? No se puede deshacer.', ['nombre' => $rol->nombre]) }}">{{ __('Eliminar') }}</button>
+                                    @endif
+                                </span></td>
+                            </tr>
+                        @endforeach
                     </tbody>
                 </table>
             </div>
-            <div class="divider"></div>
-            <div class="notice"><x-icon name="shield" /><div><b>{{ __('Permisos verificados en el servidor') }}</b><p>{{ __('El vendedor no puede cambiar su sucursal aunque modifique la página o la petición. Los permisos de los módulos comerciales se añadirán junto con cada módulo.') }}</p></div></div>
+            <p class="footnote">{{ __('Los permisos se verifican en el servidor. Solo un administrador gestiona usuarios, roles y permisos. Un rol con usuarios no se elimina: primero asígnales otro.') }}</p>
         @endif
     </section>
 
     @if ($formularioAbierto)
-        <x-modal :titulo="$editandoId ? 'Editar usuario' : 'Nuevo usuario'" cerrar="cerrarFormulario"
-            descripcion="El vendedor trabaja solo en la sucursal asignada. Los usuarios no se eliminan: se desactivan para conservar su historial.">
+        <x-modal class="rol-modal" :titulo="$editandoId ? 'Editar usuario' : 'Nuevo usuario'" cerrar="cerrarFormulario"
+            descripcion="Un usuario con rol trabaja en la sucursal asignada salvo que su rol le permita todas. Los usuarios no se eliminan: se desactivan para conservar su historial.">
             <form wire:submit="guardar">
                 <div class="fields">
                     <x-campo etiqueta="Nombre" campo="name">
@@ -118,15 +151,26 @@
                     <x-campo etiqueta="Correo de acceso" campo="email">
                         <input id="email" class="input" type="email" wire:model="email" maxlength="255" placeholder="{{ __('usuario@empresa.com') }}" required>
                     </x-campo>
-                    <x-campo etiqueta="Rol" campo="rol">
-                        <select id="rol" class="select" wire:model.live="rol" @disabled($editandoPropiaCuenta)>
-                            @foreach (\App\Enums\Rol::asignablesPorEmpresa() as $opcion)
-                                <option value="{{ $opcion->value }}">{{ $opcion->etiqueta() }}</option>
-                            @endforeach
+                    <x-campo etiqueta="Tipo" campo="tipo">
+                        <select id="tipo" class="select" wire:model.live="tipo" @disabled($editandoPropiaCuenta)>
+                            <option value="usuario">{{ __('Usuario con rol') }}</option>
+                            <option value="administrador">{{ __('Administrador') }}</option>
                         </select>
                     </x-campo>
+                    <x-campo etiqueta="Rol" campo="rol_id">
+                        @if ($esUsuario)
+                            <select id="rol_id" class="select" wire:model.live="rol_id" required>
+                                <option value="">{{ $roles->isEmpty() ? __('Crea un rol primero') : __('Selecciona un rol') }}</option>
+                                @foreach ($roles as $opcion)
+                                    <option value="{{ $opcion->id }}">{{ $opcion->nombre }}</option>
+                                @endforeach
+                            </select>
+                        @else
+                            <select id="rol_id" class="select" disabled><option>{{ __('Todos los permisos') }}</option></select>
+                        @endif
+                    </x-campo>
                     <x-campo etiqueta="Sucursal" campo="sucursal_id">
-                        @if ($rol === \App\Enums\Rol::Vendedor->value)
+                        @if ($esUsuario)
                             <select id="sucursal_id" class="select" wire:model.live="sucursal_id" required>
                                 <option value="">{{ __('Selecciona una sucursal') }}</option>
                                 @foreach ($sucursales as $sucursal)
@@ -138,14 +182,16 @@
                         @endif
                     </x-campo>
                     <x-campo etiqueta="Caja asignada" campo="caja_id">
-                        @if ($rol === \App\Enums\Rol::Vendedor->value)
-                            <select id="caja_id" class="select" wire:model="caja_id" required @disabled($cajasDisponibles->isEmpty())>
-                                <option value="">{{ $cajasDisponibles->isEmpty() ? __('Sin cajas en esta sucursal') : __('Selecciona una caja') }}</option>
+                        @if ($esUsuario)
+                            <select id="caja_id" class="select" wire:model="caja_id" @required($necesitaCaja) @disabled($cajasDisponibles->isEmpty())>
+                                <option value="">{{ $cajasDisponibles->isEmpty() ? __('Sin cajas en esta sucursal') : ($necesitaCaja ? __('Selecciona una caja') : __('Sin caja (supervisa cajas)')) }}</option>
                                 @foreach ($cajasDisponibles as $caja)
                                     <option value="{{ $caja->id }}">{{ $caja->nombre }} {{ $caja->es_principal ? __('(Principal)') : '' }}</option>
                                 @endforeach
                             </select>
-                            <small class="subtle" style="display:block;margin-top:6px">{{ __('Solo cajas de su sucursal. Varios vendedores pueden compartir una caja; si es compartida, trabajan en el mismo turno.') }}</small>
+                            <small class="subtle" style="display:block;margin-top:6px">{{ $necesitaCaja
+                                ? __('Su rol usa su caja: solo cajas de su sucursal. Varios usuarios pueden compartir una caja y trabajan en el mismo turno.')
+                                : __('Opcional: su rol supervisa cajas o no usa caja.') }}</small>
                         @else
                             <select id="caja_id" class="select" disabled><option>{{ __('Todas las cajas (supervisa)') }}</option></select>
                         @endif
@@ -158,22 +204,25 @@
                     </x-campo>
                 </div>
                 <p class="subtle" style="margin:12px 0 0">{{ __('Mínimo 12 caracteres, con letras y números.') }}</p>
-                @if ($conDespachos)
-                    @if ($rol === \App\Enums\Rol::Vendedor->value)
-                        <label class="entrega-check" style="margin-top:16px">
-                            <input type="checkbox" wire:model="puede_despachar" data-permiso-almacen>
-                            <span><b>{{ __('Permiso de almacén (puede despachar)') }}</b><small>{{ __('Autoriza la salida de las ventas Por despachar de su sucursal. Queda registrado en la auditoría.') }}</small></span>
-                        </label>
-                    @else
-                        <p class="subtle" style="margin:12px 0 0">{{ __('Los administradores siempre pueden despachar.') }}</p>
-                    @endif
+
+                @if ($esUsuario)
+                    {{-- wire:ignore.self conserva abierto/cerrado entre actualizaciones; el contenido sí se actualiza. --}}
+                    <details class="permisos-extra" wire:ignore.self @if ($permisos_extra !== []) open @endif data-test="permisos-extra">
+                        <summary>{{ __('Permisos extra') }} <small>{{ $permisos_extra === [] ? __('Solo suman a los de su rol') : trans_choice('{1} 1 extra|[2,*] :n extra', count($permisos_extra), ['n' => count($permisos_extra)]) }}</small></summary>
+                        @error('permisos_extra')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                        @error('permisos_extra.*')<p class="auth-error" role="alert">{{ $message }}</p>@enderror
+                        @include('livewire.empresa.partials.casillas-permisos', ['modelo' => 'permisos_extra', 'marcados' => $permisos_extra, 'delRol' => $delRol, 'requeridos' => $requeridos, 'grupos' => $grupos, 'ocultos' => $ocultos])
+                    </details>
+                @else
+                    <p class="subtle" style="margin:12px 0 0">{{ __('El administrador tiene todos los permisos y gestiona usuarios, roles, sucursales y la suscripción.') }}</p>
                 @endif
+
                 @if ($editandoId)
                     <label class="row" style="margin-top:16px">
                         <input type="checkbox" wire:model="activo" @disabled($editandoPropiaCuenta)>
                         <span>{{ __('Usuario activo') }}</span>
                     </label>
-                    @if ($editandoPropiaCuenta)<p class="subtle" style="margin:8px 0 0">{{ __('No puedes cambiar tu propio rol ni desactivar tu cuenta.') }}</p>@endif
+                    @if ($editandoPropiaCuenta)<p class="subtle" style="margin:8px 0 0">{{ __('No puedes cambiar tu propio tipo ni desactivar tu cuenta.') }}</p>@endif
                 @endif
                 <div class="modal-actions">
                     <button type="button" class="btn ghost" wire:click="cerrarFormulario">{{ __('Cancelar') }}</button>

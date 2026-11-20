@@ -105,7 +105,7 @@ class ClienteFicha extends Component
                 'cobrado' => Decimal::redondear((string) ($totales->cobrado ?? '0')),
                 'saldo' => Decimal::redondear((string) ($totales->saldo ?? '0')),
             ],
-            'administra' => $actor->esAdministrador(),
+            'cambiaEstado' => $actor->can('cambiarEstado', $cliente),
             'cotizaciones' => DB::table('pedidos')->where('empresa_id', $cliente->empresa_id)->where('cliente_id', $cliente->id)
                 ->where('estado', 'pendiente')->when($sucursalId !== null, fn ($q) => $q->where('sucursal_id', $sucursalId))->count(),
         ])->title($cliente->nombre);

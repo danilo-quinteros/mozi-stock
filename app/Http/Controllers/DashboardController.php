@@ -12,7 +12,7 @@ use App\Domain\Reportes\Periodo;
 use App\Domain\Tenancy\GuiaConfiguracion;
 use App\Enums\Capacidad;
 use App\Enums\EstadoPagoSaas;
-use App\Models\OperacionInventario;
+use App\Enums\Permiso;
 use App\Models\PagoSaas;
 use App\Models\Sucursal;
 use App\Models\Suscripcion;
@@ -59,7 +59,8 @@ class DashboardController extends Controller
             'guiaSiat' => $guia !== null,
             'suscripcion' => $suscripcion,
             'comprobanteEnRevision' => $suscripcion !== null && PagoSaas::query()->where('estado', EstadoPagoSaas::Pendiente)->exists(),
-            'panel' => $user->esVendedor() ? $this->vendedor($user) : $this->administrador($user),
+            // Panel de administración con reportes.ver, acotado a su alcance (ESPECIFICACION_PERMISOS.md § 10 y P7).
+            'panel' => $user->tienePermiso(Permiso::ReportesVer) ? $this->administrador($user) : $this->vendedor($user),
         ]);
     }
 
@@ -85,23 +86,23 @@ class DashboardController extends Controller
             'stockBajo' => PanelInicio::stockBajo($empresaId, $sucursalId),
             'masVendidos' => PanelInicio::masVendidos($empresaId, $sucursalId),
             // Lotes y vencimientos § 4: una consulta, solo con la capacidad (y la Policy del reporte).
-            'lotes' => Gate::forUser($user)->allows('capacidad', Capacidad::LotesVencimientos) && Gate::forUser($user)->allows('viewAny', OperacionInventario::class)
+            'lotes' => Gate::forUser($user)->allows('analizar-lotes')
                 ? ReporteVencimientos::resumen($empresaId, $sucursalId) : null,
         ];
     }
 
     /**
-     * El vendedor siempre tiene sucursal (users_vendedor_sucursal_check).
+     * Todo usuario con rol tiene sucursal (users_usuario_rol_check); quien trabaja en todas ve la que eligió.
      *
      * @return array<string, mixed>
      */
     private function vendedor(User $user): array
     {
         $empresaId = (int) $user->empresa_id;
-        $sucursalId = (int) $user->sucursal_id;
+        $sucursalId = (int) ($user->sucursalActivaId() ?? $user->sucursal_id);
 
         return [
-            'sucursal' => $user->sucursal?->nombre,
+            'sucursal' => Sucursal::query()->whereKey($sucursalId)->value('nombre'),
             'actividad' => PanelInicio::actividadDeHoy($empresaId, $sucursalId, $user->id),
             'pedidos' => PanelInicio::pedidosPendientes($empresaId, $sucursalId),
             'alertas' => ListadoProductos::contarAlertas($empresaId, $sucursalId),

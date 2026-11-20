@@ -6,7 +6,6 @@ use App\Domain\Inventario\Consultas\ReporteVencimientos;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\RegularizaLotes;
 use App\Livewire\Concerns\UsaSucursalActiva;
-use App\Models\OperacionInventario;
 use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -39,7 +38,7 @@ class Vencimientos extends Component
 
     public function mount(): void
     {
-        $this->authorize('viewAny', OperacionInventario::class);
+        $this->authorize('analizar-lotes');
         $this->aplicarSucursalActiva();
     }
 
@@ -57,7 +56,7 @@ class Vencimientos extends Component
     {
         return [
             'estado' => in_array($this->estado, ReporteVencimientos::ESTADOS, true) ? $this->estado : 'todos',
-            'sucursal_id' => ctype_digit($this->sucursal) ? (int) $this->sucursal : null,
+            'sucursal_id' => $this->sucursalFiltro(),
             'buscar' => $this->buscar,
         ];
     }

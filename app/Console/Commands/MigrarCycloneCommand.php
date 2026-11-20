@@ -6,7 +6,7 @@ use App\Domain\Migracion\Cyclone\FotosCyclone;
 use App\Domain\Migracion\Cyclone\MigrarCyclone;
 use App\Domain\Migracion\Cyclone\OrigenCyclone;
 use App\Domain\Migracion\Cyclone\PlanMigracionCyclone;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Models\Empresa;
 use App\Models\User;
 use Illuminate\Console\Command;
@@ -121,7 +121,7 @@ class MigrarCycloneCommand extends Command
     {
         return User::query()
             ->where('empresa_id', $empresa->id)
-            ->where('rol', Rol::Administrador)
+            ->where('tipo', TipoCuenta::Administrador)
             ->where('activo', true)
             ->when(filled($this->option('usuario')), fn ($q) => $q->where('email', mb_strtolower((string) $this->option('usuario'))))
             ->orderBy('id')

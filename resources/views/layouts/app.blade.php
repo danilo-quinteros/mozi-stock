@@ -2,9 +2,10 @@
     $usuario = auth()->user();
     $panelGlobal = $usuario->esSuperadmin();
     $empresaActual = $usuario->perteneceAEmpresa() ? $usuario->empresa : null;
-    // Sucursal de trabajo: el administrador la elige aquí y filtra todas las pantallas.
+    // Sucursal de trabajo: quien trabaja en todas las sucursales la elige aquí y filtra todas las pantallas.
     $sucursalActiva = $empresaActual ? $usuario->sucursalActivaId() : null;
-    $sucursalesMenu = $usuario->esAdministrador() ? \App\Models\Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect();
+    $eligeSucursal = $empresaActual !== null && $usuario->veTodasLasSucursales();
+    $sucursalesMenu = $eligeSucursal ? \App\Models\Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect();
     $impersonador = session()->has(\App\Http\Controllers\ImpersonacionController::SESION);
 @endphp
 <!doctype html>
@@ -29,7 +30,7 @@
             @elseif ($empresaActual)
                 <span class="workspace-avatar">{{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($empresaActual->nombre, 0, 2)) }}</span>
                 <span class="workspace-info"><b>{{ $empresaActual->nombre }}</b>
-                    @if ($usuario->esAdministrador())
+                    @if ($eligeSucursal)
                         <form method="POST" action="{{ route('sucursal-activa') }}">@csrf
                             <select name="sucursal_id" class="workspace-select" aria-label="{{ __('Sucursal de trabajo') }}" onchange="this.form.submit()">
                                 <option value="">{{ __('Todas las sucursales') }}</option>
@@ -65,7 +66,7 @@
                     <span class="avatar">{{ $usuario->initials() }}</span>
                     <span class="mini-profile-info">
                         <b>{{ $usuario->name }}</b>
-                        <small>{{ $usuario->rol?->etiqueta() ?? __('Sin rol asignado') }}</small>
+                        <small>{{ $usuario->nombreRol() }}</small>
                     </span>
                     <x-icon name="chevron-down" size="sm" class="profile-arrow" />
                 </button>
@@ -105,7 +106,7 @@
         @if ($impersonador)
             <div class="impersonation-bar" role="status">
                 <x-icon name="eye" />
-                <span>{!! __('Estás usando la cuenta de :nombre (:rol). Todo lo que hagas queda registrado a su nombre.', ['nombre' => '<b>'.e($usuario->name).'</b>', 'rol' => e($usuario->rol?->etiqueta())]) !!}</span>
+                <span>{!! __('Estás usando la cuenta de :nombre (:rol). Todo lo que hagas queda registrado a su nombre.', ['nombre' => '<b>'.e($usuario->name).'</b>', 'rol' => e($usuario->nombreRol())]) !!}</span>
                 <form method="POST" action="{{ route('impersonar.salir') }}">@csrf
                     <button class="btn primary sm" type="submit"><x-icon name="logout" size="sm" /> {{ __('Volver a mi cuenta') }}</button>
                 </form>

@@ -7,8 +7,8 @@
         ['Mi suscripción', 'suscripcion', 'suscripcion|suscripcion.*', 'subscription', $usuario->esAdministrador() && config('mozistock.deployment_mode') === 'saas'],
         // En SaaS se muestra siempre: sin SIAT en el plan, la pestaña abre el aviso para cambiar de plan.
         ['Facturación', 'facturacion', 'facturacion', 'receipt', $usuario->esAdministrador() && ($usuario->empresa?->siat_habilitado || config('mozistock.deployment_mode') === 'saas')],
-        // Tallas y colores (V1): solo con la capacidad «variantes».
-        ['Tallas y colores', 'configuracion.tallas-colores', 'configuracion.tallas-colores', 'tag', $usuario->esAdministrador() && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::Variantes)],
+        // Tallas y colores (V1): solo con la capacidad «variantes» y el permiso de gestionar productos.
+        ['Tallas y colores', 'configuracion.tallas-colores', 'configuracion.tallas-colores', 'tag', $usuario->tienePermiso(\App\Enums\Permiso::ProductosGestionar) && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::Variantes)],
     ], fn ($p) => $p[4]);
 @endphp
 <nav class="tabs account-tabs" aria-label="{{ __('Mi empresa') }}">

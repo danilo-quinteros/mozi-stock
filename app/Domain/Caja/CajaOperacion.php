@@ -2,6 +2,7 @@
 
 namespace App\Domain\Caja;
 
+use App\Enums\Permiso;
 use App\Models\Caja;
 use App\Models\TurnoCaja;
 use App\Models\User;
@@ -37,20 +38,20 @@ final class CajaOperacion
         $conEfectivo = Decimal::comparar($efectivo, '0', Decimal::ESCALA_DINERO) > 0;
 
         if ($conEfectivo && $externo) {
-            if (! $actor->esAdministrador()) {
-                throw ValidationException::withMessages([$campo => __('Solo un administrador registra efectivo fuera de caja.')]);
+            if (! $actor->supervisaCajas()) {
+                throw ValidationException::withMessages([$campo => __('Solo quien supervisa cajas registra efectivo fuera de caja.')]);
             }
 
             return ['caja_id' => null, 'turno_id' => null, 'externo' => true];
         }
 
-        $turno = $turnoId !== null && $actor->esAdministrador()
+        $turno = $turnoId !== null && $actor->supervisaCajas()
             ? ($this->turnosDisponibles($actor, $sucursalId)->firstWhere('id', $turnoId)
                 ?? throw ValidationException::withMessages([$campo => __('La caja elegida ya no tiene un turno abierto en esta sucursal. Elige otra.')]))
             : $this->turnoDe($actor, $sucursalId);
 
         if ($conEfectivo && $turno === null) {
-            throw ValidationException::withMessages([$campo => $actor->esAdministrador()
+            throw ValidationException::withMessages([$campo => $actor->supervisaCajas()
                 ? __('El efectivo por caja requiere un turno abierto en esta sucursal. Ábrelo en la barra superior o márcalo como externo.')
                 : __('El efectivo por caja requiere un turno abierto. Abre tu caja en la barra superior.')]);
         }
@@ -61,11 +62,11 @@ final class CajaOperacion
     /**
      * Caja con la que el usuario trabaja en la sucursal, o null si no tiene ninguna:
      *
-     * - Vendedor: solo su caja asignada, activa y de su propia sucursal. Sin asignación no se usa
-     *   la caja principal en su lugar (§ 6.5: un usuario no asignado no abre ni usa una caja).
-     * - Administrador: la caja elegida si es de esa sucursal y está activa; sin elección, la del
-     *   turno que él mismo abrió en esa sucursal (la principal primero si abrió varios), la
-     *   principal o la primera activa.
+     * - Con caja.operar (sin supervisar): solo su caja asignada, activa y de su propia sucursal. Sin
+     *   asignación no se usa la caja principal en su lugar (§ 6.5: un usuario no asignado no abre ni usa una caja).
+     * - Con caja.supervisar (ESPECIFICACION_PERMISOS.md § 6.3), en una sucursal de su alcance: la caja elegida
+     *   si es de esa sucursal y está activa; sin elección, la del turno que él mismo abrió en esa sucursal (la
+     *   principal primero si abrió varios), la principal o la primera activa.
      */
     public function cajaDe(User $actor, int $sucursalId, ?int $cajaElegida = null): ?Caja
     {
@@ -74,13 +75,17 @@ final class CajaOperacion
             ->where('sucursal_id', $sucursalId)
             ->where('activa', true);
 
-        if ($actor->esVendedor()) {
-            return $actor->caja_id === null || (int) $actor->sucursal_id !== $sucursalId
+        if (! $actor->perteneceAEmpresa()) {
+            return null;
+        }
+
+        if (! $actor->supervisaCajas()) {
+            return ! $actor->tienePermiso(Permiso::CajaOperar) || $actor->caja_id === null || (int) $actor->sucursal_id !== $sucursalId
                 ? null
                 : $cajas()->whereKey($actor->caja_id)->first();
         }
 
-        if (! $actor->esAdministrador()) {
+        if (! $actor->alcanzaSucursal($sucursalId)) {
             return null;
         }
 
@@ -94,8 +99,8 @@ final class CajaOperacion
     }
 
     /**
-     * Turnos abiertos que abrió el usuario en su empresa, con su caja y sucursal. El vendedor
-     * tiene a lo sumo uno; el administrador, uno por caja.
+     * Turnos abiertos que abrió el usuario en su empresa, con su caja y sucursal. Quien usa su caja
+     * tiene a lo sumo uno; quien supervisa, uno por caja.
      *
      * @return Collection<int, TurnoCaja>
      */
@@ -111,8 +116,8 @@ final class CajaOperacion
     }
 
     /**
-     * Turno que se usa sin elección: el de la caja asignada si es vendedor; para el
-     * administrador, el de la caja principal o el primero de otra caja activa.
+     * Turno que se usa sin elección: el de la caja asignada para quien usa su caja; para quien
+     * supervisa, el de la caja principal o el primero de otra caja activa.
      */
     public function turnoDe(User $actor, int $sucursalId): ?TurnoCaja
     {
@@ -120,18 +125,22 @@ final class CajaOperacion
     }
 
     /**
-     * Turnos abiertos de la sucursal que el usuario puede operar, con su caja: para el vendedor
-     * solo el de su caja asignada; para el administrador, los de cajas activas (principal primero).
+     * Turnos abiertos de la sucursal que el usuario puede operar, con su caja: para quien usa su caja
+     * solo el de su caja asignada; para quien supervisa, los de cajas activas de su alcance (principal primero).
      *
      * @return Collection<int, TurnoCaja>
      */
     public function turnosDisponibles(User $actor, int $sucursalId): Collection
     {
-        if ($actor->esVendedor()) {
+        if (! $actor->supervisaCajas()) {
             $caja = $this->cajaDe($actor, $sucursalId);
             $turno = $caja?->turnoActivo;
 
             return new Collection($turno !== null && $turno->usuarioPuedeOperar($actor) ? [$turno->setRelation('caja', $caja)] : []);
+        }
+
+        if (! $actor->alcanzaSucursal($sucursalId)) {
+            return new Collection;
         }
 
         return TurnoCaja::query()

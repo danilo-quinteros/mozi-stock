@@ -6,7 +6,7 @@ use App\Domain\Caja\Actions\CrearCajaPrincipal;
 use App\Domain\Caja\Actions\GuardarCaja;
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
 use App\Domain\Tenancy\Actions\GuardarSucursal;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Empresa\Usuarios;
 use App\Livewire\Ventas\Pos;
 use App\Models\Caja;
@@ -54,7 +54,8 @@ test('a seller user must have exactly one cash register from their own branch', 
     expect(fn () => app(GuardarUsuarioEmpresa::class)->crear($admin, [
         'name' => 'Vendedor Prueba',
         'email' => 'vendedor@test.com',
-        'rol' => Rol::Vendedor,
+        'tipo' => TipoCuenta::Usuario,
+        'rol_id' => rolPorDefecto($empresa),
         'sucursal_id' => $sucursal1->id,
         'caja_id' => $cajaSucursal2->id,
         'password' => 'Password12345!',
@@ -65,7 +66,8 @@ test('a seller user must have exactly one cash register from their own branch', 
     $vendedor = app(GuardarUsuarioEmpresa::class)->crear($admin, [
         'name' => 'Vendedor Prueba',
         'email' => 'vendedor@test.com',
-        'rol' => Rol::Vendedor,
+        'tipo' => TipoCuenta::Usuario,
+        'rol_id' => rolPorDefecto($empresa),
         'sucursal_id' => $sucursal1->id,
         'caja_id' => $cajaSucursal1->id,
         'password' => 'Password12345!',
@@ -83,7 +85,7 @@ test('in user creation form selecting a branch auto-selects its single cash regi
 
     Livewire::actingAs($admin)->test(Usuarios::class)
         ->call('crear')
-        ->set('rol', 'vendedor')
+        ->set('tipo', 'usuario')
         ->set('sucursal_id', (string) $sucursal->id)
         ->assertSet('caja_id', (string) $caja->id);
 });
@@ -241,7 +243,8 @@ test('multi-tenant isolation: company B cannot see, assign or operate company A 
     expect(fn () => app(GuardarUsuarioEmpresa::class)->crear($adminB, [
         'name' => 'Intruso',
         'email' => 'intruso@empresa-b.com',
-        'rol' => Rol::Vendedor,
+        'tipo' => TipoCuenta::Usuario,
+        'rol_id' => rolPorDefecto($empresaB),
         'sucursal_id' => $sucursalB->id,
         'caja_id' => $cajaA->id,
         'password' => 'Password12345!',

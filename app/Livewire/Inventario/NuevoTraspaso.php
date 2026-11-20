@@ -39,7 +39,7 @@ class NuevoTraspaso extends Component
 
     public function mount(): void
     {
-        $this->authorize('create', OperacionInventario::class);
+        $this->authorize('traspasar', OperacionInventario::class);
         $this->clave = (string) Str::uuid();
         // La sucursal fijada en el menú lateral es el origen por defecto.
         $ids = Sucursal::query()->where('activa', true)->orderBy('nombre')->pluck('id')->all();

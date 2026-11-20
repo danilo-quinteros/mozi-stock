@@ -42,7 +42,10 @@ class Catalogos extends Component
         $empresa = $this->empresa();
         $this->errorSin = null;
         // Son 17 consultas al SIN seguidas; con el SIN lento pueden superar el límite por defecto.
-        set_time_limit(300);
+        // En las pruebas no: el límite valdría para todo el proceso de la suite.
+        if (! app()->runningUnitTests()) {
+            set_time_limit(300);
+        }
 
         try {
             $resultado = $sincronizar->ejecutar($empresa);

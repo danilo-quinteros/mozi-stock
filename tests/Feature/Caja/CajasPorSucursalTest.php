@@ -6,7 +6,7 @@ use App\Domain\Caja\Actions\GuardarCaja;
 use App\Domain\Caja\LibroCaja;
 use App\Domain\Identidad\Actions\GuardarUsuarioEmpresa;
 use App\Domain\Ventas\Actions\VenderEnPos;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Caja\ControlCajaTopbar;
 use App\Models\MovimientoCaja;
 use App\Models\Sucursal;
@@ -77,7 +77,7 @@ test('una caja nunca se asigna ni se usa desde otra sucursal, aunque se manipule
     $vendedorB = User::factory()->vendedor($this->sucursalB)->create(['caja_id' => $this->cajaB->id]);
 
     expect(fn () => app(GuardarUsuarioEmpresa::class)->actualizar($this->admin, $vendedorB, [
-        'name' => $vendedorB->name, 'email' => $vendedorB->email, 'rol' => Rol::Vendedor,
+        'name' => $vendedorB->name, 'email' => $vendedorB->email, 'tipo' => TipoCuenta::Usuario, 'rol_id' => $vendedorB->rol_id,
         'sucursal_id' => $this->sucursalB->id, 'caja_id' => $this->cajaA->id, 'activo' => true,
     ]))->toThrow(ValidationException::class);
     expect(fn () => app(AbrirTurnoCaja::class)->ejecutar($vendedorB, $this->cajaA, '0'))->toThrow(ValidationException::class);
@@ -136,7 +136,7 @@ test('no se cambia la caja de un vendedor con turno abierto y un usuario desacti
     $otra = app(GuardarCaja::class)->crear($this->admin, ['sucursal_id' => $this->sucursalA->id, 'nombre' => 'Caja 2']);
     $ana = User::factory()->vendedor($this->sucursalA)->create(['caja_id' => $this->cajaA->id]);
     $turno = app(AbrirTurnoCaja::class)->ejecutar($ana, $this->cajaA, '0');
-    $datos = ['name' => $ana->name, 'email' => $ana->email, 'rol' => Rol::Vendedor, 'sucursal_id' => $this->sucursalA->id, 'activo' => true];
+    $datos = ['name' => $ana->name, 'email' => $ana->email, 'tipo' => TipoCuenta::Usuario, 'rol_id' => $ana->rol_id, 'sucursal_id' => $this->sucursalA->id, 'activo' => true];
 
     expect(fn () => app(GuardarUsuarioEmpresa::class)->actualizar($this->admin, $ana, $datos + ['caja_id' => $otra->id]))
         ->toThrow(ValidationException::class);

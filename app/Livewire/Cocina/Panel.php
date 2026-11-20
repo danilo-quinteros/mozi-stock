@@ -45,7 +45,7 @@ class Panel extends Component
         $actor = $this->actor();
         $this->verVentaId = null;
         $this->abierto = app(PedidosEnCocina::class)->visible($actor);
-        $this->sucursal = $actor->esAdministrador() ? (string) ($actor->sucursalActivaId() ?? '') : '';
+        $this->sucursal = $actor->veTodasLasSucursales() ? (string) ($actor->sucursalActivaId() ?? '') : '';
     }
 
     public function cerrar(): void
@@ -83,7 +83,7 @@ class Panel extends Component
         $actor = $this->actor();
         $datos = ['deshacer' => $this->avisoDeshacer(), 'abierto' => false];
 
-        // Si el vendedor cerró su turno o la empresa apagó cocina, el panel se cierra solo.
+        // Si quien usa su caja cerró su turno o la empresa apagó cocina, el panel se cierra solo.
         if (! $this->abierto || ! app(PedidosEnCocina::class)->visible($actor)) {
             $this->cerrar();
 
@@ -91,7 +91,7 @@ class Panel extends Component
         }
 
         $sucursalId = PedidosEnCocina::sucursalDe($actor, ctype_digit($this->sucursal) ? (int) $this->sucursal : null);
-        $this->sucursal = $actor->esAdministrador() ? (string) ($sucursalId ?? '') : '';
+        $this->sucursal = $actor->veTodasLasSucursales() ? (string) ($sucursalId ?? '') : '';
         $minutos = (int) Empresa::query()->whereKey($actor->empresa_id)->value('minutos_alerta_cocina');
         $ahora = now();
         $detalle = $this->detalle($actor);
@@ -104,10 +104,10 @@ class Panel extends Component
             'conteo' => PedidosEnCocina::conteo($actor, $sucursalId, $minutos, $ahora),
             'pedidos' => $detalle === null ? PedidosEnCocina::lista($actor, $sucursalId) : new Collection,
             'detalle' => $detalle,
-            'sucursales' => $actor->esAdministrador()
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : new Collection,
-            'todasLasSucursales' => $actor->esAdministrador() && $sucursalId === null,
+            'todasLasSucursales' => $actor->veTodasLasSucursales() && $sucursalId === null,
         ]);
     }
 

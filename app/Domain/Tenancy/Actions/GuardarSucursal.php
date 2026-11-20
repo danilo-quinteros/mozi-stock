@@ -5,7 +5,7 @@ namespace App\Domain\Tenancy\Actions;
 use App\Domain\Auditoria\Auditor;
 use App\Domain\Caja\Actions\CrearCajaPrincipal;
 use App\Domain\Suscripciones\CupoSuscripcion;
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Models\Sucursal;
 use App\Models\TurnoCaja;
 use App\Models\User;
@@ -92,11 +92,11 @@ final class GuardarSucursal
             if (! $activa && User::query()
                 ->where('empresa_id', $bloqueada->empresa_id)
                 ->where('sucursal_id', $bloqueada->id)
-                ->where('rol', Rol::Vendedor)
+                ->where('tipo', TipoCuenta::Usuario)
                 ->where('activo', true)
                 ->exists()) {
                 throw ValidationException::withMessages([
-                    'sucursal' => __('Hay vendedores activos asignados a esta sucursal. Reasígnalos o desactívalos antes.'),
+                    'sucursal' => __('Hay usuarios activos asignados a esta sucursal. Reasígnalos o desactívalos antes.'),
                 ]);
             }
 

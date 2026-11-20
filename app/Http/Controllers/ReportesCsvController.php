@@ -13,8 +13,8 @@ use App\Domain\Reportes\Consultas\Salidas;
 use App\Domain\Reportes\Consultas\VentasPeriodo;
 use App\Domain\Reportes\Periodo;
 use App\Enums\MetodoPago;
+use App\Enums\Permiso;
 use App\Models\CuentaPagar;
-use App\Models\Pedido;
 use App\Models\User;
 use App\Models\Venta;
 use App\Support\Csv;
@@ -35,7 +35,7 @@ class ReportesCsvController extends Controller
     public function creditos(Request $request): StreamedResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('viewAny', Pedido::class);
+        Gate::forUser($actor)->authorize('permiso', Permiso::CreditosVer);
         // Los mismos filtros de la pantalla Cuentas por cobrar.
         $estado = (string) $request->query('estado', 'todas');
         $fecha = fn (string $campo) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->query($campo, '')) ? (string) $request->query($campo) : null;
@@ -85,7 +85,7 @@ class ReportesCsvController extends Controller
 
     public function historial(Request $request, Venta $venta): StreamedResponse
     {
-        Gate::forUser($this->actor($request))->authorize('cobrar', $venta);
+        Gate::forUser($this->actor($request))->authorize('verCredito', $venta);
         $pagos = HistorialPagos::de($venta);
 
         return Csv::descargar("historial-{$venta->codigo()}.csv", [__('Fecha'), __('Concepto'), __('Método'), __('Efectivo'), __('Electrónico'), __('Total'), __('Sucursal'), __('Recibió'), __('Nota'), __('Anulación')],
@@ -100,11 +100,11 @@ class ReportesCsvController extends Controller
     public function arqueo(Request $request): StreamedResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('ver-reportes');
+        Gate::forUser($actor)->authorize('supervisar-cajas');
         $fecha = (string) $request->query('fecha', '');
         $dia = Periodo::rango((string) $request->query('desde', $fecha), $fecha);
         $metodo = (string) $request->query('metodo', '');
-        $sucursalId = $this->sucursal($request);
+        $sucursalId = $actor->acotarSucursal($this->sucursal($request));
         $cajaId = ReporteCaja::cajaElegida((string) $request->query('caja', ''));
         $empresaId = (int) $actor->empresa_id;
 
@@ -134,7 +134,7 @@ class ReportesCsvController extends Controller
         Gate::forUser($actor)->authorize('ver-reportes');
         $empresaId = (int) $actor->empresa_id;
         $periodo = Periodo::rango((string) $request->query('desde', ''), (string) $request->query('hasta', ''));
-        $sucursalId = $this->sucursal($request);
+        $sucursalId = $actor->acotarSucursal($this->sucursal($request));
         $buscar = (string) $request->query('q', '');
         $sufijo = $periodo->desde->format('Y-m-d').'_'.$periodo->hasta->format('Y-m-d');
 

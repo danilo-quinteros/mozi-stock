@@ -2,27 +2,28 @@
 
 namespace App\Policies;
 
+use App\Enums\Permiso;
 use App\Models\Proveedor;
 use App\Models\User;
 
 /**
- * Proveedores acompañan a Compras: solo administradores (decisión del propietario, 23/10/2026).
+ * Proveedores: permiso proveedores.gestionar. Quien solo registra compras elige proveedores existentes en el formulario.
  */
 class ProveedorPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->esAdministrador();
+        return $user->tienePermiso(Permiso::ProveedoresGestionar);
     }
 
     public function view(User $user, Proveedor $proveedor): bool
     {
-        return $user->esAdministrador() && $user->empresa_id === $proveedor->empresa_id;
+        return $this->viewAny($user) && $user->empresa_id === $proveedor->empresa_id;
     }
 
     public function create(User $user): bool
     {
-        return $user->esAdministrador();
+        return $this->viewAny($user);
     }
 
     public function update(User $user, Proveedor $proveedor): bool

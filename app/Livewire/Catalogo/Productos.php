@@ -13,12 +13,14 @@ use App\Domain\CatalogoExterno\Actions\SincronizarEmpresa;
 use App\Domain\Despachos\Consultas\ReservadoPorDespachar;
 use App\Domain\Facturacion\CatalogoEmpresa;
 use App\Enums\Capacidad;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Livewire\Concerns\UsaSucursalActiva;
 use App\Models\CatalogoExternoProducto;
 use App\Models\Categoria;
 use App\Models\EmpresaProveedorExterno;
 use App\Models\Modelo;
+use App\Models\OperacionInventario;
 use App\Models\Producto;
 use App\Models\ProductoVinculoExterno;
 use App\Models\ProveedorExterno;
@@ -188,7 +190,7 @@ class Productos extends Component
     public function iniciarEdicionPrecio(int $productoId): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         $producto = Producto::query()
             ->where('empresa_id', $actor->empresa_id)
@@ -211,7 +213,7 @@ class Productos extends Component
     public function guardarPrecio(GuardarProducto $accion, CambiarPrecioVariante $variante): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         if ($this->editandoProductoId === null) {
             return;
@@ -389,7 +391,7 @@ class Productos extends Component
     public function abrirAgregarCyclone(int $catalogoExternoId): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         $externo = CatalogoExternoProducto::query()->where('disponible', true)->findOrFail($catalogoExternoId);
         $precioActual = ProductoVinculoExterno::query()
@@ -451,7 +453,7 @@ class Productos extends Component
     public function agregarMarcados(SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         if (empty($this->seleccionadosCyclone)) {
             return;
@@ -477,7 +479,7 @@ class Productos extends Component
     public function solicitarDejarVender(int $catalogoExternoId, SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         $ext = CatalogoExternoProducto::query()->findOrFail($catalogoExternoId);
         $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
@@ -502,7 +504,7 @@ class Productos extends Component
     public function confirmarDejarVender(SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         if ($this->confirmandoDejarVenderId === null) {
             return;
@@ -521,7 +523,7 @@ class Productos extends Component
     public function solicitarDejarVenderMarcados(SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         if (empty($this->seleccionadosCyclone)) {
             return;
@@ -558,7 +560,7 @@ class Productos extends Component
     public function confirmarDejarVenderBulk(SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         if (empty($this->seleccionadosCyclone)) {
             return;
@@ -590,7 +592,7 @@ class Productos extends Component
     public function sincronizarCyclone(SincronizarEmpresa $sincronizador): void
     {
         $actor = $this->actor();
-        abort_unless($actor->esAdministrador(), 403);
+        abort_unless($actor->tienePermiso(Permiso::ProductosGestionar), 403);
 
         $proveedor = ProveedorExterno::query()->where('codigo', 'cyclone')->firstOrFail();
         $res = $sincronizador->ejecutar($actor->empresa, $proveedor, $actor, soloActualizarVinculados: true);
@@ -730,13 +732,13 @@ class Productos extends Component
             : [];
 
         // Lotes § 9.2: cuántos productos con stock aún no se llevan por lote (con el filtro de categoría).
-        $sinLote = $actor->esAdministrador() && Gate::allows('capacidad', Capacidad::LotesVencimientos)
+        $sinLote = $actor->tienePermiso(Permiso::ProductosGestionar) && Gate::allows('capacidad', Capacidad::LotesVencimientos)
             ? app(MarcarProductosConLote::class)->pendientes($empresaId, $categoriaId) : 0;
 
         return view('livewire.catalogo.productos', [
             'productos' => $productos,
             'agrupado' => $agrupado,
-            'conVariantes' => $agrupado && $actor->esAdministrador(),
+            'conVariantes' => $agrupado && $actor->tienePermiso(Permiso::ProductosGestionar),
             'sueltos' => $sueltos,
             'variantes' => $variantes,
             'modelos' => $modelos,
@@ -745,14 +747,17 @@ class Productos extends Component
             'categoriaFiltro' => $categoriaId === null ? null : Categoria::query()->whereKey($categoriaId)->value('nombre'),
             'reservados' => $reservados,
             'sucursalVista' => $sucursal,
-            'sucursales' => $actor->esAdministrador() ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
+            'sucursales' => $actor->veTodasLasSucursales() ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre']) : collect(),
             'categorias' => Categoria::query()->withCount('productos')->orderBy('nombre')->get(),
             // Marcas usadas en la empresa (scope; índice empresa_id, marca) para el filtro.
             'marcas' => Producto::query()->whereNotNull('marca')->distinct()->orderBy('marca')->limit(300)->pluck('marca'),
             'unidades' => UnidadMedida::query()->orderBy('nombre')->get(),
             'totalProductos' => Producto::query()->where('activo', true)->count(),
             'alertas' => $sucursal === null ? 0 : ListadoProductos::contarAlertas($empresaId, $sucursal->id),
-            'administra' => $actor->esAdministrador(),
+            // «administra» = gestiona productos y precios (productos.gestionar); lo usan también las filas parciales.
+            'administra' => $actor->tienePermiso(Permiso::ProductosGestionar),
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'verMovimientos' => $actor->can('viewAny', OperacionInventario::class),
             'empresaSiat' => $empresaSiat,
             'unidadesSin' => $unidadesSin,
             'esRevendedoraCyclone' => $esRevendedoraCyclone,

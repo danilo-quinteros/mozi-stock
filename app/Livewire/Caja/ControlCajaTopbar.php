@@ -207,16 +207,16 @@ class ControlCajaTopbar extends Component
 
         $caja = $this->cajaActual();
         $turno = $caja === null ? null : $this->turnoDe($caja);
-        // El administrador puede tener varias cajas abiertas: la barra muestra una y avisa del resto.
-        $misTurnos = $actor->esAdministrador() ? app(CajaOperacion::class)->turnosAbiertosDe($actor) : collect();
+        // Quien supervisa cajas puede tener varias abiertas: la barra muestra una y avisa del resto.
+        $misTurnos = $actor->supervisaCajas() ? app(CajaOperacion::class)->turnosAbiertosDe($actor) : collect();
         $turnoCierre = $this->modalCierreAbierto ? $this->turnoCierre()?->loadMissing(['caja', 'sucursal:id,nombre', 'usuarioApertura:id,name']) : null;
 
         return view('livewire.caja.control-caja-topbar', [
             'visible' => true,
             'caja' => $caja,
-            // La píldora lleva a Caja y arqueo filtrado por esta sucursal y caja. El vendedor ve solo «Mi caja», que
+            // La píldora lleva a Caja y arqueo filtrado por esta sucursal y caja. Quien usa su caja ve solo «Mi caja», que
             // no usa filtros, así que va a la ruta sin parámetros. Arqueo vuelve a validar los ids contra la empresa.
-            'enlaceCaja' => $caja === null ? null : ($actor->esAdministrador()
+            'enlaceCaja' => $caja === null ? null : ($actor->supervisaCajas()
                 ? route('caja', ['sucursal' => $caja->sucursal_id, 'caja' => $caja->id])
                 : route('caja')),
             'turno' => $turno,
@@ -229,9 +229,9 @@ class ControlCajaTopbar extends Component
     }
 
     /**
-     * Vendedor: su caja asignada de su sucursal. Administrador: en la sucursal activa (o, si no
+     * Quien usa su caja: la asignada de su sucursal. Quien supervisa: en la sucursal activa (o, si no
      * eligió una, en la de su primer turno abierto), la caja del turno que él abrió, la principal
-     * o la primera activa (CajaOperacion::cajaDe).
+     * o la primera activa de su alcance (CajaOperacion::cajaDe).
      */
     private function cajaActual(): ?Caja
     {
@@ -241,7 +241,7 @@ class ControlCajaTopbar extends Component
             return null;
         }
 
-        $sucursalId = $actor->sucursalActivaId() ?? ($actor->esAdministrador()
+        $sucursalId = $actor->sucursalActivaId() ?? ($actor->supervisaCajas()
             ? (app(CajaOperacion::class)->turnosAbiertosDe($actor)->first()->sucursal_id
                 ?? Sucursal::withoutGlobalScopes()->where('empresa_id', $actor->empresa_id)->where('activa', true)->orderBy('id')->value('id'))
             : null);
@@ -250,8 +250,8 @@ class ControlCajaTopbar extends Component
     }
 
     /**
-     * Caja a abrir: la de la barra o, para el administrador, una caja activa de su empresa.
-     * El vendedor solo abre la suya: otra caja enviada por la solicitud no se acepta.
+     * Caja a abrir: la de la barra o, para quien supervisa, una caja activa de su alcance.
+     * Quien usa su caja solo abre la suya: otra caja enviada por la solicitud no se acepta.
      */
     private function cajaParaAbrir(?int $cajaId): ?Caja
     {
@@ -261,13 +261,15 @@ class ControlCajaTopbar extends Component
             return $this->cajaActual();
         }
 
-        if (! $actor->esAdministrador()) {
+        if (! $actor->supervisaCajas()) {
             $propia = $this->cajaActual();
 
             return $propia?->id === $cajaId ? $propia : null;
         }
 
-        return Caja::withoutGlobalScopes()->where('empresa_id', $actor->empresa_id)->where('activa', true)->find($cajaId);
+        $caja = Caja::withoutGlobalScopes()->where('empresa_id', $actor->empresa_id)->where('activa', true)->find($cajaId);
+
+        return $caja !== null && $actor->alcanzaSucursal((int) $caja->sucursal_id) ? $caja : null;
     }
 
     private function turnoActual(): ?TurnoCaja

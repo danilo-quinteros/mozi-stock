@@ -6,13 +6,13 @@
             <p class="lead">{{ __('Gestiona clientes e historial de compras.') }}</p>
         </div>
         <div class="page-actions">
-            <button class="btn primary" type="button" wire:click="nuevoCliente"><x-icon name="plus" /> {{ __('Nuevo cliente') }}</button>
+            @can('create', \App\Models\Cliente::class)<button class="btn primary" type="button" wire:click="nuevoCliente"><x-icon name="plus" /> {{ __('Nuevo cliente') }}</button>@endcan
         </div>
     </div>
 
     <div class="grid three" style="margin-bottom:18px">
         <article class="card stat"><span class="stat-label">{{ __('Clientes registrados') }}</span><div class="stat-value">{{ $resumen['registrados'] }}</div><div class="stat-foot">{{ __('En :empresa', ['empresa' => $empresa]) }}</div></article>
-        <article class="card stat"><span class="stat-label">{{ __('Con ventas este mes') }}</span><div class="stat-value">{{ $resumen['con_ventas'] }}</div><div class="stat-foot">{{ auth()->user()->esVendedor() ? __('En tu sucursal') : __('Actividad del período') }}</div></article>
+        <article class="card stat"><span class="stat-label">{{ __('Con ventas este mes') }}</span><div class="stat-value">{{ $resumen['con_ventas'] }}</div><div class="stat-foot">{{ ! auth()->user()->veTodasLasSucursales() ? __('En tu sucursal') : __('Actividad del período') }}</div></article>
         <article class="card stat"><span class="stat-label">{{ __('Registros activos') }}</span><div class="stat-value">{{ $resumen['activos'] }}</div><div class="stat-foot">{{ __('Disponibles en pedidos') }}</div></article>
     </div>
 
@@ -36,7 +36,7 @@
                             <td>{{ $cliente->correo ?? '—' }}</td>
                             <td>{{ $cliente->ventas }} {{ (int) $cliente->ventas === 1 ? 'venta' : 'ventas' }}</td>
                             <td><span class="badge {{ $cliente->activo ? 'success' : 'danger' }}">{{ $cliente->activo ? __('Activo') : __('Inactivo') }}</span></td>
-                            <td><span class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" type="button" wire:click="editarCliente({{ $cliente->id }})" title="{{ __('Editar') }}" aria-label="{{ __('Editar :nombre', ['nombre' => $cliente->nombre]) }}"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</button><a class="btn sm ghost" href="{{ route('clientes.ver', $cliente->id) }}">{{ __('Ver ficha') }} <x-icon name="arrow" size="sm" /></a></span></td>
+                            <td><span class="row" style="gap:6px;flex-wrap:nowrap">@can('update', $cliente)<button class="btn sm ghost" type="button" wire:click="editarCliente({{ $cliente->id }})" title="{{ __('Editar') }}" aria-label="{{ __('Editar :nombre', ['nombre' => $cliente->nombre]) }}"><x-icon name="edit" size="sm" /> {{ __('Editar') }}</button>@endcan<a class="btn sm ghost" href="{{ route('clientes.ver', $cliente->id) }}">{{ __('Ver ficha') }} <x-icon name="arrow" size="sm" /></a></span></td>
                         </tr>
                     @empty
                         <tr><td colspan="6"><div class="empty">{{ trim($buscar) === '' ? __('Aún no registras clientes.') : __('No hay clientes que coincidan con la búsqueda.') }}</div></td></tr>

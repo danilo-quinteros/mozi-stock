@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Reportes\Periodo;
+use App\Enums\Permiso;
 use App\Models\Concerns\BelongsToEmpresa;
 use App\Support\Decimal;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -133,7 +134,7 @@ class TurnoCaja extends Model
     }
 
     /**
-     * Compartida: quien abrió, los vendedores asignados a la caja y el administrador trabajan en
+     * Compartida: quien abrió, los usuarios asignados a la caja y quien supervisa cajas trabajan en
      * el mismo turno. Individual: solo quien abrió.
      */
     public function usuarioPuedeOperar(User $usuario): bool
@@ -146,7 +147,7 @@ class TurnoCaja extends Model
             return $this->usuario_apertura_id === $usuario->id;
         }
 
-        return $this->usuario_apertura_id === $usuario->id || $usuario->caja_id === $this->caja_id || $usuario->esAdministrador();
+        return $this->usuario_apertura_id === $usuario->id || $usuario->caja_id === $this->caja_id || $usuario->supervisaCajas();
     }
 
     public function usuarioPuedeCerrar(User $usuario): bool
@@ -155,7 +156,7 @@ class TurnoCaja extends Model
             return false;
         }
 
-        if ($usuario->esAdministrador()) {
+        if ($usuario->supervisaCajas()) {
             return true;
         }
 
@@ -167,18 +168,19 @@ class TurnoCaja extends Model
     }
 
     /**
-     * Usuario activo de la empresa del turno; el vendedor, además, de la sucursal de la caja.
-     * Una caja nunca se usa desde otra sucursal, aunque el vendedor la haya abierto antes de
-     * un cambio de sucursal.
+     * Usuario activo de la empresa del turno (ESPECIFICACION_PERMISOS.md § 6.3): quien supervisa cajas, si la
+     * sucursal está en su alcance; quien usa su caja, si es de su sucursal asignada. Una caja nunca se usa desde
+     * otra sucursal, aunque el usuario la haya abierto antes de un cambio de sucursal.
      */
     private function esDelEquipo(User $usuario): bool
     {
-        if (! $usuario->activo || (int) $usuario->empresa_id !== (int) $this->empresa_id) {
+        if (! $usuario->activo || ! $usuario->perteneceAEmpresa() || (int) $usuario->empresa_id !== (int) $this->empresa_id) {
             return false;
         }
 
-        return $usuario->esAdministrador()
-            || ($usuario->esVendedor() && (int) $usuario->sucursal_id === (int) $this->sucursal_id);
+        return $usuario->supervisaCajas()
+            ? $usuario->alcanzaSucursal((int) $this->sucursal_id)
+            : $usuario->tienePermiso(Permiso::CajaOperar) && (int) $usuario->sucursal_id === (int) $this->sucursal_id;
     }
 
     /**

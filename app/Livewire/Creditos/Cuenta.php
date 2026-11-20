@@ -3,6 +3,7 @@
 namespace App\Livewire\Creditos;
 
 use App\Domain\Creditos\Actions\RegistrarCobro;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\FormularioPago;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\CuentaCobrar;
@@ -33,7 +34,7 @@ class Cuenta extends Component
         $this->authorize('view', $cuenta);
         $this->cuentaId = $cuenta->id;
         $actor = $this->actor();
-        $this->sucursal_id = (string) ($actor->esVendedor() ? $actor->sucursal_id : ($actor->sucursalActivaId() ?? $cuenta->sucursal_id));
+        $this->sucursal_id = (string) (! $actor->veTodasLasSucursales() ? $actor->sucursal_id : ($actor->sucursalActivaId() ?? $cuenta->sucursal_id));
         $this->iniciarPago();
 
         if (is_string($mensaje = session('aviso'))) {
@@ -66,8 +67,10 @@ class Cuenta extends Component
             'cobrado' => Decimal::restar($cuenta->importe, $cuenta->saldo_pendiente, Decimal::ESCALA_DINERO),
             'pendiente' => ! $cuenta->estaAnulado() && Decimal::comparar($cuenta->saldo_pendiente, '0', 2) > 0,
             'sumaMixta' => $this->sumaMixta(),
-            'administra' => $actor->esAdministrador(),
-            'sucursales' => $actor->esAdministrador()
+            'anula' => $actor->tienePermiso(Permiso::CobrosAnular),
+            // Sin «Trabajar en todas las sucursales» cobra en la suya; el servidor la vuelve a imponer.
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
         ])->title(__('Cuenta por cobrar · :codigo', ['codigo' => $cuenta->codigo()]));

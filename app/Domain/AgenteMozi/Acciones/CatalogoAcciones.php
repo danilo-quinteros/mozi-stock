@@ -3,6 +3,7 @@
 namespace App\Domain\AgenteMozi\Acciones;
 
 use App\Domain\AgenteMozi\DTOs\AccionPropuesta;
+use App\Enums\Permiso;
 use App\Models\Compra;
 use App\Models\CuentaPagar;
 use App\Models\Pedido;
@@ -88,7 +89,8 @@ final class CatalogoAcciones
         $puede = Gate::forUser($usuario);
 
         return match ($tipo) {
-            'registrar_cobro' => $puede->allows('ver-reportes') && $puede->allows('viewAny', Pedido::class),
+            // Como antes: la sugerencia de cobro va con los reportes (finanzas), además del permiso de cobrar.
+            'registrar_cobro' => $puede->allows('ver-reportes') && $puede->allows('permiso', Permiso::CreditosCobrar),
             'ver_cuenta_pagar' => $puede->allows('viewAny', CuentaPagar::class),
             'abrir_pedido' => $puede->allows('viewAny', Pedido::class),
             'nueva_orden', 'abrir_orden', 'nuevo_envasado' => $puede->allows('usar-produccion'),

@@ -3,6 +3,7 @@
 namespace App\Domain\Caja\Consultas;
 
 use App\Domain\Reportes\Periodo;
+use App\Enums\TipoCuenta;
 use App\Models\Caja;
 use App\Models\TurnoCaja;
 use App\Models\User;
@@ -425,10 +426,11 @@ final class ReporteCaja
                 DB::raw("COALESCE(SUM(CASE WHEN estado = 'cerrado' THEN diferencia END), 0) AS diferencia"),
             ])->keyBy('usuario_apertura_id');
         $usuarios = DB::table('users')
-            ->where('empresa_id', $empresaId)
-            ->whereIn('id', $dinero->keys()->merge($turnos->keys())->unique()->all())
-            ->orderBy('name')
-            ->get(['id', 'name', 'rol']);
+            ->leftJoin('roles', 'roles.id', '=', 'users.rol_id')
+            ->where('users.empresa_id', $empresaId)
+            ->whereIn('users.id', $dinero->keys()->merge($turnos->keys())->unique()->all())
+            ->orderBy('users.name')
+            ->get(['users.id', 'users.name', 'users.tipo', 'roles.nombre as rol_nombre']);
 
         return array_values($usuarios->map(function (object $u) use ($dinero, $turnos): object {
             $d = $dinero->get($u->id);
@@ -438,7 +440,8 @@ final class ReporteCaja
             return (object) [
                 'id' => $u->id,
                 'nombre' => $u->name,
-                'rol' => $u->rol,
+                // Tipo de cuenta o nombre del rol de la empresa, ya listo para mostrar.
+                'rol' => $u->tipo === TipoCuenta::Usuario->value ? (string) $u->rol_nombre : (TipoCuenta::tryFrom((string) $u->tipo)?->etiqueta() ?? ''),
                 'cajas' => implode(', ', $cajas),
                 'cobros' => (int) ($d->cobros ?? 0),
                 'efectivo' => Decimal::redondear((string) ($d->efectivo ?? '0')),

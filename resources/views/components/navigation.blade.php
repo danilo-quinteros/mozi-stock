@@ -1,12 +1,14 @@
 @php
     $usuario = auth()->user();
     $administra = $usuario->esAdministrador();
+    // Cada entrada se muestra con el mismo permiso que exige su pantalla (ESPECIFICACION_PERMISOS.md § 4).
+    $puede = fn (\App\Enums\Permiso $permiso): bool => $usuario->tienePermiso($permiso);
     $saas = config('mozistock.deployment_mode') === 'saas';
     // Indicador de vencimiento (§ 8.5: correo + panel); solo para administradores.
     $plan = $administra && $saas ? \App\Models\Suscripcion::query()->first(['id', 'empresa_id', 'vencimiento']) : null;
     $situacion = $plan?->estado();
     $alertaCuenta = $situacion === null || $situacion === \App\Enums\EstadoSuscripcion::AlDia ? null : $situacion;
-    // Cada entrada lleva ruta, patrón activo, icono (App\Support\Iconos), visibilidad por rol y
+    // Cada entrada lleva ruta, patrón activo, icono (App\Support\Iconos), visibilidad por permiso y
     // la etiqueta corta del menú colapsado.
     $enlace = fn (string $etiqueta, string $ruta, string $patron, string $icono, bool $visible = true, ?string $corto = null) => compact('etiqueta', 'ruta', 'patron', 'icono', 'visible', 'corto');
     // Icono y etiqueta corta de cada grupo en el menú colapsado (sus enlaces se abren en un panel flotante).
@@ -17,24 +19,23 @@
         'Gestión' => ['users', 'Gestión'],
         'Reportes' => ['chart', 'Reportes'],
     ];
-    // Producción (ESPECIFICACION_PRODUCCION.md § 3): solo el administrador de una empresa con la capacidad.
+    // Producción (ESPECIFICACION_PRODUCCION.md § 3): permiso produccion.gestionar con la capacidad activa.
     $produce = $usuario->perteneceAEmpresa() && \Illuminate\Support\Facades\Gate::allows('usar-produccion');
     $grupos = [
         'Ventas y finanzas' => [
-            $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*|pos', 'cart', corto: 'Pedidos'),
-            
-            $enlace('Mi caja', 'caja', 'caja', 'cash', $usuario->esVendedor(), 'Caja'),
-            
-            $enlace('Cuentas por cobrar', 'creditos.index', 'creditos.*', 'wallet', corto: 'Cobrar'),
-            $enlace('Cuentas por pagar', 'cuentas-pagar.index', 'cuentas-pagar.*', 'receipt', $administra, 'Pagar'),
-            $enlace('Egresos', 'egresos.index', 'egresos.*', 'expense', $administra),
+            $enlace('Pedidos', 'pedidos.index', 'pedidos.*|ventas.*|pos', 'cart', $puede(\App\Enums\Permiso::VentasVer), 'Pedidos'),
+            // Mi caja: quien usa su caja sin supervisar; quien supervisa entra por Caja y arqueo.
+            $enlace('Mi caja', 'caja', 'caja', 'cash', $puede(\App\Enums\Permiso::CajaOperar) && ! $usuario->supervisaCajas(), 'Caja'),
+            $enlace('Cuentas por cobrar', 'creditos.index', 'creditos.*', 'wallet', $puede(\App\Enums\Permiso::CreditosVer), 'Cobrar'),
+            $enlace('Cuentas por pagar', 'cuentas-pagar.index', 'cuentas-pagar.*', 'receipt', $puede(\App\Enums\Permiso::CuentasPagarGestionar), 'Pagar'),
+            $enlace('Egresos', 'egresos.index', 'egresos.*', 'expense', $puede(\App\Enums\Permiso::EgresosGestionar)),
             ],
         'Inventario' => [
             $enlace('Productos', 'productos.index', 'productos.*', 'box'),
-            $enlace('Compras', 'compras.index', 'compras.*', 'truck', $administra),
-            $enlace('Ajustes y traspasos', 'inventario.movimientos', 'inventario.movimientos|inventario.ajuste|inventario.traspaso', 'swap', $administra, 'Ajustes'),
-            // Lotes y vencimientos § 4: dentro de Inventario, solo con la capacidad y para quien ve el historial.
-            $enlace('Vencimientos', 'inventario.vencimientos', 'inventario.vencimientos|inventario.lote', 'calendar', $administra && \Illuminate\Support\Facades\Gate::allows('capacidad', \App\Enums\Capacidad::LotesVencimientos)),
+            $enlace('Compras', 'compras.index', 'compras.*', 'truck', $puede(\App\Enums\Permiso::ComprasGestionar)),
+            $enlace('Ajustes y traspasos', 'inventario.movimientos', 'inventario.movimientos|inventario.ajuste|inventario.traspaso', 'swap', $puede(\App\Enums\Permiso::InventarioHistorial), 'Ajustes'),
+            // Lotes y vencimientos § 4: dentro de Inventario; el permiso solo cuenta con la capacidad activa.
+            $enlace('Vencimientos', 'inventario.vencimientos', 'inventario.vencimientos|inventario.lote', 'calendar', $puede(\App\Enums\Permiso::InventarioVencimientos)),
         ],
         'Producción' => [
             $enlace('Órdenes', 'produccion.ordenes', 'produccion.ordenes|produccion.ordenes.*', 'receipt', $produce),
@@ -45,13 +46,13 @@
         ],
         'Gestión' => [
             $enlace('Clientes', 'clientes.index', 'clientes.*', 'users'),
-            $enlace('Proveedores', 'proveedores.index', 'proveedores.*', 'building', $administra),
+            $enlace('Proveedores', 'proveedores.index', 'proveedores.*', 'building', $puede(\App\Enums\Permiso::ProveedoresGestionar)),
             $enlace('Sucursales y cajas', 'sucursales.index', 'sucursales.*', 'store', $administra, 'Sucursales'),
             $enlace('Usuarios', 'usuarios.index', 'usuarios.*', 'shield', $administra),
         ],
         'Reportes' => [
-            $enlace('Caja y arqueo', 'caja', 'caja|caja.*', 'cash', $administra, 'Caja'),
-            $enlace('Reportes generales', 'reportes', 'reportes|reportes.*', 'chart', $administra, 'Reportes'),
+            $enlace('Caja y arqueo', 'caja', 'caja|caja.*', 'cash', $usuario->supervisaCajas(), 'Caja'),
+            $enlace('Reportes generales', 'reportes', 'reportes|reportes.*', 'chart', $puede(\App\Enums\Permiso::ReportesVer), 'Reportes'),
         ],
     ];
     // Despachos (rubro distribuidora): es la pestaña Despachos de Pedidos, con acceso directo en el menú.

@@ -595,7 +595,7 @@ test('sirve foto de catalogo externo a revendedor autorizado y aisla para no rev
 
     // Empresa NO revendedora intenta ver la foto
     $otraEmpresa = Empresa::factory()->create();
-    $otroAdmin = User::factory()->create(['empresa_id' => $otraEmpresa->id, 'rol' => 'administrador']);
+    $otroAdmin = User::factory()->administrador($otraEmpresa)->create();
     $this->actingAs($otroAdmin);
 
     $resForbidden = $this->get(route('catalogo-externo.foto', $prodCentral));

@@ -274,7 +274,7 @@ trait EligeVariantes
     {
         $actor = $this->actorSelector();
 
-        if ($actor->esVendedor()) {
+        if (! $actor->veTodasLasSucursales()) {
             return $actor->sucursal_id === null ? null : (int) $actor->sucursal_id;
         }
 

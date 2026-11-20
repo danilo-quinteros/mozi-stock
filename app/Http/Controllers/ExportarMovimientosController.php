@@ -28,7 +28,7 @@ class ExportarMovimientosController extends Controller
         $filas = HistorialMovimientos::consulta((int) $actor->empresa_id, [
             'buscar' => (string) $request->query('q', ''),
             'tipo' => in_array($tipo, array_column(TipoOperacionInventario::cases(), 'value'), true) ? $tipo : '',
-            'sucursal_id' => ctype_digit($sucursal) ? (int) $sucursal : null,
+            'sucursal_id' => $actor->acotarSucursal(ctype_digit($sucursal) ? (int) $sucursal : null),
         ])->lazyByIdDesc(500, 'm.id', 'id');
 
         return Csv::descargar('movimientos-inventario.csv',

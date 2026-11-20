@@ -237,17 +237,17 @@ class Pos extends Component
     }
 
     /**
-     * El vendedor vende siempre en su sucursal asignada; el administrador, en una activa de su empresa.
-     * VenderEnPos lo vuelve a resolver en el servidor; esto solo evita mostrar stock de otra sucursal.
+     * Quien no trabaja en todas las sucursales vende siempre en la asignada; el resto, en una activa de su
+     * empresa. VenderEnPos lo vuelve a resolver en el servidor; esto solo evita mostrar stock de otra sucursal.
      */
     public function updatedSucursalId(): void
     {
         $actor = $this->actor();
-        $valida = $actor->esAdministrador() && $this->sucursal_id !== null && ctype_digit($this->sucursal_id)
+        $valida = $actor->veTodasLasSucursales() && $this->sucursal_id !== null && ctype_digit($this->sucursal_id)
             && Sucursal::query()->where('activa', true)->whereKey((int) $this->sucursal_id)->exists();
 
         if (! $valida) {
-            $sucursalId = $actor->esVendedor() ? $actor->sucursal_id
+            $sucursalId = ! $actor->veTodasLasSucursales() ? $actor->sucursal_id
                 : Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id');
             $this->sucursal_id = $sucursalId === null ? null : (string) $sucursalId;
         }
@@ -257,13 +257,13 @@ class Pos extends Component
     }
 
     /**
-     * El administrador elige con qué caja vende (puede tener varias abiertas). Una caja que no es
+     * Quien supervisa cajas elige con qué caja vende (puede tener varias abiertas). Una caja que no es
      * activa de la sucursal vuelve a la que le corresponde; VenderEnPos lo valida de nuevo.
      */
     public function updatedPosCajaId(): void
     {
         $sucursalId = $this->sucursal_id === null || ! ctype_digit((string) $this->sucursal_id) ? null : (int) $this->sucursal_id;
-        $valida = $sucursalId !== null && $this->actor()->esAdministrador() && $this->pos_caja_id !== null && ctype_digit($this->pos_caja_id)
+        $valida = $sucursalId !== null && $this->actor()->supervisaCajas() && $this->pos_caja_id !== null && ctype_digit($this->pos_caja_id)
             && app(CajaOperacion::class)->cajaDe($this->actor(), $sucursalId, (int) $this->pos_caja_id) !== null;
 
         if (! $valida) {
@@ -434,18 +434,18 @@ class Pos extends Component
 
         $actor = $this->actor();
         $cajas = app(CajaOperacion::class);
-        $elegida = $actor->esAdministrador() && $this->pos_caja_id !== null && ctype_digit($this->pos_caja_id)
+        $elegida = $actor->supervisaCajas() && $this->pos_caja_id !== null && ctype_digit($this->pos_caja_id)
             ? $cajas->cajaDe($actor, $sucursalId, (int) $this->pos_caja_id)
             : null;
 
         return $elegida ?? $cajas->cajaDe($actor, $sucursalId);
     }
 
-    /** Selector del administrador: la caja que le corresponde en la sucursal (su turno abierto o la principal). */
+    /** Selector de quien supervisa cajas: la que le corresponde en la sucursal (su turno abierto o la principal). */
     private function elegirCajaPorDefecto(): void
     {
         $this->pos_caja_id = null;
-        $caja = $this->actor()->esAdministrador() ? $this->cajaActual() : null;
+        $caja = $this->actor()->supervisaCajas() ? $this->cajaActual() : null;
         $this->pos_caja_id = $caja === null ? null : (string) $caja->id;
     }
 
@@ -821,8 +821,8 @@ class Pos extends Component
             'saldo' => $saldo,
             'cambio' => $cobro !== null && $cobro['metodo'] === MetodoPago::Efectivo ? $this->cambio($cobro['monto']) : null,
             'erroresVivos' => array_values(array_unique($errores)),
-            'administra' => $actor->esAdministrador(),
-            'sucursales' => $actor->esAdministrador()
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
             'cliente' => $cliente,
@@ -836,12 +836,12 @@ class Pos extends Component
             'cajaActual' => $cajaActual,
             'turnoActual' => $turnoActual,
             'arqueoCierre' => $this->modalCierreAbierto && $turnoActual ? $turnoActual->calcularArqueo($this->montoCierre) : null,
-            // Solo el administrador elige caja; el vendedor vende con la suya.
-            'cajasDisponibles' => $actor->esAdministrador() && $sucursalId
+            // Solo quien supervisa cajas elige caja; el resto vende con la suya.
+            'cajasDisponibles' => $actor->supervisaCajas() && $sucursalId && $actor->alcanzaSucursal((int) $sucursalId)
                 ? Caja::query()->where('sucursal_id', $sucursalId)->where('activa', true)->with('turnoActivo')
                     ->orderByDesc('es_principal')->orderBy('nombre')->get()
                 : collect(),
-            'misOtrosTurnos' => $this->modalAperturaAbierto && $actor->esAdministrador()
+            'misOtrosTurnos' => $this->modalAperturaAbierto && $actor->supervisaCajas()
                 ? app(CajaOperacion::class)->turnosAbiertosDe($actor)->reject(fn (TurnoCaja $t): bool => $t->caja_id === $cajaActual?->id)->values()
                 : collect(),
         ])->title(__('Punto de venta'));

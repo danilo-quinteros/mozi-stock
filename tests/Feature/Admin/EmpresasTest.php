@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\Rol;
+use App\Enums\TipoCuenta;
 use App\Livewire\Admin\Empresas;
 use App\Models\Auditoria;
 use App\Models\Caja;
@@ -30,7 +30,7 @@ test('the superadmin registers a company with its first administrator', function
     expect($empresa->activa)->toBeTrue()
         ->and($empresa->siat_habilitado)->toBeFalse()
         ->and($admin->empresa_id)->toBe($empresa->id)
-        ->and($admin->rol)->toBe(Rol::Administrador)
+        ->and($admin->tipo)->toBe(TipoCuenta::Administrador)
         ->and($admin->sucursal_id)->toBeNull()
         ->and(Hash::check('ClaveSegura12345', $admin->password))->toBeTrue()
         ->and(Caja::withoutGlobalScopes()->where('empresa_id', $empresa->id)->where('es_principal', true)->exists())->toBeTrue()
@@ -118,7 +118,7 @@ test('the superadmin command creates the account and refuses company users', fun
     $this->artisan('mozistock:superadmin')
         ->expectsQuestion('Correo electrónico', $admin->email)
         ->assertFailed();
-    expect($admin->refresh()->rol)->toBe(Rol::Administrador);
+    expect($admin->refresh()->tipo)->toBe(TipoCuenta::Administrador);
 });
 
 test('the superadmin command promotes an existing account without company', function () {
@@ -129,7 +129,7 @@ test('the superadmin command promotes an existing account without company', func
         ->expectsConfirmation("¿Conceder el rol de superadministrador a {$cuenta->name}?", 'yes')
         ->assertSuccessful();
 
-    expect($cuenta->refresh()->rol)->toBe(Rol::Superadmin)
+    expect($cuenta->refresh()->tipo)->toBe(TipoCuenta::Superadmin)
         ->and(Auditoria::query()->where('accion', 'usuario.rol_superadmin')->count())->toBe(1);
 });
 

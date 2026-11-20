@@ -54,7 +54,7 @@ trait EligeCaja
             }
         }
 
-        if ($actor->esAdministrador()) {
+        if ($actor->supervisaCajas()) {
             $opciones['externo'] = __('Fuera de caja (externo)');
         }
 

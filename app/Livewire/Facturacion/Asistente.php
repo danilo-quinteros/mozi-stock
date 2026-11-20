@@ -366,7 +366,11 @@ class Asistente extends Component
     private function sincronizarCatalogos(SincronizarCatalogos $sincronizar, VerificacionSiat $verificacion, Empresa $empresa): array
     {
         try {
-            set_time_limit(300);
+            // En las pruebas no: el límite valdría para todo el proceso de la suite.
+            if (! app()->runningUnitTests()) {
+                set_time_limit(300);
+            }
+
             $resultado = $sincronizar->ejecutar($empresa);
             $resultado['fallidos'] === []
                 ? $this->avisar(__('Listo: el SIN aceptó tu configuración y se sincronizaron :correctos catálogos.', ['correctos' => $resultado['correctos']]))

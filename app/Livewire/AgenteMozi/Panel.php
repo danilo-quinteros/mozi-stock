@@ -5,6 +5,7 @@ namespace App\Livewire\AgenteMozi;
 use App\Domain\AgenteMozi\Acciones\CatalogoAcciones;
 use App\Domain\AgenteMozi\Actions\EliminarConversacion;
 use App\Domain\AgenteMozi\Actions\EnviarMensaje;
+use App\Domain\AgenteMozi\ContextoAgente;
 use App\Domain\AgenteMozi\Ia\GestorProveedores;
 use App\Domain\AgenteMozi\Lienzo\ProtocoloLienzo;
 use App\Enums\TipoArtefacto;
@@ -201,8 +202,8 @@ class Panel extends Component
         $conIa = app(GestorProveedores::class)->motor() !== GestorProveedores::DEMO;
         $sugerencias = match (true) {
             ! $conIa => self::SUGERENCIAS,
-            $actor->esVendedor() => self::SUGERENCIAS_IA_VENDEDOR,
-            Gate::forUser($actor)->allows('usar-produccion') => self::sugerenciasProduccion(Gate::forUser($actor)->allows('analizar-lotes')),
+            ! ContextoAgente::amplio($actor) => self::SUGERENCIAS_IA_VENDEDOR,
+            Gate::forUser($actor)->allows('usar-produccion') => self::sugerenciasProduccion(Gate::forUser($actor)->allows('analizar-lotes-empresa')),
             default => self::SUGERENCIAS_IA,
         };
 

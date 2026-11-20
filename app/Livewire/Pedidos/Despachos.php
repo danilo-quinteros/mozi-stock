@@ -55,7 +55,7 @@ class Despachos extends Component
         }
 
         $actor = $this->actor();
-        $activa = $actor->esAdministrador() ? $actor->sucursalActivaId() : null;
+        $activa = $actor->veTodasLasSucursales() ? $actor->sucursalActivaId() : null;
 
         if ($activa !== null) {
             $this->sucursal = (string) $activa;
@@ -82,12 +82,12 @@ class Despachos extends Component
                 ->withCount('items')
                 ->paginate(25),
             'conteos' => ListadoDespachos::conteos($actor, $filtros),
-            'sucursales' => $actor->esAdministrador() ? Sucursal::query()->orderBy('nombre')->get(['id', 'nombre']) : collect(),
-            'administra' => $actor->esAdministrador(),
+            'sucursales' => $actor->veTodasLasSucursales() ? Sucursal::query()->orderBy('nombre')->get(['id', 'nombre']) : collect(),
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
             'dialogo' => $this->dialogoEntrega(),
             'exportar' => array_filter([
                 'entrega' => $this->estado,
-                'suc' => $actor->esAdministrador() ? $this->sucursal : '',
+                'suc' => $actor->veTodasLasSucursales() ? $this->sucursal : '',
                 'cliente' => trim($this->cliente),
                 'desde' => $filtros['desde'] ?? '',
                 'hasta' => $filtros['hasta'] ?? '',
@@ -104,7 +104,7 @@ class Despachos extends Component
 
         return array_filter([
             // El vendedor queda en su sucursal dentro de la consulta; este valor solo lo usa el administrador.
-            'sucursal_id' => $actor->esAdministrador() && ctype_digit($this->sucursal) ? (int) $this->sucursal : null,
+            'sucursal_id' => $actor->veTodasLasSucursales() && ctype_digit($this->sucursal) ? (int) $this->sucursal : null,
             'cliente' => $this->cliente,
             'desde' => $fecha($this->desde),
             'hasta' => $fecha($this->hasta),

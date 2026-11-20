@@ -24,7 +24,7 @@
         <article class="card stat"><span class="stat-label">{{ __('Productos activos') }}</span><div class="stat-value">{{ $totalProductos }}</div><div class="stat-foot">{{ __('Ficha única para todas las sucursales') }}</div></article>
         <article class="card stat"><span class="stat-label">{{ __('Categorías') }}</span><div class="stat-value">{{ $categorias->where('activa', true)->count() }}</div><div class="stat-foot">{{ __('Organización simple') }}</div></article>
         <article class="card stat"><span class="stat-label">{{ __('Existencias bajas') }}</span><div class="stat-value">{{ $alertas }}</div><div class="stat-foot">{{ $sucursalVista ? __('En ').$sucursalVista->nombre : __('Sin sucursal') }}</div></article>
-        <article class="card stat"><span class="stat-label">{{ __('Stock de') }}</span><div class="stat-value" style="font-size:clamp(18px,2vw,24px)">{{ $sucursalVista->nombre ?? '—' }}</div><div class="stat-foot">{{ $administra ? __('Elige la sucursal en el filtro') : __('Tu sucursal asignada') }}</div></article>
+        <article class="card stat"><span class="stat-label">{{ __('Stock de') }}</span><div class="stat-value" style="font-size:clamp(18px,2vw,24px)">{{ $sucursalVista->nombre ?? '—' }}</div><div class="stat-foot">{{ $eligeSucursal ? __('Elige la sucursal en el filtro') : __('Tu sucursal asignada') }}</div></article>
     </div>
 
     <section class="card card-pad">
@@ -68,7 +68,7 @@
                         @endforeach
                     </select>
                 @endif
-                @if ($administra && $sucursales->count() > 1)
+                @if ($eligeSucursal && $sucursales->count() > 1)
                     <select class="select" wire:model.live="sucursal" @disabled($sucursalFija) aria-label="{{ __('Ver stock de la sucursal') }}">
                         @foreach ($sucursales as $opcion)
                             <option value="{{ $opcion->id }}" @selected($sucursalVista?->id === $opcion->id)>{{ __('Stock · :nombre', ['nombre' => $opcion->nombre]) }}</option>
@@ -170,7 +170,7 @@
             </div>
             <div class="table-footer">
                 <span>{{ __('Los precios se guardan por producto. El stock y el mínimo pertenecen a cada sucursal.') }}</span>
-                @if ($administra)<a class="btn sm ghost" href="{{ route('inventario.movimientos') }}">{{ __('Ver movimientos') }} <x-icon name="arrow" size="sm" /></a>@endif
+                @if ($verMovimientos)<a class="btn sm ghost" href="{{ route('inventario.movimientos') }}">{{ __('Ver movimientos') }} <x-icon name="arrow" size="sm" /></a>@endif
             </div>
             @if ($productos->hasPages())
                 <div class="table-footer">

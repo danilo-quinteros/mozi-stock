@@ -5,10 +5,10 @@ namespace App\Livewire\Creditos;
 use App\Domain\Creditos\Actions\RegistrarCobro;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
 use App\Domain\Creditos\Consultas\PendientesCobro;
+use App\Enums\Permiso;
 use App\Livewire\Concerns\FormularioPago;
 use App\Livewire\Concerns\MuestraAvisos;
 use App\Models\Cliente;
-use App\Models\Pedido;
 use App\Models\Sucursal;
 use App\Models\User;
 use App\Support\Decimal;
@@ -40,9 +40,9 @@ class Cobrar extends Component
 
     public function mount(): void
     {
-        $this->authorize('viewAny', Pedido::class);
+        $this->authorize('permiso', Permiso::CreditosCobrar);
         $actor = $this->actor();
-        $this->sucursal_id = (string) ($actor->esVendedor() ? $actor->sucursal_id
+        $this->sucursal_id = (string) (! $actor->veTodasLasSucursales() ? $actor->sucursal_id
             : ($actor->sucursalActivaId() ?? Sucursal::query()->where('activa', true)->orderBy('nombre')->value('id')));
         $this->iniciarPago();
     }
@@ -81,8 +81,9 @@ class Cobrar extends Component
             'items' => $items,
             'saldoTotal' => array_reduce($items, fn (string $suma, array $i) => Decimal::sumar($suma, $i['saldo'], 2), '0.00'),
             'sumaMixta' => $this->sumaMixta(),
-            'administra' => $actor->esAdministrador(),
-            'sucursales' => $actor->esAdministrador()
+            // Sin «Trabajar en todas las sucursales» cobra en la suya; el servidor la vuelve a imponer.
+            'eligeSucursal' => $actor->veTodasLasSucursales(),
+            'sucursales' => $actor->veTodasLasSucursales()
                 ? Sucursal::query()->where('activa', true)->orderBy('nombre')->get(['id', 'nombre'])
                 : Sucursal::query()->whereKey($actor->sucursal_id)->get(['id', 'nombre']),
         ]);

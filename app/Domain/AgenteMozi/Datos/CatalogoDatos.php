@@ -7,7 +7,6 @@ use App\Domain\AgenteMozi\Herramientas\ArgumentoInvalido;
 use App\Domain\Creditos\Consultas\CuentasPorCobrar;
 use App\Domain\CuentasPagar\Consultas\CuentasPorPagar;
 use App\Domain\Produccion\Consultas\MaterialesEnvasado;
-use App\Enums\Rol;
 use App\Models\Producto;
 use App\Models\Venta;
 use Carbon\CarbonImmutable;
@@ -71,14 +70,14 @@ final class CatalogoDatos
 
     private readonly int $empresaId;
 
-    /** Sucursal fija del vendedor; null = administrador (toda la empresa). */
+    /** Sucursal fija sin vista amplia; null = vista amplia (toda la empresa). */
     private readonly ?int $sucursalVendedor;
 
     private readonly string $desfase;
 
     private readonly string $hoy;
 
-    /** Administrador con la capacidad produccion. */
+    /** Permiso produccion.gestionar con la capacidad produccion. */
     private readonly bool $produccion;
 
     /** Empresa con Lotes y vencimientos. */
@@ -87,8 +86,8 @@ final class CatalogoDatos
     public function __construct(ContextoAgente $contexto)
     {
         $this->empresaId = $contexto->empresaId;
-        // Un vendedor sin sucursal asignada no ve filas de ninguna: 0 nunca es un id válido.
-        $this->sucursalVendedor = $contexto->rol === Rol::Administrador ? null : ($contexto->sucursalId ?? 0);
+        // Sin vista amplia y sin sucursal no se ve ninguna fila: 0 nunca es un id válido.
+        $this->sucursalVendedor = $contexto->amplio ? null : ($contexto->sucursalId ?? 0);
         $this->desfase = $contexto->fechaReferencia->format('P');
         $this->hoy = $contexto->fechaReferencia->format('Y-m-d');
         $this->produccion = $contexto->produccion();
@@ -102,13 +101,15 @@ final class CatalogoDatos
     /**
      * Catálogo solo para describir fuentes y campos al modelo: sin empresa, nunca se ejecuta.
      *
+     * @param  bool  $administrador  vista amplia (ContextoAgente::amplio)
      * @param  list<string>  $capacidades  funciones activas de la empresa del usuario
+     * @param  bool|null  $produccion  permiso produccion.gestionar; null = el de la vista amplia
      */
-    public static function paraDescribir(bool $administrador, array $capacidades = []): self
+    public static function paraDescribir(bool $administrador, array $capacidades = [], ?bool $produccion = null): self
     {
         $zona = (string) config('mozistock.business_timezone');
 
-        return new self(new ContextoAgente(0, 0, $administrador ? Rol::Administrador : Rol::Vendedor, null, $zona, CarbonImmutable::now($zona), 'es', '', $capacidades));
+        return new self(new ContextoAgente(0, 0, $administrador, null, $zona, CarbonImmutable::now($zona), 'es', '', $capacidades, $produccion ?? $administrador));
     }
 
     public function administrador(): bool
@@ -164,7 +165,7 @@ final class CatalogoDatos
     {
         if (! in_array($nombre, $this->fuentesPermitidas(), true)) {
             $motivo = match (true) {
-                in_array($nombre, self::FUENTES_PRODUCCION, true) => 'solo existe para el administrador de una empresa con Producción activa',
+                in_array($nombre, self::FUENTES_PRODUCCION, true) => 'solo existe para quien gestiona Producción en una empresa con Producción activa',
                 $nombre === self::FUENTE_LOTES => 'solo existe en empresas con Lotes y vencimientos activo',
                 default => 'no está disponible para el rol del usuario',
             };

@@ -97,10 +97,10 @@ final class VenderEnPos
 
     private function resolverCaja(User $actor, int $sucursalId, ?int $cajaId): Caja
     {
-        $caja = $this->cajas->cajaDe($actor, $sucursalId, $actor->esAdministrador() ? $cajaId : null);
+        $caja = $this->cajas->cajaDe($actor, $sucursalId, $actor->supervisaCajas() ? $cajaId : null);
 
         if ($caja === null) {
-            throw ValidationException::withMessages(['caja' => $actor->esVendedor()
+            throw ValidationException::withMessages(['caja' => ! $actor->supervisaCajas()
                 ? __('No tienes una caja activa asignada en esta sucursal. Solicita al administrador que te asigne una.')
                 : __('La caja elegida no está activa en la sucursal de la venta.')]);
         }

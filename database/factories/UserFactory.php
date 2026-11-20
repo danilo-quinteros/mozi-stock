@@ -2,11 +2,14 @@
 
 namespace Database\Factories;
 
-use App\Enums\Rol;
+use App\Domain\Identidad\Actions\CrearRolesPorDefecto;
+use App\Enums\TipoCuenta;
 use App\Models\Empresa;
+use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -41,22 +44,57 @@ class UserFactory extends Factory
 
     public function superadmin(): static
     {
-        return $this->state(fn () => ['rol' => Rol::Superadmin, 'empresa_id' => null, 'sucursal_id' => null]);
+        return $this->state(fn () => ['tipo' => TipoCuenta::Superadmin, 'empresa_id' => null, 'sucursal_id' => null]);
     }
 
     public function administrador(Empresa $empresa): static
     {
-        return $this->state(fn () => ['rol' => Rol::Administrador, 'empresa_id' => $empresa->id, 'sucursal_id' => null]);
+        return $this->state(fn () => ['tipo' => TipoCuenta::Administrador, 'empresa_id' => $empresa->id, 'sucursal_id' => null]);
     }
 
+    /**
+     * Usuario con el rol por defecto «Vendedor» de su empresa (ESPECIFICACION_PERMISOS.md § 5).
+     */
     public function vendedor(Sucursal $sucursal): static
     {
+        return $this->conPlantilla($sucursal, Rol::PLANTILLA_VENDEDOR);
+    }
+
+    /**
+     * Usuario con el rol por defecto «Encargado de sucursal» de su empresa.
+     */
+    public function encargado(Sucursal $sucursal): static
+    {
+        return $this->conPlantilla($sucursal, Rol::PLANTILLA_ENCARGADO);
+    }
+
+    /**
+     * Usuario con un rol cualquiera de la empresa de la sucursal.
+     */
+    public function conRol(Rol $rol, Sucursal $sucursal): static
+    {
         return $this->state(fn () => [
-            'rol' => Rol::Vendedor,
+            'tipo' => TipoCuenta::Usuario,
+            'rol_id' => $rol->id,
             'empresa_id' => $sucursal->empresa_id,
             'sucursal_id' => $sucursal->id,
             'caja_id' => $sucursal->cajaPrincipal()?->id,
         ]);
+    }
+
+    private function conPlantilla(Sucursal $sucursal, string $plantilla): static
+    {
+        return $this->state(function () use ($sucursal, $plantilla): array {
+            app(CrearRolesPorDefecto::class)->ejecutar((int) $sucursal->empresa_id);
+
+            return [
+                'tipo' => TipoCuenta::Usuario,
+                'rol_id' => (int) DB::table('roles')->where('empresa_id', $sucursal->empresa_id)->where('plantilla', $plantilla)->value('id'),
+                'empresa_id' => $sucursal->empresa_id,
+                'sucursal_id' => $sucursal->id,
+                'caja_id' => $sucursal->cajaPrincipal()?->id,
+            ];
+        });
     }
 
     public function inactivo(): static

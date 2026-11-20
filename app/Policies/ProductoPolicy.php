@@ -2,11 +2,12 @@
 
 namespace App\Policies;
 
+use App\Enums\Permiso;
 use App\Models\Producto;
 use App\Models\User;
 
 /**
- * Todos los usuarios de la empresa consultan productos; solo el administrador los gestiona.
+ * Todos los usuarios de la empresa consultan productos (base); gestionarlos exige productos.gestionar.
  */
 class ProductoPolicy
 {
@@ -22,11 +23,11 @@ class ProductoPolicy
 
     public function create(User $user): bool
     {
-        return $user->esAdministrador();
+        return $user->tienePermiso(Permiso::ProductosGestionar);
     }
 
     public function update(User $user, Producto $producto): bool
     {
-        return $user->esAdministrador() && $user->empresa_id === $producto->empresa_id;
+        return $this->create($user) && $user->empresa_id === $producto->empresa_id;
     }
 }
