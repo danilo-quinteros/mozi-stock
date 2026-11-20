@@ -47,7 +47,7 @@ class ProductoFormulario extends Component
 
     private const CANTIDAD = 'regex:/^\d{1,15}([.,]\d{1,3})?$/';
 
-    private const REGLAS_IMAGEN = ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'];
+    private const REGLAS_IMAGEN = ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'];
 
     #[Locked]
     public ?int $productoId = null;
@@ -262,7 +262,7 @@ class ProductoFormulario extends Component
     public function updatedImagen(): void
     {
         try {
-            $this->validate(['imagen' => self::REGLAS_IMAGEN], ['imagen.max' => __('La imagen no puede superar 3 MB.')]);
+            $this->validate(['imagen' => self::REGLAS_IMAGEN], ['imagen.max' => __('La imagen no puede superar 10 MB.')]);
             $this->quitarImagen = false;
         } catch (ValidationException $e) {
             $this->imagen = null;
@@ -414,7 +414,7 @@ class ProductoFormulario extends Component
             'precio_mayorista.regex' => __('Ingresa un precio válido (por ejemplo 9,80).'),
             'stock_minimo.regex' => __('Ingresa una cantidad mayor o igual a 0.'),
             'minimos.*.regex' => __('Ingresa una cantidad mayor o igual a 0, o déjalo vacío.'),
-            'imagen.max' => __('La imagen no puede superar 3 MB.'),
+            'imagen.max' => __('La imagen no puede superar 10 MB.'),
         ], [
             'nombre' => __('nombre'),
             'marca' => mb_strtolower($this->etiquetaMarca()),
@@ -520,7 +520,7 @@ class ProductoFormulario extends Component
             'precio_minorista.regex' => __('Ingresa un precio válido (por ejemplo 11,10).'),
             'precio_mayorista.regex' => __('Ingresa un precio válido (por ejemplo 9,80).'),
             'stock_minimo.regex' => __('Ingresa una cantidad mayor o igual a 0.'),
-            'imagen.max' => __('La imagen no puede superar 3 MB.'),
+            'imagen.max' => __('La imagen no puede superar 10 MB.'),
         ], [
             'nombre' => __('nombre'), 'sku_base' => __('SKU base'), 'categoria_id' => __('categoría'), 'unidad_medida_id' => __('unidad'),
             'stock_minimo' => __('stock mínimo'), 'precio_consumidor' => __('precio consumidor'),

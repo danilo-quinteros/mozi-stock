@@ -11,6 +11,7 @@ use App\Models\Modelo;
 use App\Models\Talla;
 use App\Models\User;
 use App\Support\Decimal;
+use App\Support\OptimizadorImagen;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -53,6 +54,7 @@ final class GuardarModelo
         private readonly Auditor $auditor,
         private readonly Variantes $variantes,
         private readonly StockInicial $stockInicial,
+        private readonly OptimizadorImagen $imagenes,
     ) {}
 
     /**
@@ -155,7 +157,7 @@ final class GuardarModelo
         $this->variantes->exigir($empresaId);
 
         $imagenAnterior = $modelo->imagen_path;
-        $imagenNueva = $imagen?->storeAs("empresas/{$empresaId}/modelos", Str::random(40).'.'.$imagen->extension(), self::DISCO);
+        $imagenNueva = $imagen === null ? null : $this->imagenes->guardar($imagen, "empresas/{$empresaId}/modelos", self::DISCO);
 
         if ($imagen !== null && $imagenNueva === false) {
             throw ValidationException::withMessages(['imagen' => __('No se pudo guardar la imagen.')]);

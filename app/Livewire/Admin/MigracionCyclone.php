@@ -127,6 +127,13 @@ class MigracionCyclone extends Component
         $this->archivo = null;
         $this->respaldo = $ruta;
         $this->respaldoNombre = $nombre;
+        $empresa = $this->empresa();
+
+        if ($empresa !== null && MigrarCyclone::migrada((int) $empresa->id)) {
+            $this->completarFotos($empresa);
+
+            return;
+        }
 
         try {
             $this->prevista();
@@ -276,7 +283,7 @@ class MigracionCyclone extends Component
                 $copia = $copiador->copiar($empresa, $tanda);
                 $this->fotosIntentadas = array_merge($this->fotosIntentadas, array_map('strval', array_keys($tanda)));
                 $this->fotos['copiadas'] += $copia['copiadas'];
-                $this->fotos['fallidas'] = array_merge($this->fotos['fallidas'], $copia['fallidas'], $copia['sin_catalogo']);
+                $this->fotos['fallidas'] = array_merge($this->fotos['fallidas'], $copia['fallidas']);
             }
 
             if (count($pendientes) <= count($tanda)) {
@@ -293,13 +300,14 @@ class MigracionCyclone extends Component
         $this->authorize('migrarDatos', Empresa::class);
         $empresa = $this->empresa();
         $migradas = DB::table('migracion_origenes')->where('sistema', MigrarCyclone::SISTEMA)->distinct()->pluck('empresa_id');
+        $migrada = $empresa !== null && $migradas->contains($empresa->id);
 
         return view('livewire.admin.migracion-cyclone', [
             'empresa' => $empresa,
             'administrador' => $empresa === null ? null : $this->administrador($empresa),
-            'migrada' => $empresa !== null && $migradas->contains($empresa->id),
-            'fotosPendientes' => $empresa !== null && $migradas->contains($empresa->id) && ! $this->copiandoFotos
-                ? count(FotosCyclone::pendientes($empresa)) : 0,
+            'migrada' => $migrada,
+            'sinDatoDeFoto' => $migrada ? FotosCyclone::sinDatoDeFoto($empresa) : 0,
+            'fotosPendientes' => $migrada && ! $this->copiandoFotos ? count(FotosCyclone::pendientes($empresa)) : 0,
             'disponibles' => $this->empresasDisponibles($migradas->all()),
             'yaMigradas' => Empresa::query()->whereIn('id', $migradas)->orderBy('nombre')->get(['id', 'nombre']),
             'puedeMigrar' => $this->puedeMigrar(),
@@ -353,6 +361,30 @@ class MigracionCyclone extends Component
         } finally {
             $lector->liberar();
         }
+    }
+
+    /**
+     * Empresa migrada antes de que se guardara qué productos tienen foto: el respaldo solo completa ese dato (ningún
+     * otro cambia), se borra enseguida y empiezan a copiarse las fotos desde Cyclone.
+     */
+    private function completarFotos(Empresa $empresa): void
+    {
+        try {
+            $plan = $this->plan();
+        } finally {
+            $this->quitarRespaldo();
+        }
+
+        $completadas = FotosCyclone::registrarNombres($empresa, collect($plan['productos'])->pluck('foto', 'origen_id')->all());
+
+        if ($completadas === 0) {
+            $this->addError('respaldo', __('Este respaldo no tiene productos de esta empresa a los que les falte el dato de la foto.'));
+
+            return;
+        }
+
+        $this->avisar(__('Respaldo leído: se traen las fotos desde Cyclone.'));
+        $this->iniciarFotos();
     }
 
     private function prevista(): void

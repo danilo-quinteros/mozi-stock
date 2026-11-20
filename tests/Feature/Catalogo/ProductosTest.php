@@ -185,16 +185,45 @@ test('the product image is stored privately per company and served only to it', 
     $this->get(route('productos.imagen', $producto))->assertNotFound();
 });
 
-test('files that are not images or exceed 3 MB are rejected', function () {
+test('files that are not images or exceed 10 MB are rejected', function () {
     Storage::fake('local');
 
     Livewire::test(ProductoFormulario::class)
         ->set('imagen', UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf'))
         ->assertHasErrors('imagen');
     Livewire::test(ProductoFormulario::class)
-        ->set('imagen', UploadedFile::fake()->createWithContent('grande.png', base64_decode(PNG_MINIMO).str_repeat('0', 3200 * 1024)))
-        ->assertHasErrors('imagen');
+        ->set('imagen', UploadedFile::fake()->createWithContent('grande.png', base64_decode(PNG_MINIMO).str_repeat('0', 10300 * 1024)))
+        ->assertHasErrors(['imagen' => 'max'])
+        ->assertSee('La imagen no puede superar 10 MB.');
+    // Una foto de celular de unos 5 MB ya se acepta (antes el límite era 3 MB).
+    Livewire::test(ProductoFormulario::class)
+        ->set('imagen', UploadedFile::fake()->createWithContent('celular.png', base64_decode(PNG_MINIMO).str_repeat('0', 5 * 1024 * 1024)))
+        ->assertHasNoErrors('imagen');
 });
+
+test('a large phone photo is stored reduced to 1600 px in WebP', function () {
+    Storage::fake('local');
+    $lienzo = imagecreatetruecolor(2400, 1800);
+
+    for ($i = 0; $i < 1500; $i++) {
+        imageline($lienzo, random_int(0, 2399), random_int(0, 1799), random_int(0, 2399), random_int(0, 1799), random_int(0, 0xFFFFFF));
+    }
+
+    ob_start();
+    imagejpeg($lienzo, null, 95);
+    $jpeg = (string) ob_get_clean();
+
+    crearProductoDesdePantalla([
+        'nombre' => 'Foto grande', 'sku' => 'FOTO-2', 'unidad_medida_id' => (string) $this->unidad->id,
+        'precio_consumidor' => '5', 'imagen' => UploadedFile::fake()->createWithContent('celular.jpg', $jpeg),
+    ])->assertHasNoErrors();
+
+    $ruta = Producto::query()->sole()->imagen_path;
+    $guardada = Storage::disk('local')->get($ruta);
+    expect($ruta)->toStartWith("empresas/{$this->empresa->id}/productos/")->toEndWith('.webp')
+        ->and(array_slice(getimagesizefromstring($guardada), 0, 2))->toBe([1600, 1200])
+        ->and(strlen($guardada))->toBeLessThan(strlen($jpeg));
+})->skip(! extension_loaded('gd'), 'Requiere la extensión GD de PHP');
 
 test('editing keeps stock untouched and stores per-branch minimums', function () {
     $sucursal = Sucursal::factory()->create(['empresa_id' => $this->empresa->id]);

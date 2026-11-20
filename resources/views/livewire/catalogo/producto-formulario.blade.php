@@ -76,7 +76,7 @@
                                 <b>{{ __('Imagen del producto') }}</b>
                                 <small wire:loading.remove wire:target="imagen">{{ __('Haz clic para elegir una imagen') }}</small>
                                 <small wire:loading wire:target="imagen">{{ __('Subiendo…') }}</small>
-                                <small>{{ __('JPG, PNG o WebP · máx. 3 MB') }}</small>
+                                <small>{{ __('JPG, PNG o WebP · máx. 10 MB') }}</small>
                                 @if ($modeloVariante && ! $imagen && (! $producto?->imagen_path || $quitarImagen))
                                     <small data-test="nota-foto-modelo">{{ $modeloVariante->imagen_path ? __('Sin foto propia: se muestra la del modelo.') : __('Sin foto propia ni del modelo.') }}</small>
                                 @endif

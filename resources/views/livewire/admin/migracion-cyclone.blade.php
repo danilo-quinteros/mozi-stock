@@ -55,9 +55,12 @@
                     </div>
                     <button class="btn sm ghost" type="button" wire:click="quitarRespaldo" wire:loading.attr="disabled"><x-icon name="trash" size="sm" /> {{ __('Quitar') }}</button>
                 </div>
-            @elseif ($migrada)
+            @elseif ($migrada && $sinDatoDeFoto === 0)
                 <p class="subtle" style="margin:0">{{ __('Esta empresa ya recibió su migración: no hace falta subir el respaldo de nuevo.') }}</p>
             @else
+                @if ($migrada)
+                    <p class="subtle" style="margin:0 0 12px" data-test="completar-fotos">{{ __('Esta empresa se migró antes de que se guardara qué productos tienen foto. Sube otra vez su respaldo .sql para traer las fotos desde Cyclone: no cambia ningún otro dato y el archivo se borra enseguida.') }}</p>
+                @endif
                 <label class="upload-box" for="archivo" wire:loading.class="drag-over" wire:target="archivo" style="min-height:150px">
                     <x-icon name="upload" />
                     <b wire:loading.remove wire:target="archivo">{{ __('Elige el respaldo .sql') }}</b>
@@ -87,7 +90,7 @@
                 <article class="card stat">
                     <span class="stat-label">{{ __('Fotos') }}</span>
                     <div class="stat-value">{{ $n($vista['con_foto']) }}</div>
-                    <div class="stat-foot">{{ __('Del catálogo central de Cyclone') }}</div>
+                    <div class="stat-foot">{{ __('Se descargan de Cyclone al migrar') }}</div>
                 </article>
                 <article class="card stat">
                     <span class="stat-label">{{ __('Clientes') }}</span>

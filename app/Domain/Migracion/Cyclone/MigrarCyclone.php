@@ -154,7 +154,8 @@ final class MigrarCyclone
             ], $plan['proveedores']));
 
             $this->equivalencias($empresaId, 'sucursal', $sucursales, $ahora);
-            $this->equivalencias($empresaId, 'producto', $productos, $ahora);
+            $this->equivalencias($empresaId, 'producto', $productos, $ahora,
+                collect($plan['productos'])->mapWithKeys(fn (array $p): array => [$p['origen_id'] => (string) ($p['foto'] ?? '')])->all());
 
             $resultado = [
                 'sucursales' => count($sucursales),
@@ -322,15 +323,17 @@ final class MigrarCyclone
 
     /**
      * @param  array<int, int>  $ids  id de origen => id en MoziStock
+     * @param  array<int, string>|null  $fotos  solo productos: id de origen => nombre de su foto ('' = sin foto)
      */
-    private function equivalencias(int $empresaId, string $entidad, array $ids, Carbon $ahora): void
+    private function equivalencias(int $empresaId, string $entidad, array $ids, Carbon $ahora, ?array $fotos = null): void
     {
         $filas = [];
 
         foreach ($ids as $origen => $destino) {
             $filas[] = [
                 'empresa_id' => $empresaId, 'sistema' => self::SISTEMA, 'entidad' => $entidad,
-                'origen_id' => (string) $origen, 'destino_id' => $destino, 'created_at' => $ahora,
+                'origen_id' => (string) $origen, 'destino_id' => $destino,
+                'foto' => $fotos === null ? null : mb_substr($fotos[$origen] ?? '', 0, 255), 'created_at' => $ahora,
             ];
         }
 

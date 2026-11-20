@@ -184,15 +184,15 @@ class MigrarCycloneCommand extends Command
      */
     private function copiarFotos(FotosCyclone $fotos, Empresa $empresa, array $plan): int
     {
+        // Empresa migrada antes de guardar qué productos tienen foto: el respaldo lo completa.
+        FotosCyclone::registrarNombres($empresa, collect($plan['productos'])->pluck('foto', 'origen_id')->all());
         $conFoto = collect($plan['productos'])->whereNotNull('foto')->pluck('foto', 'origen_id')->all();
         $resultado = $fotos->copiar($empresa, $conFoto);
 
         $this->info("Fotos copiadas: {$resultado['copiadas']}.");
 
-        foreach (['sin_catalogo' => 'Sin foto en el catálogo central', 'fallidas' => 'No se pudo copiar'] as $clave => $titulo) {
-            if ($resultado[$clave] !== []) {
-                $this->warn("{$titulo} (".count($resultado[$clave]).'): '.implode(', ', array_slice($resultado[$clave], 0, 10)));
-            }
+        if ($resultado['fallidas'] !== []) {
+            $this->warn('No se pudo copiar ('.count($resultado['fallidas']).'): '.implode(', ', array_slice($resultado['fallidas'], 0, 10)));
         }
 
         return self::SUCCESS;

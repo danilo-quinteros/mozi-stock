@@ -30,7 +30,7 @@
                                 <b>{{ __('Foto general del modelo') }}</b>
                                 <small wire:loading.remove wire:target="imagen">{{ __('Haz clic para elegir una imagen') }}</small>
                                 <small wire:loading wire:target="imagen">{{ __('Subiendo…') }}</small>
-                                <small>{{ __('JPG, PNG o WebP · máx. 3 MB') }}</small>
+                                <small>{{ __('JPG, PNG o WebP · máx. 10 MB') }}</small>
                             </label>
                             <input id="imagen" type="file" accept="image/png,image/jpeg,image/webp" wire:model="imagen" hidden>
                             @error('imagen')<p class="auth-error" role="alert">{{ $message }}</p>@enderror

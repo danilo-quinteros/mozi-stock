@@ -14,6 +14,7 @@ use App\Models\Sucursal;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -368,6 +369,80 @@ test('photos are copied in small batches and can be resumed after closing the pa
 
     $pantalla->call('copiarFotos')->assertSet('fotos.copiadas', 9);
     Livewire::actingAs($this->superadmin)->test(MigracionCyclone::class)->set('empresaId', $this->empresa->id)->assertDontSee('fotos que faltan');
+});
+
+test('without the central catalog, photos are downloaded from the Cyclone API by product id', function () {
+    Http::preventStrayRequests();
+    $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+    Http::fake([
+        '*/catalogo/productos/3/foto' => Http::response($png, 200, ['Content-Type' => 'image/png']),
+        '*/catalogo/productos/100/foto' => Http::response('No encontrado', 404),
+    ]);
+
+    Livewire::actingAs($this->superadmin)->test(MigracionCyclone::class)
+        ->set('empresaId', $this->empresa->id)
+        ->set('archivo', subirRespaldoCyclone(respaldoCyclone([['id' => 100, 'codigo' => 'SINFOTO', 'nombre' => 'Foto borrada en Cyclone', 'foto' => 'borrada.png']])))
+        ->call('migrar')
+        ->assertHasNoErrors()
+        ->assertSet('fotos.total', 2)
+        ->call('copiarFotos')
+        ->assertSet('copiandoFotos', false)
+        ->assertSet('fotos.copiadas', 1)
+        ->assertSee('Fotos copiadas: 1 de 2.')
+        ->assertSee('Producto 100 (SINFOTO Foto borrada en Cyclone)');
+
+    $imagen = DB::table('productos')->where('empresa_id', $this->empresa->id)->where('sku', '0DIMO05')->value('imagen_path');
+    expect($imagen)->toStartWith("empresas/{$this->empresa->id}/productos/")->toEndWith('.png')
+        ->and(Storage::disk('local')->get($imagen))->toBe($png)
+        // Qué productos tenían foto queda guardado con la migración ('' = sin foto): LAVA01 no se pide a Cyclone.
+        ->and(DB::table('migracion_origenes')->where('empresa_id', $this->empresa->id)->where('entidad', 'producto')->orderBy('origen_id')->pluck('foto', 'origen_id')->all())
+        ->toBe(['100' => 'borrada.png', '3' => '1682479264_DESINCRUSTANTE.png', '5' => '']);
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/catalogo/productos/3/foto'));
+});
+
+test('a company migrated before photo names were saved completes them by uploading its backup again', function () {
+    Http::preventStrayRequests();
+    $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+    Http::fake(['*/catalogo/productos/3/foto' => Http::response($png, 200, ['Content-Type' => 'image/png'])]);
+
+    Livewire::actingAs($this->superadmin)->test(MigracionCyclone::class)
+        ->set('empresaId', $this->empresa->id)
+        ->set('archivo', subirRespaldoCyclone(respaldoCyclone()))
+        ->call('migrar')
+        ->assertHasNoErrors();
+    // Así quedaron las empresas migradas antes de la columna «foto».
+    DB::table('migracion_origenes')->where('empresa_id', $this->empresa->id)->update(['foto' => null]);
+    $antes = DB::table('productos')->where('empresa_id', $this->empresa->id)->orderBy('id')->get(['id', 'sku', 'precio_consumidor', 'updated_at'])->toArray();
+    $auditorias = Auditoria::query()->count();
+
+    Livewire::actingAs($this->superadmin)->test(MigracionCyclone::class)
+        ->set('empresaId', $this->empresa->id)
+        ->assertDontSee('fotos que faltan')
+        ->assertSee('Sube otra vez su respaldo .sql para traer las fotos desde Cyclone')
+        ->set('archivo', subirRespaldoCyclone(respaldoCyclone()))
+        ->assertHasNoErrors()
+        ->assertSet('respaldo', null)
+        ->assertSet('vista', [])
+        ->assertSet('fotos.total', 1)
+        ->call('copiarFotos')
+        ->assertSet('fotos.copiadas', 1)
+        ->assertDontSee('Sube otra vez su respaldo');
+
+    expect(Storage::disk('local')->files('migraciones/respaldos'))->toBe([])
+        ->and(DB::table('productos')->where('empresa_id', $this->empresa->id)->where('sku', '0DIMO05')->value('imagen_path'))->not->toBeNull()
+        // Ningún otro dato cambió y no hubo otra migración.
+        ->and(DB::table('productos')->where('empresa_id', $this->empresa->id)->where('sku', '<>', '0DIMO05')->orderBy('id')->get(['id', 'sku', 'precio_consumidor', 'updated_at'])->toArray())
+        ->toEqual(array_values(array_filter($antes, fn (object $p): bool => $p->sku !== '0DIMO05')))
+        ->and(Auditoria::query()->count())->toBe($auditorias);
+
+    // Con el dato ya completo, otro respaldo no cambia nada.
+    Livewire::actingAs($this->superadmin)->test(MigracionCyclone::class)
+        ->set('empresaId', $this->empresa->id)
+        ->set('archivo', subirRespaldoCyclone(respaldoCyclone()))
+        ->assertHasErrors('respaldo')
+        ->assertSee('no tiene productos de esta empresa a los que les falte el dato de la foto');
+    expect(Storage::disk('local')->files('migraciones/respaldos'))->toBe([]);
 });
 
 test('backups left behind are deleted the next day', function () {

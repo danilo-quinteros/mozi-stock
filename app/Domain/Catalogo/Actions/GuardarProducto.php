@@ -13,6 +13,7 @@ use App\Domain\Produccion\Presentaciones;
 use App\Models\Producto;
 use App\Models\User;
 use App\Support\Decimal;
+use App\Support\OptimizadorImagen;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -24,7 +25,7 @@ use Throwable;
 /**
  * Alta y edición de la ficha de producto. Nunca escribe saldos directamente: las existencias solo
  * cambian con operaciones de inventario por sucursal (el stock inicial del alta es una entrada «Inventario inicial»). La imagen se guarda en el disco
- * privado, en una carpeta de la empresa y con nombre aleatorio.
+ * privado, en una carpeta de la empresa y con nombre aleatorio, achicada con OptimizadorImagen (GD) cuando se puede.
  *
  * Casilla «Controla stock» (ESPECIFICACION_PRODUCTOS_SIN_STOCK.md § 4.5): marcada por defecto. Desmarcarla
  * exige stock 0 en todas las sucursales, comprobado en la transacción con FOR UPDATE sobre la ficha y sus
@@ -66,6 +67,7 @@ final class GuardarProducto
         private readonly StockInicial $stockInicial,
         private readonly GeneradorSku $skus,
         private readonly Presentaciones $presentaciones,
+        private readonly OptimizadorImagen $imagenes,
     ) {}
 
     /**
@@ -166,7 +168,7 @@ final class GuardarProducto
 
         $this->marcarPrecioPropio($producto);
 
-        $imagenNueva = $imagen?->storeAs("empresas/{$empresaId}/productos", Str::random(40).'.'.$imagen->extension(), self::DISCO);
+        $imagenNueva = $imagen === null ? null : $this->imagenes->guardar($imagen, "empresas/{$empresaId}/productos", self::DISCO);
 
         if ($imagen !== null && $imagenNueva === false) {
             throw ValidationException::withMessages(['imagen' => __('No se pudo guardar la imagen.')]);

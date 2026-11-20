@@ -16,8 +16,7 @@ class CycloneFuente implements FuenteCatalogoExterno
 
     public function obtenerProductos(ProveedorExterno $proveedor): Generator
     {
-        $baseUrl = rtrim((string) ($proveedor->base_url ?: config('services.cyclone.base_url')), '/');
-        $endpoint = str_ends_with($baseUrl, '/catalogo/productos') ? $baseUrl : $baseUrl.'/catalogo/productos';
+        $endpoint = self::endpointProductos($proveedor);
         $token = self::token($proveedor);
 
         $pagina = 1;
@@ -62,6 +61,20 @@ class CycloneFuente implements FuenteCatalogoExterno
             $ultimaPagina = (int) ($meta['last_page'] ?? $pagina);
             $pagina++;
         } while ($pagina <= $ultimaPagina);
+    }
+
+    /** Endpoint del catálogo de productos de la API (base del proveedor o, si no tiene, `services.cyclone.base_url`). */
+    public static function endpointProductos(?ProveedorExterno $proveedor): string
+    {
+        $baseUrl = rtrim((string) ($proveedor?->base_url ?: config('services.cyclone.base_url')), '/');
+
+        return str_ends_with($baseUrl, '/catalogo/productos') ? $baseUrl : $baseUrl.'/catalogo/productos';
+    }
+
+    /** Foto de un producto de Cyclone por su id, la misma que publica el catálogo (`…/catalogo/productos/{id}/foto`). */
+    public static function urlFoto(?ProveedorExterno $proveedor, string $externoId): string
+    {
+        return self::endpointProductos($proveedor).'/'.rawurlencode($externoId).'/foto';
     }
 
     /**
