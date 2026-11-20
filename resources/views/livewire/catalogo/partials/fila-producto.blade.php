@@ -35,7 +35,7 @@
     </td>
     <td>{{ $producto->precio_minorista === null ? '—' : Decimal::bs($producto->precio_minorista) }}</td>
     <td>{{ $producto->precio_mayorista === null ? '—' : Decimal::bs($producto->precio_mayorista) }}</td>
-    <td>@if ($alerta === 'sin_control')<span class="subtle" data-sin-control>{{ __('Sin control') }}</span>@else<b>{{ Decimal::formatear((string) $producto->stock) }}</b> {{ $producto->unidad->abreviatura }}@endif @isset($reservados[$producto->id])<small class="accent-text" data-reservado title="{{ __('Vendido y todavía en el almacén: inclúyelo en el conteo físico, no en el stock.') }}">{{ __('Reservado por despachar: :cantidad', ['cantidad' => Decimal::formatear($reservados[$producto->id])]) }}</small>@endisset</td>
+    <td>@if ($alerta === 'sin_control')<span class="subtle" data-sin-control>{{ __('Sin control') }}</span>@else<b>{{ Decimal::formatear((string) $producto->stock) }}</b> {{ $producto->unidadStock() }}@endif @isset($reservados[$producto->id])<small class="accent-text" data-reservado title="{{ __('Vendido y todavía en el almacén: inclúyelo en el conteo físico, no en el stock.') }}">{{ __('Reservado por despachar: :cantidad', ['cantidad' => Decimal::formatear($reservados[$producto->id])]) }}</small>@endisset</td>
     <td>
         @if ($alerta === 'sin_control')<span class="subtle">—</span>
         @elseif ($alerta === 'sin_stock')<span class="badge danger">{{ __('Sin stock') }}</span>

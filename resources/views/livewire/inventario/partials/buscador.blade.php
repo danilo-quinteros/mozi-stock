@@ -95,7 +95,7 @@
                 @foreach ($sugerencias as $sugerencia)
                     <button type="button" class="suggestion" role="option" wire:key="sugerencia-{{ $sugerencia->id }}"
                         @click="texto = ''; $wire.agregarProducto({{ $sugerencia->id }}); $refs.buscador.focus()">
-                        <span class="suggestion-product"><b>{{ $sugerencia->nombre }}</b><small>{{ implode(' · ', array_filter([$sugerencia->marca, $sugerencia->sku, $sugerencia->unidad->abreviatura])) }}</small></span>
+                        <span class="suggestion-product"><b>{{ $sugerencia->nombre }}</b><small>{{ implode(' · ', array_filter([$sugerencia->marca, $sugerencia->sku, $sugerencia->unidadStock()])) }}</small></span>
                         <span class="kbd-quiet">{{ __('Agregar') }}</span>
                     </button>
                 @endforeach
@@ -176,9 +176,9 @@
                                 <small>
                                     {{ implode(' · ', array_filter([$producto->marca, $producto->sku])) }}@if ($producto->sku || $producto->marca) · @endif
                                     @if ($listado['conStock'])
-                                        <span @class(['multipick-bajo' => $alerta !== 'normal'])>{{ __('Stock :cantidad', ['cantidad' => Decimal::formatear($stock)]) }} {{ $producto->unidad->abreviatura ?? '' }}@if ($alerta === 'bajo') · {{ __('mín. :minimo', ['minimo' => Decimal::formatear((string) $producto->minimo)]) }}@endif</span>
+                                        <span @class(['multipick-bajo' => $alerta !== 'normal'])>{{ __('Stock :cantidad', ['cantidad' => Decimal::formatear($stock)]) }} {{ $producto->unidadStock() }}@if ($alerta === 'bajo') · {{ __('mín. :minimo', ['minimo' => Decimal::formatear((string) $producto->minimo)]) }}@endif</span>
                                     @else
-                                        {{ $producto->unidad->abreviatura ?? '' }}
+                                        {{ $producto->unidadStock() }}
                                     @endif
                                     @isset($enTabla[$producto->id])
                                         · <span class="multipick-en-tabla">{{ __('en la tabla') }}</span>

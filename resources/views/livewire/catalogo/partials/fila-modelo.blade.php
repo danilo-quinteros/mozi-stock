@@ -64,7 +64,7 @@
         </td>
         <td>{{ $variante->precio_minorista === null ? '—' : Decimal::bs($variante->precio_minorista) }}</td>
         <td>{{ $variante->precio_mayorista === null ? '—' : Decimal::bs($variante->precio_mayorista) }}</td>
-        <td><b>{{ Decimal::formatear((string) $variante->stock) }}</b> {{ $variante->unidad->abreviatura }} @isset($reservados[$variante->id])<small class="accent-text" data-reservado>{{ __('Reservado por despachar: :cantidad', ['cantidad' => Decimal::formatear($reservados[$variante->id])]) }}</small>@endisset</td>
+        <td><b>{{ Decimal::formatear((string) $variante->stock) }}</b> {{ $variante->unidadStock() }} @isset($reservados[$variante->id])<small class="accent-text" data-reservado>{{ __('Reservado por despachar: :cantidad', ['cantidad' => Decimal::formatear($reservados[$variante->id])]) }}</small>@endisset</td>
         <td>
             @if ($alerta === 'sin_control')<span class="subtle">—</span>
             @elseif ($alerta === 'sin_stock')<span class="badge danger">{{ __('Sin stock') }}</span>

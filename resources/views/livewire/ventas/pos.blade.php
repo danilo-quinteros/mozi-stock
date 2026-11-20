@@ -277,7 +277,7 @@
                         </span>
                         <div class="pos-item-info">
                             <div class="pos-item-name"><b>{{ $producto->nombre }}</b><strong>{{ $neto === null ? '—' : Decimal::bs($neto) }}</strong></div>
-                            <div class="pos-item-unit">@if ($producto->marca){{ $producto->marca }} · @endif{{ $fila['precio'] === null ? __('Sin precio en esta lista') : __(':precio c/u', ['precio' => Decimal::bs($fila['precio'])]) }} · {{ $producto->unidad->abreviatura }}</div>
+                            <div class="pos-item-unit">@if ($producto->marca){{ $producto->marca }} · @endif{{ $fila['precio'] === null ? __('Sin precio en esta lista') : __(':precio c/u', ['precio' => Decimal::bs($fila['precio'])]) }} · {{ $producto->unidadStock() }}</div>
                             <div class="pos-item-mini">
                                 <select class="pos-tiny" aria-label="{{ __('Lista de precio de :producto', ['producto' => $producto->nombre]) }}" wire:model.live="lineas.{{ $i }}.tipo_precio">
                                     @foreach (TipoPrecio::cases() as $tipo)

@@ -52,7 +52,7 @@ class ExportarProductosController extends Controller
                         $producto->sku,
                         $producto->codigo_barras ?? '',
                         $producto->categoria->nombre ?? '',
-                        $producto->unidad->abreviatura,
+                        $producto->unidadStock(),
                         $producto->precio_consumidor,
                         $producto->precio_minorista ?? '',
                         $producto->precio_mayorista ?? '',

@@ -458,7 +458,7 @@ final class SincronizarEmpresa
                 'externo_id' => $vinculo->externo_id,
                 'nombre' => $producto->nombre,
                 'stock_total' => $totalStock,
-                'unidad' => $producto->unidad->abreviatura,
+                'unidad' => $producto->unidadStock(),
                 'sucursales' => $sucursales,
             ];
         }

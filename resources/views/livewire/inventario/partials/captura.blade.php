@@ -30,7 +30,7 @@
                     @php($clave = (string) ($fila['clave'] ?? $producto->id))
                     <tr data-sku="{{ $producto->sku }}" wire:key="linea-{{ $clave }}" @class(['rapid-selected' => in_array($clave, array_map('strval', $seleccionadas), true)])>
                         <td data-label="{{ __('Seleccionar') }}"><input type="checkbox" class="row-checkbox" value="{{ $clave }}" wire:model.live="seleccionadas" aria-label="{{ __('Seleccionar :nombre', ['nombre' => $producto->nombre]) }}"></td>
-                        <td data-label="{{ __('Producto') }}"><div class="rapid-product"><span class="product-dot" aria-hidden="true"><x-icon name="box" size="sm" /></span><div><b>{{ $producto->nombre }}</b><small>@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->unidad->abreviatura }}@if ($producto->categoria) · {{ $producto->categoria->nombre }}@endif</small></div></div>
+                        <td data-label="{{ __('Producto') }}"><div class="rapid-product"><span class="product-dot" aria-hidden="true"><x-icon name="box" size="sm" /></span><div><b>{{ $producto->nombre }}</b><small>@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->unidadStock() }}@if ($producto->categoria) · {{ $producto->categoria->nombre }}@endif</small></div></div>
                             @if (($fila['lote'] ?? false) && ($fila['loteModo'] ?? 'ingreso') === 'salida')
                                 {{-- Salida o ajuste que resta (§ 5.4): automático (primero lo vencido) o un lote concreto, también vencido. --}}
                                 <div class="lote-campos" data-test="lote-selector">

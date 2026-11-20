@@ -109,7 +109,7 @@
                                             @if ($fila['stock'] === null)
                                                 <span class="stock-hint">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->sku }} · {{ __('Sin control') }}</span>
                                             @else
-                                                <span class="stock-hint @if ($falta) falta @endif">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->sku }} · {{ __('Stock') }} {{ Decimal::formatear($fila['stock']) }} {{ $producto->unidad->abreviatura }}@if ($falta) · {{ __('insuficiente') }} @endif</span>
+                                                <span class="stock-hint @if ($falta) falta @endif">@if ($producto->marca){{ $producto->marca }} · @endif{{ $producto->sku }} · {{ __('Stock') }} {{ Decimal::formatear($fila['stock']) }} {{ $producto->unidadStock() }}@if ($falta) · {{ __('insuficiente') }} @endif</span>
                                             @endif
                                         </td>
                                         <td><input class="input table-input" type="text" inputmode="decimal" aria-label="{{ __('Cantidad de :producto', ['producto' => $producto->nombre]) }}" wire:model.live.debounce.400ms="lineas.{{ $i }}.cantidad"></td>

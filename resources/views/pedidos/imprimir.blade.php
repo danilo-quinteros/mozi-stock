@@ -30,7 +30,7 @@
         <tbody>
             @foreach ($pedido->items as $item)
                 <tr>
-                    <td class="der">{{ Decimal::formatear($item->cantidad) }}@unless ($rollo ?? (request('formato') === 'rollo')) {{ $item->producto->unidad->abreviatura }}@endunless</td>
+                    <td class="der">{{ Decimal::formatear($item->cantidad) }}@unless ($rollo ?? (request('formato') === 'rollo')) {{ $item->producto->unidadStock() }}@endunless</td>
                     <td>{{ \App\Models\Producto::descripcionConMarca($item->producto->nombre, $item->producto->marca) }}@unless ($rollo ?? (request('formato') === 'rollo')) <span class="muted">({{ $item->tipo_precio->etiqueta() }})</span>@endunless</td>
                     @unless ($rollo ?? (request('formato') === 'rollo'))
                         <td>{{ $item->producto->codigo_barras ?? $item->producto->sku ?? '—' }}</td>

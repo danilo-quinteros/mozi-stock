@@ -221,6 +221,39 @@ class Producto extends Model
             ."TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM {$p}.contenido)), NULLIF({$um}.abreviatura, '')) ELSE {$p}.nombre END";
     }
 
+    /** Cómo se cuenta el stock de un envase: por unidades («5 und.» de «Ambientador 100 ml»). */
+    public const ABREVIATURA_ENVASE = 'und.';
+
+    /**
+     * Unidad en que se cuentan las existencias. Un envase con contenido se vende por unidades: la unidad del producto
+     * es la de su contenido (100 ml), no la del stock (5 frascos son «5 und.», no «5 ml»). Sin contenido, la del
+     * producto (kg, L, u, paq.). Misma condición de contenido que el nombre completo.
+     */
+    public static function abreviaturaStock(string|int|float|null $contenido, string $abreviatura): string
+    {
+        return $contenido !== null && $contenido !== '' && Decimal::comparar((string) $contenido, '0') > 0
+            ? self::ABREVIATURA_ENVASE
+            : $abreviatura;
+    }
+
+    /** abreviaturaStock() del producto (con la unidad ya cargada). */
+    public function unidadStock(): string
+    {
+        return self::abreviaturaStock($this->contenido, (string) ($this->unidad?->abreviatura ?? ''));
+    }
+
+    /**
+     * abreviaturaStock() en SQL, para listados con DB::table. $p es el alias de productos y $um el de unidades_medida.
+     *
+     * @param  literal-string  $p
+     * @param  literal-string  $um
+     * @return literal-string
+     */
+    public static function sqlAbreviaturaStock(string $p = 'p', string $um = 'um'): string
+    {
+        return "CASE WHEN {$p}.contenido IS NOT NULL AND {$p}.contenido > 0 THEN '".self::ABREVIATURA_ENVASE."' ELSE {$um}.abreviatura END";
+    }
+
     public const MAX_MARCA = 60;
 
     /**

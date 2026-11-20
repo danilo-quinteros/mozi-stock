@@ -11,6 +11,7 @@ use App\Models\Producto;
 use App\Models\Sucursal;
 use App\Models\UnidadMedida;
 use App\Models\User;
+use App\Support\Decimal;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -224,6 +225,31 @@ test('a large phone photo is stored reduced to 1600 px in WebP', function () {
         ->and(array_slice(getimagesizefromstring($guardada), 0, 2))->toBe([1600, 1200])
         ->and(strlen($guardada))->toBeLessThan(strlen($jpeg));
 })->skip(! extension_loaded('gd'), 'Requiere la extensión GD de PHP');
+
+test('stock of a packaged product is counted in units, not in the unit of its content', function () {
+    $sucursal = Sucursal::factory()->create(['empresa_id' => $this->empresa->id]);
+    $unidad = fn (string $abreviatura): int => (int) UnidadMedida::withoutGlobalScopes()->where('empresa_id', $this->empresa->id)->where('abreviatura', $abreviatura)->value('id');
+    // Cyclone: «Ambientador Liquido Ohm 100 ml» con 5 frascos en Av. Pirai se veía como «5 ml».
+    $envase = productoDe($this->empresa, ['nombre' => 'Ambientador Liquido Ohm', 'sku' => 'OHM100', 'contenido' => '100', 'unidad_medida_id' => $unidad('ml')]);
+    $granel = productoDe($this->empresa, ['nombre' => 'Detergente a granel', 'sku' => 'GRA01', 'unidad_medida_id' => $unidad('kg'), 'tipo_venta' => 'medida']);
+    cargarStock($this->admin, $sucursal, $envase, '5');
+    cargarStock($this->admin, $sucursal, $granel, '2.5');
+
+    Livewire::test(Productos::class)->set('sucursal', (string) $sucursal->id)
+        ->assertSee('Ambientador Liquido Ohm 100 ml')
+        ->assertSeeHtml('<b>5</b> und.')
+        ->assertDontSeeHtml('<b>5</b> ml')
+        ->assertSeeHtml('<b>'.Decimal::formatear('2.500').'</b> kg');
+
+    $sql = fn (Producto $p): string => (string) DB::table('productos as p')->join('unidades_medida as u', 'u.id', '=', 'p.unidad_medida_id')
+        ->where('p.id', $p->id)->value(DB::raw(Producto::sqlAbreviaturaStock('p', 'u')));
+    expect($envase->refresh()->unidadStock())->toBe('und.')->and($sql($envase))->toBe('und.')
+        ->and($granel->refresh()->unidadStock())->toBe('kg')->and($sql($granel))->toBe('kg')
+        ->and(Producto::abreviaturaStock('0.000', 'ml'))->toBe('ml');
+
+    $csv = $this->get(route('productos.exportar', ['sucursal' => $sucursal->id]))->streamedContent();
+    expect($csv)->toContain(';und.;')->not->toContain(';ml;');
+});
 
 test('editing keeps stock untouched and stores per-branch minimums', function () {
     $sucursal = Sucursal::factory()->create(['empresa_id' => $this->empresa->id]);

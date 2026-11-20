@@ -36,7 +36,7 @@ final class InventarioSucursales
             ->orderBy('s.nombre')
             ->select(['p.id',
                 DB::raw("CASE WHEN p.contenido IS NOT NULL THEN CONCAT(p.nombre, ' ', TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM p.contenido)), ' ', u.abreviatura) ELSE p.nombre END AS nombre"),
-                'p.sku', 'u.abreviatura', 's.nombre as sucursal',
+                'p.sku', DB::raw(Producto::sqlAbreviaturaStock('p', 'u').' AS abreviatura'), 's.nombre as sucursal',
                 DB::raw('COALESCE(sn.cantidad, 0) AS stock'),
                 DB::raw('COALESCE(sn.stock_minimo, p.stock_minimo) AS minimo')]);
     }
