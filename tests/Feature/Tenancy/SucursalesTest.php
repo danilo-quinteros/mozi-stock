@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Tenancy\Actions\GuardarSucursal;
 use App\Domain\Tenancy\ResolverSucursal;
 use App\Livewire\Empresa\Sucursales;
 use App\Models\Auditoria;
@@ -35,6 +36,33 @@ test('an administrator registers and edits branches with audit trail', function 
         ->and($sucursal->direccion)->toBeNull()
         ->and(Auditoria::query()->where('entidad', 'Sucursal')->pluck('accion')->all())
         ->toBe(['sucursal.creada', 'sucursal.actualizada']);
+});
+
+test('a branch keeps an optional phone that other screens never erase', function () {
+    [$empresa, $admin] = empresaConAdministrador();
+
+    Livewire::actingAs($admin)->test(Sucursales::class)
+        ->call('crear')
+        ->set('nombre', 'Sucursal Av. Beni')->set('codigo', 'S1')->set('telefono', ' 75070807 ')
+        ->call('guardar')
+        ->assertHasNoErrors()
+        ->assertSee('75070807');
+
+    $sucursal = Sucursal::withoutGlobalScopes()->where('empresa_id', $empresa->id)->sole();
+    expect($sucursal->telefono)->toBe('75070807');
+
+    // Quien actualiza sin enviar el teléfono (otra pantalla o proceso) no lo borra.
+    app(GuardarSucursal::class)->actualizar($admin, $sucursal, ['nombre' => 'Beni', 'codigo' => 'S1', 'direccion' => null]);
+    expect($sucursal->refresh()->telefono)->toBe('75070807');
+
+    Livewire::actingAs($admin)->test(Sucursales::class)
+        ->call('editar', $sucursal->id)
+        ->assertSet('telefono', '75070807')
+        ->set('telefono', str_repeat('7', 41))->call('guardar')->assertHasErrors(['telefono' => 'max'])
+        ->set('telefono', '')->call('guardar')->assertHasNoErrors();
+
+    expect($sucursal->refresh()->telefono)->toBeNull()
+        ->and(Auditoria::query()->where('entidad', 'Sucursal')->latest('id')->value('despues'))->toHaveKey('telefono', null);
 });
 
 test('branch fields are validated in spanish', function () {

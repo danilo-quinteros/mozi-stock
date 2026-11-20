@@ -18,11 +18,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $documento
  * @property string|null $telefono
  * @property string|null $correo
+ * @property string|null $direccion
  * @property bool $activo
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['nombre', 'documento', 'telefono', 'correo'])]
+#[Fillable(['nombre', 'documento', 'telefono', 'correo', 'direccion'])]
 class Cliente extends Model
 {
     use BelongsToEmpresa;

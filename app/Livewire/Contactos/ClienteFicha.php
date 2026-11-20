@@ -39,6 +39,8 @@ class ClienteFicha extends Component
 
     public string $clienteCorreo = '';
 
+    public string $clienteDireccion = '';
+
     public function mount(Cliente $cliente): void
     {
         $this->authorize('view', $cliente);
@@ -54,6 +56,7 @@ class ClienteFicha extends Component
         $this->clienteDocumento = (string) $cliente->documento;
         $this->clienteTelefono = (string) $cliente->telefono;
         $this->clienteCorreo = (string) $cliente->correo;
+        $this->clienteDireccion = (string) $cliente->direccion;
         $this->formCliente = true;
     }
 
@@ -61,7 +64,7 @@ class ClienteFicha extends Component
     {
         $accion->actualizar($this->actor(), $this->cliente(), [
             'nombre' => $this->clienteNombre, 'documento' => $this->clienteDocumento,
-            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo,
+            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo, 'direccion' => $this->clienteDireccion,
         ]);
         $this->formCliente = false;
         $this->avisar(__('Datos del cliente actualizados.'));

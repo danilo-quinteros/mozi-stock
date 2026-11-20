@@ -43,6 +43,8 @@ class Proveedores extends Component
 
     public string $ciudad = '';
 
+    public string $direccion = '';
+
     public function mount(): void
     {
         $this->authorize('viewAny', Proveedor::class);
@@ -57,7 +59,7 @@ class Proveedores extends Component
     {
         $this->authorize('create', Proveedor::class);
         $this->resetValidation();
-        $this->reset('nombre', 'documento', 'telefono', 'correo', 'ciudad', 'editandoId');
+        $this->reset('nombre', 'documento', 'telefono', 'correo', 'ciudad', 'direccion', 'editandoId');
         $this->formProveedor = true;
     }
 
@@ -72,13 +74,14 @@ class Proveedores extends Component
         $this->telefono = (string) $proveedor->telefono;
         $this->correo = (string) $proveedor->correo;
         $this->ciudad = (string) $proveedor->ciudad;
+        $this->direccion = (string) $proveedor->direccion;
         $this->formProveedor = true;
     }
 
     public function actualizarProveedor(GuardarProveedor $accion): void
     {
         $proveedor = $accion->actualizar($this->actor(), Proveedor::query()->findOrFail($this->editandoId),
-            $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad']));
+            $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad', 'direccion']));
         $this->formProveedor = false;
         $this->editandoId = null;
         $this->avisar(__('Datos de :nombre actualizados.', ['nombre' => $proveedor->nombre]));
@@ -86,7 +89,7 @@ class Proveedores extends Component
 
     public function crearProveedor(GuardarProveedor $accion): void
     {
-        $proveedor = $accion->crear($this->actor(), $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad']));
+        $proveedor = $accion->crear($this->actor(), $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad', 'direccion']));
         $this->formProveedor = false;
         $this->avisar(__('Proveedor :nombre registrado.', ['nombre' => $proveedor->nombre]));
     }

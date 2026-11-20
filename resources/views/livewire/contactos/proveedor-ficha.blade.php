@@ -4,7 +4,7 @@
         <div>
             <div class="eyebrow">{{ __('Ficha de proveedor') }}</div>
             <h1>{{ $proveedor->nombre }}<span class="accent-text">.</span></h1>
-            <p class="lead">{{ $proveedor->documento ? 'NIT/CI '.$proveedor->documento : __('Sin NIT/CI') }} · {{ $proveedor->ciudad ?? __('Sin ciudad') }} · {{ $proveedor->telefono ?? __('Sin teléfono') }}@if ($proveedor->correo) · {{ $proveedor->correo }}@endif</p>
+            <p class="lead">{{ $proveedor->documento ? 'NIT/CI '.$proveedor->documento : __('Sin NIT/CI') }} · {{ $proveedor->ciudad ?? __('Sin ciudad') }} · {{ $proveedor->telefono ?? __('Sin teléfono') }}@if ($proveedor->correo) · {{ $proveedor->correo }}@endif @if ($proveedor->direccion) · {{ $proveedor->direccion }}@endif</p>
         </div>
         <div class="page-actions">
             <a class="btn ghost" href="{{ route('proveedores.index') }}"><x-icon name="arrow-left" /> {{ __('Proveedores') }}</a>

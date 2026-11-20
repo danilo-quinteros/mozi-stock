@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 final class GuardarCliente
 {
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null}  $datos
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, direccion?: string|null}  $datos
      */
     public function crear(User $actor, array $datos): Cliente
     {
@@ -31,7 +31,7 @@ final class GuardarCliente
     }
 
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null}  $datos
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, direccion?: string|null}  $datos
      */
     public function actualizar(User $actor, Cliente $cliente, array $datos): Cliente
     {
@@ -54,8 +54,8 @@ final class GuardarCliente
     }
 
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null}  $datos
-     * @return array{nombre: string, documento: string|null, telefono: string|null, correo: string|null}
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, direccion?: string|null}  $datos
+     * @return array{nombre: string, documento: string|null, telefono: string|null, correo: string|null, direccion?: string|null}
      */
     private function normalizar(User $actor, array $datos, ?int $ignorar): array
     {
@@ -85,11 +85,24 @@ final class GuardarCliente
             throw ValidationException::withMessages(['clienteCorreo' => __('Escribe un correo válido.')]);
         }
 
-        return [
+        $normalizado = [
             'nombre' => $nombre,
             'documento' => $documento === '' ? null : $documento,
             'telefono' => $telefono === '' ? null : $telefono,
             'correo' => $correo === '' ? null : mb_strtolower($correo),
         ];
+
+        // Dirección opcional: solo la tocan los formularios que la muestran; el alta rápida del pedido no la borra.
+        if (array_key_exists('direccion', $datos)) {
+            $direccion = trim((string) $datos['direccion']);
+
+            if (mb_strlen($direccion) > 300) {
+                throw ValidationException::withMessages(['clienteDireccion' => __('La dirección admite hasta 300 caracteres.')]);
+            }
+
+            $normalizado['direccion'] = $direccion === '' ? null : $direccion;
+        }
+
+        return $normalizado;
     }
 }

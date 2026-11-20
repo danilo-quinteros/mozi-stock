@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
 final class GuardarProveedor
 {
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null}  $datos
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null, direccion?: string|null}  $datos
      */
     public function crear(User $actor, array $datos): Proveedor
     {
@@ -30,7 +30,7 @@ final class GuardarProveedor
     }
 
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null}  $datos
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null, direccion?: string|null}  $datos
      */
     public function actualizar(User $actor, Proveedor $proveedor, array $datos): Proveedor
     {
@@ -53,8 +53,8 @@ final class GuardarProveedor
     }
 
     /**
-     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null}  $datos
-     * @return array{nombre: string, documento: string|null, telefono: string|null, correo: string|null, ciudad: string|null}
+     * @param  array{nombre: string, documento?: string|null, telefono?: string|null, correo?: string|null, ciudad?: string|null, direccion?: string|null}  $datos
+     * @return array{nombre: string, documento: string|null, telefono: string|null, correo: string|null, ciudad: string|null, direccion?: string|null}
      */
     private function normalizar(User $actor, array $datos, ?int $ignorar): array
     {
@@ -75,13 +75,20 @@ final class GuardarProveedor
             throw ValidationException::withMessages(['correo' => __('Escribe un correo válido.')]);
         }
 
-        return [
+        $normalizado = [
             'nombre' => $nombre,
             'documento' => $documento,
             'telefono' => $this->texto($datos, 'telefono', 40),
             'correo' => $correo === null ? null : mb_strtolower($correo),
             'ciudad' => $this->texto($datos, 'ciudad', 80),
         ];
+
+        // Dirección opcional: solo la tocan los formularios que la muestran; el alta rápida en compras no la borra.
+        if (array_key_exists('direccion', $datos)) {
+            $normalizado['direccion'] = $this->texto($datos, 'direccion', 300);
+        }
+
+        return $normalizado;
     }
 
     /**

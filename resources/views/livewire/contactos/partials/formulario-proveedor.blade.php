@@ -17,6 +17,9 @@
             <x-campo etiqueta="Correo (opcional)" campo="correo">
                 <input id="correo" class="input" type="email" maxlength="150" wire:model="correo">
             </x-campo>
+            <x-campo etiqueta="Dirección (opcional)" campo="direccion" style="grid-column:1/-1">
+                <input id="direccion" class="input" type="text" maxlength="300" wire:model="direccion" placeholder="{{ __('Zona, calle, número o enlace de ubicación') }}">
+            </x-campo>
         </div>
         <div class="modal-actions">
             <button type="button" class="btn ghost" wire:click="cerrar">{{ __('Cancelar') }}</button>

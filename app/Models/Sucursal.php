@@ -16,11 +16,12 @@ use Illuminate\Support\Carbon;
  * @property string $nombre
  * @property string $codigo
  * @property string|null $direccion
+ * @property string|null $telefono
  * @property bool $activa
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['nombre', 'codigo', 'direccion'])]
+#[Fillable(['nombre', 'codigo', 'direccion', 'telefono'])]
 class Sucursal extends Model
 {
     use BelongsToEmpresa;

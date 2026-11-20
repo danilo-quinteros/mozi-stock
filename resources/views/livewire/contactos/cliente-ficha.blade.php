@@ -4,7 +4,7 @@
         <div>
             <div class="eyebrow">{{ __('Ficha de cliente') }}</div>
             <h1>{{ $cliente->nombre }}<span class="accent-text">.</span></h1>
-            <p class="lead">{{ $cliente->documento ? 'CI/NIT '.$cliente->documento : __('Sin CI/NIT') }} · {{ $cliente->telefono ?? __('Sin teléfono') }} · {{ $cliente->correo ?? __('Sin correo') }}</p>
+            <p class="lead">{{ $cliente->documento ? 'CI/NIT '.$cliente->documento : __('Sin CI/NIT') }} · {{ $cliente->telefono ?? __('Sin teléfono') }} · {{ $cliente->correo ?? __('Sin correo') }}@if ($cliente->direccion) · {{ $cliente->direccion }}@endif</p>
         </div>
         <div class="page-actions">
             <a class="btn ghost" href="{{ route('clientes.index') }}"><x-icon name="arrow-left" /> {{ __('Clientes') }}</a>

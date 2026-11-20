@@ -9,6 +9,9 @@
             <button class="btn ghost" type="button" wire:click="descargarCatalogoCyclone" wire:loading.attr="disabled" title="{{ __('Descargar catálogo central desde la API de Cyclone') }}">
                 <x-icon name="history" /> {{ __('Descargar catálogo Cyclone') }}
             </button>
+            <a class="btn ghost" href="{{ route('admin.migracion-cyclone') }}" wire:navigate title="{{ __('Subir el respaldo del sistema anterior de Cyclone a una empresa nueva') }}">
+                <x-icon name="upload" /> {{ __('Migrar desde Cyclone') }}
+            </a>
             <button class="btn primary" type="button" wire:click="crear"><x-icon name="plus" /> {{ __('Nueva empresa') }}</button>
         </div>
     </div>

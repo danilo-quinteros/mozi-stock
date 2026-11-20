@@ -71,7 +71,7 @@
                         <span class="token"><x-icon name="store" /></span>
                         <div>
                             <h2>{{ $sucursal->nombre }} <span class="badge success">{{ __('Activa') }}</span></h2>
-                            <p>{{ $sucursal->codigo }}@if ($sucursal->direccion) · {{ $sucursal->direccion }}@endif</p>
+                            <p>{{ $sucursal->codigo }}@if ($sucursal->direccion) · {{ $sucursal->direccion }}@endif @if ($sucursal->telefono) · {{ $sucursal->telefono }}@endif</p>
                         </div>
                     </div>
                     <div class="sc-suc-actions">

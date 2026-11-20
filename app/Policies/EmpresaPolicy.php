@@ -45,6 +45,14 @@ class EmpresaPolicy
     }
 
     /**
+     * Migrar los datos de un sistema anterior (respaldo de Cyclone) a una empresa: solo el superadministrador.
+     */
+    public function migrarDatos(User $user): bool
+    {
+        return $user->esSuperadmin();
+    }
+
+    /**
      * Habilitar la facturación SIAT de una empresa es una decisión del superadministrador (decisión D6).
      */
     public function habilitarFacturacion(User $user, Empresa $empresa): bool

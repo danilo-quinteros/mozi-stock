@@ -31,6 +31,7 @@ use App\Livewire\Admin\AjustesGlobales;
 use App\Livewire\Admin\CatalogosSiat as AdminCatalogosSiat;
 use App\Livewire\Admin\Comprobantes;
 use App\Livewire\Admin\Empresas;
+use App\Livewire\Admin\MigracionCyclone;
 use App\Livewire\Admin\Panel;
 use App\Livewire\Admin\SitioWeb as AdminSitioWeb;
 use App\Livewire\Admin\Suscripciones;
@@ -239,6 +240,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::livewire('/', Panel::class)->name('panel');
         Route::livewire('empresas', Empresas::class)->name('empresas');
         Route::livewire('empresas/{empresa}/facturacion', FacturacionPanel::class)->whereNumber('empresa')->name('empresas.facturacion');
+        Route::livewire('migracion-cyclone', MigracionCyclone::class)->name('migracion-cyclone');
         Route::livewire('suscripciones', Suscripciones::class)->name('suscripciones');
         Route::get('suscripciones/exportar', [SuscripcionesCsvController::class, 'suscripciones'])->middleware('throttle:exportaciones')->name('suscripciones.exportar');
         Route::livewire('comprobantes', Comprobantes::class)->name('comprobantes');

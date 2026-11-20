@@ -7,8 +7,11 @@
         <x-campo etiqueta="Código interno" campo="codigo">
             <input id="codigo" class="input" type="text" wire:model="codigo" maxlength="20" placeholder="{{ __('Ej. MATRIZ') }}" required>
         </x-campo>
-        <x-campo etiqueta="Dirección (opcional)" campo="direccion" style="grid-column:1/-1">
+        <x-campo etiqueta="Dirección (opcional)" campo="direccion">
             <input id="direccion" class="input" type="text" wire:model="direccion" maxlength="255" placeholder="{{ __('Zona, calle, ciudad') }}">
+        </x-campo>
+        <x-campo etiqueta="Teléfono (opcional)" campo="telefono">
+            <input id="telefono" class="input" type="tel" wire:model="telefono" maxlength="40" placeholder="{{ __('Ej. 77092733') }}">
         </x-campo>
     </div>
     @if (! $embebido && $editandoId && ($editada = $sucursales->firstWhere('id', $editandoId)))

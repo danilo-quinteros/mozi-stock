@@ -38,6 +38,8 @@ class ProveedorFicha extends Component
 
     public string $ciudad = '';
 
+    public string $direccion = '';
+
     public function mount(Proveedor $proveedor): void
     {
         $this->authorize('view', $proveedor);
@@ -54,12 +56,13 @@ class ProveedorFicha extends Component
         $this->telefono = (string) $proveedor->telefono;
         $this->correo = (string) $proveedor->correo;
         $this->ciudad = (string) $proveedor->ciudad;
+        $this->direccion = (string) $proveedor->direccion;
         $this->formProveedor = true;
     }
 
     public function guardar(GuardarProveedor $accion): void
     {
-        $accion->actualizar($this->actor(), $this->proveedor(), $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad']));
+        $accion->actualizar($this->actor(), $this->proveedor(), $this->only(['nombre', 'documento', 'telefono', 'correo', 'ciudad', 'direccion']));
         $this->formProveedor = false;
         $this->avisar(__('Datos del proveedor actualizados.'));
     }

@@ -49,6 +49,8 @@ class Sucursales extends Component
 
     public string $direccion = '';
 
+    public string $telefono = '';
+
     /** Sucursal de la caja que se crea o edita. */
     #[Locked]
     public ?int $cajaSucursalId = null;
@@ -94,7 +96,7 @@ class Sucursales extends Component
     {
         $this->authorize('create', Sucursal::class);
         $this->resetValidation();
-        $this->reset('editandoId', 'nombre', 'codigo', 'direccion');
+        $this->reset('editandoId', 'nombre', 'codigo', 'direccion', 'telefono');
         $this->formularioAbierto = true;
     }
 
@@ -108,6 +110,7 @@ class Sucursales extends Component
         $this->nombre = $sucursal->nombre;
         $this->codigo = $sucursal->codigo;
         $this->direccion = (string) $sucursal->direccion;
+        $this->telefono = (string) $sucursal->telefono;
         $this->formularioAbierto = true;
     }
 
@@ -119,6 +122,7 @@ class Sucursales extends Component
             'codigo' => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]+$/',
                 Rule::unique('sucursales', 'codigo')->where('empresa_id', $actor->empresa_id)->ignore($this->editandoId)],
             'direccion' => ['nullable', 'string', 'max:255'],
+            'telefono' => ['nullable', 'string', 'max:40'],
         ], [
             'codigo.regex' => __('Usa solo letras, números y guiones.'),
             'codigo.unique' => __('Ya existe una sucursal con ese código en tu empresa.'),
@@ -145,7 +149,7 @@ class Sucursales extends Component
     public function cerrarFormulario(): void
     {
         $this->formularioAbierto = false;
-        $this->reset('editandoId', 'nombre', 'codigo', 'direccion');
+        $this->reset('editandoId', 'nombre', 'codigo', 'direccion', 'telefono');
         $this->resetValidation();
     }
 

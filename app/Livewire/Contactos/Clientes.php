@@ -42,6 +42,8 @@ class Clientes extends Component
 
     public string $clienteCorreo = '';
 
+    public string $clienteDireccion = '';
+
     public function mount(): void
     {
         $this->authorize('viewAny', Cliente::class);
@@ -56,7 +58,7 @@ class Clientes extends Component
     {
         $this->authorize('create', Cliente::class);
         $this->resetValidation();
-        $this->reset('clienteNombre', 'clienteDocumento', 'clienteTelefono', 'clienteCorreo', 'editandoId');
+        $this->reset('clienteNombre', 'clienteDocumento', 'clienteTelefono', 'clienteCorreo', 'clienteDireccion', 'editandoId');
         $this->formCliente = true;
     }
 
@@ -70,6 +72,7 @@ class Clientes extends Component
         $this->clienteDocumento = (string) $cliente->documento;
         $this->clienteTelefono = (string) $cliente->telefono;
         $this->clienteCorreo = (string) $cliente->correo;
+        $this->clienteDireccion = (string) $cliente->direccion;
         $this->formCliente = true;
     }
 
@@ -77,7 +80,7 @@ class Clientes extends Component
     {
         $cliente = $accion->actualizar($this->actor(), Cliente::query()->findOrFail($this->editandoId), [
             'nombre' => $this->clienteNombre, 'documento' => $this->clienteDocumento,
-            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo,
+            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo, 'direccion' => $this->clienteDireccion,
         ]);
         $this->formCliente = false;
         $this->editandoId = null;
@@ -88,7 +91,7 @@ class Clientes extends Component
     {
         $cliente = $accion->crear($this->actor(), [
             'nombre' => $this->clienteNombre, 'documento' => $this->clienteDocumento,
-            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo,
+            'telefono' => $this->clienteTelefono, 'correo' => $this->clienteCorreo, 'direccion' => $this->clienteDireccion,
         ]);
         $this->formCliente = false;
         $this->avisar(__('Cliente :nombre registrado.', ['nombre' => $cliente->nombre]));

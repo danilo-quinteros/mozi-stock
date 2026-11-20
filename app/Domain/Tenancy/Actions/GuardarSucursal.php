@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class GuardarSucursal
 {
-    private const CAMPOS = ['nombre', 'codigo', 'direccion', 'activa'];
+    private const CAMPOS = ['nombre', 'codigo', 'direccion', 'telefono', 'activa'];
 
     public function __construct(
         private readonly Auditor $auditor,
@@ -28,7 +28,7 @@ final class GuardarSucursal
     ) {}
 
     /**
-     * @param  array{nombre: string, codigo: string, direccion?: string|null}  $datos
+     * @param  array{nombre: string, codigo: string, direccion?: string|null, telefono?: string|null}  $datos
      */
     public function crear(User $actor, array $datos): Sucursal
     {
@@ -54,7 +54,7 @@ final class GuardarSucursal
     }
 
     /**
-     * @param  array{nombre: string, codigo: string, direccion?: string|null}  $datos
+     * @param  array{nombre: string, codigo: string, direccion?: string|null, telefono?: string|null}  $datos
      */
     public function actualizar(User $actor, Sucursal $sucursal, array $datos): Sucursal
     {
@@ -121,17 +121,29 @@ final class GuardarSucursal
     }
 
     /**
-     * @param  array{nombre: string, codigo: string, direccion?: string|null}  $datos
-     * @return array{nombre: string, codigo: string, direccion: string|null}
+     * @param  array{nombre: string, codigo: string, direccion?: string|null, telefono?: string|null}  $datos
+     * @return array{nombre: string, codigo: string, direccion: string|null, telefono?: string|null}
      */
     private function normalizar(array $datos): array
     {
         $direccion = trim((string) ($datos['direccion'] ?? ''));
-
-        return [
+        $normalizado = [
             'nombre' => trim($datos['nombre']),
             'codigo' => Str::upper(trim($datos['codigo'])),
             'direccion' => $direccion === '' ? null : $direccion,
         ];
+
+        // Teléfono opcional: solo lo toca quien lo envía (el formulario de Sucursales), nadie más lo borra.
+        if (array_key_exists('telefono', $datos)) {
+            $telefono = trim((string) $datos['telefono']);
+
+            if (mb_strlen($telefono) > 40) {
+                throw ValidationException::withMessages(['telefono' => __('El teléfono admite hasta 40 caracteres.')]);
+            }
+
+            $normalizado['telefono'] = $telefono === '' ? null : $telefono;
+        }
+
+        return $normalizado;
     }
 }

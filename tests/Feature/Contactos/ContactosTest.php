@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Compras\Actions\GuardarProveedor;
+use App\Domain\Ventas\Actions\GuardarCliente;
 use App\Livewire\Contactos\ClienteFicha;
 use App\Livewire\Contactos\Clientes;
 use App\Livewire\Contactos\Proveedores;
@@ -142,4 +143,40 @@ test('las exportaciones CSV se limitan a 30 por minuto por usuario, sin afectar 
 
     $otro = User::factory()->administrador($this->empresa)->create();
     $this->actingAs($otro)->get(route('clientes.exportar'))->assertOk();
+});
+
+test('clients and suppliers keep an optional address that the quick forms never erase', function () {
+    $mapa = 'https://www.google.com/maps/place/'.str_repeat('x', 250);
+
+    Livewire::test(Clientes::class)->call('nuevoCliente')
+        ->set('clienteNombre', 'Lavadero El Gato')->set('clienteDireccion', '  '.$mapa.'  ')
+        ->call('crearCliente')->assertHasNoErrors();
+    $cliente = Cliente::query()->sole();
+    expect($cliente->direccion)->toBe($mapa);
+    $this->get(route('clientes.ver', $cliente))->assertOk()->assertSee($mapa);
+
+    // Actualizar sin enviar la dirección (otras pantallas) no la borra; el formulario sí puede vaciarla.
+    app(GuardarCliente::class)->actualizar($this->admin, $cliente, ['nombre' => 'Lavadero El Gato SRL']);
+    expect($cliente->refresh()->direccion)->toBe($mapa);
+
+    Livewire::test(ClienteFicha::class, ['cliente' => $cliente])->call('editar')
+        ->assertSet('clienteDireccion', $mapa)
+        ->set('clienteDireccion', str_repeat('a', 301))->call('guardar')->assertHasErrors('clienteDireccion');
+    expect($cliente->refresh()->direccion)->toBe($mapa);
+
+    Livewire::test(ClienteFicha::class, ['cliente' => $cliente])->call('editar')
+        ->set('clienteDireccion', '')->call('guardar')->assertHasNoErrors();
+    expect($cliente->refresh()->direccion)->toBeNull();
+
+    Livewire::test(Proveedores::class)->call('nuevoProveedor')
+        ->set('nombre', 'Maprial')->set('direccion', 'Parque Industrial, manzana 4')
+        ->call('crearProveedor')->assertHasNoErrors();
+    $proveedor = Proveedor::query()->sole();
+    expect($proveedor->direccion)->toBe('Parque Industrial, manzana 4');
+    $this->get(route('proveedores.ver', $proveedor))->assertOk()->assertSee('Parque Industrial, manzana 4');
+
+    app(GuardarProveedor::class)->actualizar($this->admin, $proveedor, ['nombre' => 'Maprial SRL', 'ciudad' => 'Santa Cruz']);
+    expect($proveedor->refresh()->direccion)->toBe('Parque Industrial, manzana 4');
+    expect(fn () => app(GuardarProveedor::class)->actualizar($this->admin, $proveedor, ['nombre' => 'Maprial', 'direccion' => str_repeat('a', 301)]))
+        ->toThrow(ValidationException::class);
 });
